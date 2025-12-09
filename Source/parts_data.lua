@@ -9,7 +9,9 @@ local parts_data = {
         weight = 3,
         slot_x = 1,
         slot_y = 1,
-        color = gfx.kColorBlack
+        color = gfx.kColorBlack,
+        -- placement_row: "TOP", "BOTTOM", or "BOTH"
+        placement_row = "BOTH"
     },
     ["LEG-02"] = {
         name = "Leg Mk2",
@@ -17,7 +19,8 @@ local parts_data = {
         weight = 4,
         slot_x = 1,
         slot_y = 1,
-        color = gfx.kColorBlack
+        color = gfx.kColorBlack,
+        placement_row = "BOTTOM"
     },
     ["CORE-03"] = {
         name = "Core Unit",
@@ -25,32 +28,8 @@ local parts_data = {
         weight = 10,
         slot_x = 1,
         slot_y = 1,
-        color = gfx.kColorBlack
-    },
-    -- 舊示例零件（保留供測試）
-    ["WHEEL_2X1"] = {
-        name = "Wheel",
-        hp = 20,
-        weight = 5,
-        slot_x = 2,
-        slot_y = 1,
-        color = gfx.kColorBlack
-    },
-    ["ARMOR_1X1"] = {
-        name = "Armor",
-        hp = 10,
-        weight = 2,
-        slot_x = 1,
-        slot_y = 1,
-        color = gfx.kColorBlack
-    },
-    ["FRAME_3X1"] = {
-        name = "Light Frame",
-        hp = 15,
-        weight = 3,
-        slot_x = 3,
-        slot_y = 1,
-        color = gfx.kColorBlack
+        color = gfx.kColorBlack,
+        placement_row = "TOP"
     }
 }
 

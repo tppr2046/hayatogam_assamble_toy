@@ -37,6 +37,12 @@ local hq_mode = "EQUIP"         -- EQUIP (組裝模式), UNEQUIP (拆卸模式),
 local menu_option_index = 1     
 local is_placing_part = false 
 
+-- 放置失敗視覺/音效反饋
+local FLASH_DURATION = 12 -- 幀數
+local flash_timer = 0
+local flash_col = nil
+local flash_row = nil
+
 -- 底部菜單選項清單
 local MENU_OPTIONS = {
     {name = "Start Mission", action = "MISSION_SELECT"}, 
@@ -55,6 +61,28 @@ local function checkIfFits(part_data, start_col, start_row)
     local h = part_data.slot_y or 1
     if start_col < 1 or start_row < 1 or (start_col + w - 1) > GRID_COLS or (start_row + h - 1) > GRID_ROWS then
         return false, "Out of bounds"
+    end
+
+    -- 檢查 placement_row 限制（TOP/BOTTOM/BOTH）
+    if part_data.placement_row then
+        local pr = part_data.placement_row
+        if pr == "TOP" then
+            -- 允許的起始 row 必須在最上方（row 1）
+            if start_row > 1 then
+                return false, "Must place on TOP row"
+            end
+        elseif pr == "BOTTOM" then
+            -- 允許的起始 row 必須位於底排（當 GRID_ROWS==2 時為 row 2）
+            if start_row < GRID_ROWS then
+                -- if part height covers multiple rows, ensure it fits entirely within bottom
+                if (start_row + h - 1) < GRID_ROWS then
+                    return false, "Must place on BOTTOM row"
+                end
+            end
+            if GRID_ROWS == 2 and start_row ~= 2 and h == 1 then
+                return false, "Must place on BOTTOM row"
+            end
+        end
     end
 
     -- 檢查是否與已佔用格子重疊
@@ -97,21 +125,45 @@ local function removeEquippedPart(index)
             if GRID_MAP[r] then GRID_MAP[r][c] = nil end
         end
     end
-
-    -- 更新 mech_stats
-    local pdata = _G.PartsData and _G.PartsData[item.id]
-    if pdata then
-        if pdata.hp then
-            _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) - pdata.hp
-        end
-        if pdata.weight then
-            _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) - pdata.weight
-        end
-    end
-
     table.remove(eq, index)
     print("LOG: Removed part", item.id, "from", item.col, item.row)
+    -- 重算 mech_stats 以避免累加/重複扣除造成誤差
+    if _G and _G.GameState and _G.GameState.mech_stats then
+        recalcMechStats()
+    end
     return true
+end
+
+-- 根據 equipped_parts 重新計算 mech_stats（total_hp, total_weight）
+function recalcMechStats()
+    if not (_G and _G.GameState and _G.GameState.mech_stats) then return end
+    local total_hp = 0
+    local total_weight = 0
+    local eq = _G.GameState.mech_stats.equipped_parts or {}
+    for _, item in ipairs(eq) do
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        if pdata then
+            total_hp = total_hp + (pdata.hp or 0)
+            total_weight = total_weight + (pdata.weight or 0)
+        end
+    end
+    -- 確保即便沒有裝備也有基礎值（例如 0 或先前設定的 base）
+    _G.GameState.mech_stats.total_hp = total_hp
+    _G.GameState.mech_stats.total_weight = total_weight
+end
+
+-- 繪製網狀 Dither 覆蓋 (簡單方格樣式)
+local function drawDither(x, y, w, h)
+    local step = 6
+    local fillSize = math.max(1, step - 2)
+    for yy = y, y + h - 1, step do
+        for xx = x, x + w - 1, step do
+            local r = math.floor((xx / step) + (yy / step))
+            if (r % 2) == 0 then
+                gfx.fillRect(xx, yy, fillSize, fillSize)
+            end
+        end
+    end
 end
 
 -- ==========================================
@@ -197,6 +249,13 @@ function StateHQ.update()
                     print("LOG: Part placed successfully:", part_id, "at", cursor_col, cursor_row)
                 else
                     print("LOG: Placement failed: " .. reason)
+                    -- 觸發閃爍提示並嘗試播放音效
+                    flash_timer = FLASH_DURATION
+                    flash_col = cursor_col
+                    flash_row = cursor_row
+                    if placeFailSFX then
+                        pcall(function() placeFailSFX:play() end)
+                    end
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
                 is_placing_part = false -- 取消放置
@@ -278,6 +337,15 @@ function StateHQ.update()
             hq_mode = "EQUIP" -- 返回組裝模式
         end
     end
+    -- 更新 flash 計時器（每幀減少）
+    if flash_timer and flash_timer > 0 then
+        flash_timer = flash_timer - 1
+        if flash_timer <= 0 then
+            flash_col = nil
+            flash_row = nil
+            flash_timer = 0
+        end
+    end
 end
 
 
@@ -311,6 +379,9 @@ function StateHQ.draw()
                 local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
                 gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(cell_x, cell_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+                -- draw dither overlay inside the cell for visual mesh effect
+                gfx.setColor(gfx.kColorBlack)
+                drawDither(cell_x + 2, cell_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
                 if pdata and pdata.name then
                     gfx.drawText(pdata.name, cell_x + 2, cell_y + 2)
                 else
@@ -329,6 +400,9 @@ function StateHQ.draw()
         gfx.fillRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
         gfx.setColor(gfx.kColorBlack)
         gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+        -- preview dither overlay
+        gfx.setColor(gfx.kColorBlack)
+        drawDither(cursor_x + 2, cursor_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
     end
 
     -- 如果在 UNEQUIP 模式，繪製游標框並顯示要移除的零件資訊（若有）
@@ -346,6 +420,23 @@ function StateHQ.draw()
         else
             gfx.drawText("No part", cursor_x, cursor_y + GRID_CELL_SIZE + 2)
         end
+    end
+    
+    -- 繪製閃爍（放置失敗）覆蓋層
+    if flash_timer and flash_timer > 0 and flash_col and flash_row then
+        local fx = GRID_START_X + (flash_col - 1) * GRID_CELL_SIZE
+        local fy = GRID_START_Y + (flash_row - 1) * GRID_CELL_SIZE
+        -- 閃爍效果：交替黑白填充
+        if (flash_timer % 4) < 2 then
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(fx, fy, GRID_CELL_SIZE, GRID_CELL_SIZE)
+            gfx.setColor(gfx.kColorWhite)
+        else
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(fx, fy, GRID_CELL_SIZE, GRID_CELL_SIZE)
+            gfx.setColor(gfx.kColorBlack)
+        end
+        gfx.drawText("X", fx + math.floor(GRID_CELL_SIZE/2) - 3, fy + math.floor(GRID_CELL_SIZE/2) - 6)
     end
     
     -- 4. 繪製零件清單 (左側)
