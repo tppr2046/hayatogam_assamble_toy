@@ -23,7 +23,7 @@ StateHQ = {}
 local UI_AREA_Y_START = 160 
 local GRID_COLS = 3       
 local GRID_ROWS = 2       
-local GRID_CELL_SIZE = 50 
+local GRID_CELL_SIZE = 32 
 local GRID_START_X = 100  
 local GRID_START_Y = 40   
 
@@ -201,6 +201,52 @@ function StateHQ.setup()
             GRID_MAP[r][c] = nil
         end
     end
+
+    -- 保存網格設定到全域，供任務關卡使用（用於合成機體影像）
+    _G.GameState.mech_grid = { cell_size = GRID_CELL_SIZE, cols = GRID_COLS, rows = GRID_ROWS }
+
+    -- Preload part images into parts data (store as _img)
+    if _G and _G.PartsData then
+        for pid, pdata in pairs(_G.PartsData) do
+            if pdata.image then
+                local img, err = gfx.image.new(pdata.image)
+                if img then
+                    pdata._img = img
+                else
+                    print("WARN: failed to load image for part", pid, pdata.image, err)
+                end
+            end
+        end
+    end
+    -- Pre-render scaled images that match grid cell sizes so a part that is w x h
+    -- cells can be drawn once spanning those cells. This creates pdata._img_scaled.
+    if _G and _G.PartsData then
+        for pid, pdata in pairs(_G.PartsData) do
+            if pdata._img then
+                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
+                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
+                if sw > 0 and sh > 0 then
+                    local ok, buf = pcall(function() return gfx.image.new(sw, sh) end)
+                    if ok and buf then
+                        gfx.pushContext(buf)
+                        gfx.clear(gfx.kColorClear)
+                        -- Draw original into the buffer without scaling; center it if smaller
+                        local gotSize, iw, ih = pcall(function() return pdata._img:getSize() end)
+                        if gotSize and iw and ih then
+                            local dx = math.floor((sw - iw) / 2)
+                            local dy = math.floor((sh - ih) / 2)
+                            pcall(function() pdata._img:draw(math.max(0, dx), math.max(0, dy)) end)
+                        else
+                            -- As a last resort try raw draw at 0,0
+                            pcall(function() pdata._img:draw(0, 0) end)
+                        end
+                        gfx.popContext()
+                        pdata._img_scaled = buf
+                    end
+                end
+            end
+        end
+    end
 end
 
 function StateHQ.update()
@@ -369,40 +415,48 @@ function StateHQ.draw()
     gfx.drawRect(mech_image_x, mech_image_y, mech_width, mech_height)
     gfx.drawText("MECH ASSEMBLY GRID", mech_image_x + 5, mech_image_y + 5)
     
-    -- 繪製已放置的零件（以格子為單位）
-    for r = 1, GRID_ROWS do
-        for c = 1, GRID_COLS do
-            local cell_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
-            local cell_y = GRID_START_Y + (r - 1) * GRID_CELL_SIZE
-            local pid = GRID_MAP[r] and GRID_MAP[r][c]
-            if pid then
-                local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawRect(cell_x, cell_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-                -- draw dither overlay inside the cell for visual mesh effect
-                gfx.setColor(gfx.kColorBlack)
-                drawDither(cell_x + 2, cell_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
-                if pdata and pdata.name then
-                    gfx.drawText(pdata.name, cell_x + 2, cell_y + 2)
-                else
-                    gfx.drawText(pid, cell_x + 2, cell_y + 2)
-                end
-            end
-        end
-    end
+    -- Grid and parts rendering handled below (draw grid lines, then draw each equipped part once)
     
     -- 3. 繪製組裝游標 (白色方框，標示當前位置)
     if hq_mode == "EQUIP" and is_placing_part then
         local cursor_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
         local cursor_y = GRID_START_Y + (cursor_row - 1) * GRID_CELL_SIZE
-        
-        gfx.setColor(gfx.kColorWhite)
-        gfx.fillRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-        -- preview dither overlay
-        gfx.setColor(gfx.kColorBlack)
-        drawDither(cursor_x + 2, cursor_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
+        local part_id = _G.GameState and _G.GameState.unlocked_parts and _G.GameState.unlocked_parts[selected_part_index]
+        local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
+        if pdata and pdata._img_scaled then
+            local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
+            local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
+            -- if part would extend beyond grid bounds, clamp position for preview
+            local preview_px = cursor_x
+            local preview_py = cursor_y
+            pcall(function() pdata._img_scaled:draw(preview_px, preview_py) end)
+            gfx.setColor(gfx.kColorBlack)
+            drawDither(preview_px + 2, preview_py + 2, sw - 4, sh - 4)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawRect(preview_px, preview_py, sw, sh)
+        elseif pdata and pdata._img then
+            local iw, ih
+            local ok, a, b = pcall(function() return pdata._img:getSize() end)
+            if ok then iw, ih = a, b end
+            local draw_x = cursor_x
+            local draw_y = cursor_y
+            if iw and ih then
+                draw_x = cursor_x + math.floor((GRID_CELL_SIZE - iw) / 2)
+                draw_y = cursor_y + math.floor((GRID_CELL_SIZE - ih) / 2)
+            end
+            pcall(function() pdata._img:draw(draw_x, draw_y) end)
+            gfx.setColor(gfx.kColorBlack)
+            drawDither(cursor_x + 2, cursor_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+        else
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+            gfx.setColor(gfx.kColorBlack)
+            drawDither(cursor_x + 2, cursor_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
+        end
     end
 
     -- 如果在 UNEQUIP 模式，繪製游標框並顯示要移除的零件資訊（若有）
@@ -452,12 +506,62 @@ function StateHQ.draw()
         if hq_mode == "EQUIP" and not is_placing_part and i == selected_part_index then
             display_text = "> " .. display_text .. " <"
         end
+        -- Only show the part name in the left list (no thumbnail)
         gfx.drawText(display_text, 10, current_y)
     end
     
     -- 5. 繪製零件詳細資訊 / 狀態 (右側)
     local detail_x = 250
     local detail_y = 30
+    
+                -- 繪製格子格線
+                for r = 1, GRID_ROWS do
+                    for c = 1, GRID_COLS do
+                        local cell_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
+                        local cell_y = GRID_START_Y + (r - 1) * GRID_CELL_SIZE
+                        gfx.setColor(gfx.kColorBlack)
+                        gfx.drawRect(cell_x, cell_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+                    end
+                end
+    
+                -- 繪製已放置的零件，每個零件只繪製一次，佔據 w x h 格
+                local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    local pid = item.id
+                    local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
+                    local px = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
+                    local py = GRID_START_Y + (item.row - 1) * GRID_CELL_SIZE
+                    local pw = (item.w or 1) * GRID_CELL_SIZE
+                    local ph = (item.h or 1) * GRID_CELL_SIZE
+                    if pdata and pdata._img_scaled then
+                        -- draw the pre-rendered scaled image that fits the part cell area
+                        pcall(function() pdata._img_scaled:draw(px, py) end)
+                        -- overlay dither for style
+                        gfx.setColor(gfx.kColorBlack)
+                        drawDither(px + 2, py + 2, pw - 4, ph - 4)
+                        -- draw bounding rect
+                        gfx.setColor(gfx.kColorBlack)
+                        gfx.drawRect(px, py, pw, ph)
+                    elseif pdata and pdata._img then
+                        -- fallback: draw original centered into bounding box (no scaling)
+                        local iw, ih
+                        local ok, a, b = pcall(function() return pdata._img:getSize() end)
+                        if ok then iw, ih = a, b end
+                        local draw_x = px
+                        local draw_y = py
+                        if iw and ih then
+                            draw_x = px + math.floor((pw - iw) / 2)
+                            draw_y = py + math.floor((ph - ih) / 2)
+                        end
+                        pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                        gfx.setColor(gfx.kColorBlack)
+                        drawDither(px + 2, py + 2, pw - 4, ph - 4)
+                    else
+                        -- no image: draw text label at the origin cell
+                        gfx.setColor(gfx.kColorBlack)
+                        gfx.drawText(pid or "?", px + 2, py + 2)
+                    end
+                end
     gfx.drawText("MECH STATS:", detail_x, detail_y)
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
     gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y + 20)

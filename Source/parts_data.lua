@@ -3,33 +3,36 @@ import "CoreLibs/graphics"
 local gfx = playdate.graphics
 
 local parts_data = {
-    ["ARM-01"] = {
-        name = "Arm Mk1",
+    ["GUN"] = {
+        name = "GUN",
         hp = 10,
         weight = 3,
         slot_x = 1,
         slot_y = 1,
-        color = gfx.kColorBlack,
+            color = gfx.kColorBlack,
+            image = "images/gun.png",
         -- placement_row: "TOP", "BOTTOM", or "BOTH"
         placement_row = "BOTH"
     },
-    ["LEG-02"] = {
-        name = "Leg Mk2",
+    ["WHEEL"] = {
+        name = "WHEEL",
         hp = 12,
         weight = 4,
-        slot_x = 1,
+        slot_x = 3,
         slot_y = 1,
-        color = gfx.kColorBlack,
-        placement_row = "BOTTOM"
+            color = gfx.kColorBlack,
+            image = "images/wheel.png",
+            placement_row = "BOTTOM"
     },
-    ["CORE-03"] = {
-        name = "Core Unit",
+    ["CANON"] = {
+        name = "CANON",
         hp = 30,
         weight = 10,
-        slot_x = 1,
+        slot_x = 2,
         slot_y = 1,
-        color = gfx.kColorBlack,
-        placement_row = "TOP"
+            color = gfx.kColorBlack,
+            image = "images/canon.png",
+            placement_row = "TOP"
     }
 }
 
