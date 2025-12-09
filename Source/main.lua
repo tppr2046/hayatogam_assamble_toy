@@ -21,7 +21,9 @@ _G.GameState.mech_stats = _G.GameState.mech_stats or {
     equipped_parts = {}
 }
 -- ❗ 假設 PartsData 存在
-_G.PartsData = _G.PartsData or {}
+-- 讀取零件資料模組（若不存在則回退為空表）
+local pd = import "parts_data"
+_G.PartsData = pd or _G.PartsData or {}
 
 -- 載入狀態模組 
 _G.StateMenu = import "state_menu"
@@ -42,17 +44,33 @@ local current_state = _G.StateMenu
 -- ==========================================
 
 function setState(newState)
-    
+    local function nameOf(s)
+        if s == _G.StateMenu then return "StateMenu" end
+        if s == _G.StateHQ then return "StateHQ" end
+        if s == _G.StateMission then return "StateMission" end
+        return tostring(s)
+    end
+
+    print("LOG: setState requested. From:", nameOf(current_state), "To:", nameOf(newState))
+
     -- 執行舊狀態的清理工作 (如果有的話)
     if current_state and current_state.tearDown then
         current_state.tearDown()
     end
-    
+
     current_state = newState
-    
+
     -- 執行新狀態的初始化工作
-    if current_state and current_state.setup then
-        current_state.setup()
+    if current_state then
+        print("LOG: setState calling setup for:", nameOf(current_state))
+        if current_state.setup then
+            current_state.setup()
+            print("LOG: setState setup complete for:", nameOf(current_state))
+        else
+            print("LOG: new state has no setup() function:", nameOf(current_state))
+        end
+    else
+        print("ERROR: setState received nil newState")
     end
 end
 

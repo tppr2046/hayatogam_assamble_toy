@@ -38,7 +38,9 @@ function Projectile:update(dt, GRAVITY)
     
     -- 應用物理
     self.x = self.x + self.vx * dt
-    self.vy = self.vy + GRAVITY * dt
+    -- 使用砲彈自帶的 gravity（若未設定則使用世界重力）
+    local g = self.gravity or GRAVITY or 0.5
+    self.vy = self.vy + g * dt
     self.y = self.y + self.vy * dt
     
     -- 檢查是否碰到地面
@@ -84,6 +86,9 @@ function Enemy:init(x, y, type_id, ground_y)
     e.y = ground_y - e.height 
     setmetatable(e, { __index = Enemy })
     print("LOG: Created Enemy " .. type_id .. " at " .. x)
+    -- 從敵人資料讀取砲彈 multiplier（可在 enemy_data.lua 調整）
+    e.projectile_speed_mult = (data and data.projectile_speed_mult) or 1.0
+    e.projectile_grav_mult = (data and data.projectile_grav_mult) or 1.0
     return e
 end
 
@@ -114,21 +119,29 @@ function Enemy:fire(target_x, controller)
     local start_x = self.x + self.width / 2
     local start_y = self.y + self.height / 2
     local target_dist = target_x - start_x
-    local time_to_target = 60 -- 預設砲彈飛行時間 (越大越平緩)
-    
-    -- 計算水平速度
-    local vx = target_dist / time_to_target
-    
-    -- 計算垂直初速度 (拋物線)
+    -- 使砲彈水平方向速度接近玩家的移動速度（尊重敵人定義的 multiplier）
+    local base_vx = (controller and controller.player_move_speed) or 2.0
+    local speed_multiplier = self.projectile_speed_mult or 1.0
+    local vx_sign = 1
+    if target_dist < 0 then vx_sign = -1 end
+    local vx = vx_sign * base_vx * speed_multiplier
+
+    -- 以水平速度估算到達時間（避免除以 0）
+    local time_to_target = math.max(1.0, math.abs(target_dist) / math.max(math.abs(vx), 0.1))
+
+    -- 使用與玩家相同的重力感覺（controller.GRAVITY），並乘上敵人定義的 grav multiplier
+    local grav_multiplier = self.projectile_grav_mult or 1.0
+    local projectileGravity = (controller and controller.GRAVITY) and (controller.GRAVITY * grav_multiplier) or 0.5
+
+    -- 計算垂直初速度，使砲彈在 time_to_target 時抵達 target_y
     local target_y = self.ground_y - 32 -- 假定機甲高度
     local delta_y = target_y - start_y
-    local GRAVITY = controller.GRAVITY
-    
-    -- 拋物線公式: $y = y0 + vy0*t + 0.5*g*t^2$
-    -- $vy0 = (y - y0 - 0.5*g*t^2) / t$
+    local GRAVITY = projectileGravity
     local vy = (delta_y - 0.5 * GRAVITY * time_to_target^2) / time_to_target
 
+    -- 建立砲彈並給予自定重力
     local projectile = Projectile:init(start_x, start_y, vx, vy, self.attack, false, self.ground_y)
+    projectile.gravity = projectileGravity
     table.insert(controller.projectiles, projectile)
 end
 
@@ -148,7 +161,7 @@ end
 -- [[  EntityController 類別 (實體總控制器) ]]
 -- [[ ========================================== ]]
 
-function EntityController:init(scene_data, enemies_data)
+function EntityController:init(scene_data, enemies_data, player_move_speed)
     local safe_ground_y = (scene_data and scene_data.ground_y) or 240 
     
     local controller = {
@@ -156,7 +169,8 @@ function EntityController:init(scene_data, enemies_data)
         ground_y = safe_ground_y,
         enemies = {}, -- 新增敵人列表
         projectiles = {}, -- 新增砲彈列表
-        GRAVITY = 0.5 -- 將重力常數傳入
+        GRAVITY = 0.5, -- 將重力常數傳入
+        player_move_speed = player_move_speed or 2.0 -- 供敵人計算砲彈速度
     }
     setmetatable(controller, { __index = EntityController })
     

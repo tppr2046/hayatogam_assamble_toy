@@ -60,8 +60,8 @@ function StateMission.setup()
     local scene_data = _G.SceneData.Level1
     current_scene = scene_data
 
-    -- 3. 初始化 EntityController (處理障礙物、敵人等)
-    entity_controller = EntityController:init(scene_data) 
+    -- 3. 初始化 EntityController (處理障礙物、敵人等)，並傳入關卡內的敵人資料與玩家移動速度
+    entity_controller = EntityController:init(scene_data, scene_data.enemies, MOVE_SPEED)
 
     -- 4. 初始化機甲位置和 HP
     local ground_level = current_scene.ground_y - MECH_HEIGHT
@@ -115,12 +115,19 @@ function StateMission.update()
     
     if entity_controller then
         -- 使用 EntityController 進行精確碰撞
-        local result = entity_controller:checkCollision(new_x, new_y, mech_y_old, MECH_WIDTH, MECH_HEIGHT, mech_vy)
-        
-        mech_x = new_x + (result.horizontal_block or 0)
-        
-        if result.vertical_stop then
-            mech_y = result.vertical_stop
+        -- 注意：EntityController.checkCollision(self, target_x, target_y, mech_vy_current, mech_y_old, mech_width, mech_height)
+        local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, MECH_WIDTH, MECH_HEIGHT)
+
+        -- 如果沒有水平阻擋，採用計算後的新 X；否則保留原地（阻擋水平移動）
+        if not horizontal_block then
+            mech_x = new_x
+        else
+            -- 保持原本的 mech_x（或你可以在此加入推回量）
+            -- mech_x = mech_x -- 明確保留
+        end
+
+        if vertical_stop then
+            mech_y = vertical_stop
             mech_vy = 0
             is_on_ground = true
         elseif new_y >= ground_level then
@@ -151,11 +158,15 @@ function StateMission.update()
     if target_camera_x > max_camera_x then target_camera_x = max_camera_x end
     camera_x = target_camera_x
 
-    -- 4. 模擬戰鬥/傷害 (臨時: 模擬在 x=400 處受到 5 點傷害)
-    if mech_x >= 400 and timer == 0 then
-        current_hp = current_hp - 5
-        timer = 30 -- 設置 30 幀的冷卻時間
-        print("LOG: Mech took 5 damage! Current HP: " .. current_hp)
+    -- 4. 更新實體控制器 (敵人、砲彈)，並套用造成的傷害
+    -- 使用近似幀時間 dt（playdate 刷新率預設 30 FPS）
+    local dt = 1.0 / 30.0
+    if entity_controller then
+        local damage = entity_controller:updateAll(dt, mech_x, mech_y, MECH_WIDTH, MECH_HEIGHT, _G.GameState.mech_stats)
+        if damage and damage > 0 then
+            current_hp = current_hp - damage
+            print("LOG: Mech took " .. damage .. " damage from entities. Current HP: " .. current_hp)
+        end
     end
     
     -- 5. 更新計時器
@@ -220,3 +231,5 @@ function StateMission.draw()
     gfx.drawText("Mech X: " .. math.floor(mech_x), 10, SCREEN_HEIGHT - 30)
     gfx.drawText("Input: " .. last_input, 10, SCREEN_HEIGHT - 15)
 end
+
+return StateMission
