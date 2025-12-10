@@ -51,116 +51,91 @@ local max_hp = 1     -- 機甲最大 HP (在 setup 中獲取)
 -- ==========================================
 
 function StateMission.setup()
-    -- 設置字體
+    -- 初始化字體與狀態
     gfx.setFont(font)
     is_paused = false
     timer = 0
-    
-    -- 1. 載入 Assets
-    -- ❗ 假設您有 images/mech_24x32.png 圖片
-    -- 如果在 HQ 已經合成了機體影像，使用它；否則組合當前 equipped_parts
+
+    -- 嘗試使用先前快取的 mech image
     if _G and _G.GameState and _G.GameState.mech_image then
         Assets.mech_image = _G.GameState.mech_image
+        mech_draw_w = _G.GameState.mech_draw_w or mech_draw_w
+        mech_draw_h = _G.GameState.mech_draw_h or mech_draw_h
     else
-        -- 嘗試從 HQ 儲存的網格設定與 equipped_parts 合成影像
+        -- 嘗試從 mech_grid 與已裝備零件合成一張圖
         local mech_grid = _G and _G.GameState and _G.GameState.mech_grid
         local eq = _G and _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
-        if mech_grid and eq and _G.PartsData then
+        if mech_grid and eq and _G.PartsData and (#eq > 0) then
             local comp_w = mech_grid.cols * mech_grid.cell_size
             local comp_h = mech_grid.rows * mech_grid.cell_size
-            local final_w, final_h = MECH_WIDTH, MECH_HEIGHT
-
-                    -- Compose into a grid-sized composition (comp_w x comp_h) so layout matches HQ exactly
-                    local okcomp, comp = pcall(function() return gfx.image.new(comp_w, comp_h) end)
-                    if okcomp and comp then
-                        gfx.pushContext(comp)
-                        gfx.clear(gfx.kColorClear)
-                        for i, item in ipairs(eq) do
-                            local pid = item.id
-                            local pdata = _G.PartsData and _G.PartsData[pid]
-                            if not pdata then
-                                -- missing part data
-                            else
-                                local px = (item.col - 1) * mech_grid.cell_size
-                                local py = (item.row - 1) * mech_grid.cell_size
-                                local pw = (item.w or 1) * mech_grid.cell_size
-                                local ph = (item.h or 1) * mech_grid.cell_size
-                                if pdata._img_scaled then
-                                    -- If pre-rendered scaled image matches cell area, draw it; otherwise center it
-                                    local ok, sw, sh = pcall(function() return pdata._img_scaled:getSize() end)
-                                    if ok and sw and sh and sw == pw and sh == ph then
-                                        pcall(function() pdata._img_scaled:draw(px, py) end)
-                                    else
-                                        local ok2, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
-                                        if ok2 and iw and ih then
-                                            local dx = math.floor((pw - iw) / 2)
-                                            local dy = math.floor((ph - ih) / 2)
-                                            pcall(function() pdata._img_scaled:draw(px + math.max(0, dx), py + math.max(0, dy)) end)
-                                        else
-                                            pcall(function() pdata._img_scaled:draw(px, py) end)
-                                        end
-                                    end
-                                elseif pdata._img then
-                                    local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
-                                    if ok and iw and ih then
-                                        local dx = math.floor((pw - iw) / 2)
-                                        local dy = math.floor((ph - ih) / 2)
-                                        pcall(function() pdata._img:draw(px + math.max(0, dx), py + math.max(0, dy)) end)
-                                    else
-                                        pcall(function() pdata._img:draw(px, py) end)
-                                    end
-                                else
-                                    -- no image for this part
-                                end
-                            end
+            local okcomp, comp = pcall(function() return gfx.image.new(comp_w, comp_h) end)
+            if okcomp and comp then
+                gfx.pushContext(comp)
+                gfx.clear(gfx.kColorClear)
+                -- draw each equipped part into comp; convert row origin (bottom-left) to top-based y
+                for _, item in ipairs(eq) do
+                    local pid = item.id
+                    local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
+                    if pdata and pdata._img then
+                        local px = (item.col - 1) * mech_grid.cell_size
+                        local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size
+                        local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+                        local draw_x = px
+                        local draw_y = py_top
+                        if ok and iw and ih then
+                            draw_y = py_top + (mech_grid.cell_size - ih)
                         end
-                        gfx.popContext()
-
-                        -- Use the grid-sized comp as the mech image so mission draws match HQ layout
-                        Assets.mech_image = comp
-                        _G.GameState.mech_image = comp
-                        mech_draw_w = comp_w
-                        mech_draw_h = comp_h
-                        -- composed and cached as mech_image
-                    else
-                        print("WARN: Failed to create comp buffer; using default mech image")
-                        Assets.mech_image = gfx.image.new("images/mech_24x32.png") or gfx.image.new("images/mech_24x32")
+                        pcall(function() pdata._img:draw(draw_x, draw_y) end)
                     end
-            -- mech_grid or equipped_parts missing; using default image
+                end
+                gfx.popContext()
+                _G.GameState.mech_image = comp
+                _G.GameState.mech_draw_w = comp_w
+                _G.GameState.mech_draw_h = comp_h
+                Assets.mech_image = comp
+                mech_draw_w = comp_w
+                mech_draw_h = comp_h
+            end
         end
     end
 
-    -- Diagnostic: print whether mech image is available and its size
-    if Assets.mech_image then
-        local ok, iw, ih = pcall(function() return Assets.mech_image:getSize() end)
-        -- Assets.mech_image size check (silent)
-        if not ok then
-            -- getSize failed; keep silent
+    -- 初始化機甲位置：如果場景有 ground 資訊則放在地面，否則靠畫面底部
+    -- determine current scene: prefer selected mission in GameState, otherwise first mission in MissionData
+    local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or nil
+    if not mission_id then
+        for k, v in pairs(MissionData) do
+            mission_id = k
+            break
         end
+    end
+    if mission_id and MissionData[mission_id] and MissionData[mission_id].scene then
+        current_scene = MissionData[mission_id].scene
+    end
+
+    -- Initialize entity controller for the current scene (so ground/obstacles/enemies draw)
+    if current_scene and EntityController then
+        local enemies = (current_scene.enemies) or {}
+        entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED)
     else
-        -- Assets.mech_image is nil after setup
+        entity_controller = nil
     end
-    
-    -- 2. 獲取關卡數據 (假設我們總是載入 Level1)
-    local scene_data = _G.SceneData.Level1
-    current_scene = scene_data
 
-    -- 3. 初始化 EntityController (處理障礙物、敵人等)，並傳入關卡內的敵人資料與玩家移動速度
-    entity_controller = EntityController:init(scene_data, scene_data.enemies, MOVE_SPEED)
-
-    -- 4. 初始化機甲位置和 HP
-    local ground_level = current_scene.ground_y - MECH_HEIGHT
-    mech_x, mech_y, mech_vy = 50, ground_level, 0
+    if current_scene and current_scene.ground_y then
+        mech_x = 50
+        mech_y = current_scene.ground_y - mech_draw_h
+    else
+        mech_x = 50
+        mech_y = SCREEN_HEIGHT - mech_draw_h - 10
+    end
+    mech_vy = 0
     is_on_ground = true
     mech_y_old = mech_y
     camera_x = 0
-    
-    -- 5. 初始化 HP (從全域 GameState 獲取組裝後的 HP)
-    local stats = _G.GameState.mech_stats or {}
-    max_hp = stats.total_hp or 100 
+
+    -- 初始化 HP (從全域 GameState 獲取組裝後的 HP)
+    local stats = (_G and _G.GameState and _G.GameState.mech_stats) or {}
+    max_hp = stats.total_hp or 100
     current_hp = max_hp
-    
-    -- StateMission initialized
 end
 
 function StateMission.update()
@@ -196,7 +171,12 @@ function StateMission.update()
     local new_x = mech_x + dx
     local new_y = mech_y + mech_vy
     
-    local ground_level = current_scene.ground_y - MECH_HEIGHT
+    local ground_level
+    if current_scene and current_scene.ground_y then
+        ground_level = current_scene.ground_y - mech_draw_h
+    else
+        ground_level = SCREEN_HEIGHT - mech_draw_h - 10
+    end
     
     if entity_controller then
         -- 使用 EntityController 進行精確碰撞
@@ -226,6 +206,8 @@ function StateMission.update()
         end
     else
         -- 備用/簡單地面碰撞邏輯
+        -- apply horizontal movement (no entity controller)
+        mech_x = new_x
         if new_y >= ground_level then
             mech_y = ground_level
             mech_vy = 0
@@ -239,11 +221,18 @@ function StateMission.update()
     -- 3. 相機邏輯
     local target_camera_x = mech_x - 150 
     if target_camera_x < 0 then target_camera_x = 0 end
-    local max_camera_x = (current_scene.width or 400) - SCREEN_WIDTH
+    local max_camera_x = ((current_scene and current_scene.width) or 400) - SCREEN_WIDTH
     if target_camera_x > max_camera_x then target_camera_x = max_camera_x end
     camera_x = target_camera_x
 
     -- 4. 更新實體控制器 (敵人、砲彈)，並套用造成的傷害
+    if entity_controller then
+        local dt = 1 / 30 -- approximate delta time per frame
+        local damage = entity_controller:updateAll(dt, mech_x, mech_y, mech_draw_w or MECH_WIDTH, mech_draw_h or MECH_HEIGHT, (_G.GameState and _G.GameState.mech_stats) or {})
+        if damage and damage > 0 then
+            current_hp = current_hp - damage
+        end
+    end
     
     -- 5. 更新計時器
     if timer > 0 then
@@ -296,55 +285,60 @@ function StateMission.draw()
         local comp_h = mech_grid.rows * mech_grid.cell_size
         local sx = (mech_draw_w or MECH_WIDTH) / comp_w
         local sy = (mech_draw_h or MECH_HEIGHT) / comp_h
+        -- build draw list with computed draw_y so we can sort by vertical position
+        local draw_list = {}
         for _, item in ipairs(eq) do
             local pid = item.id
             local pdata = _G.PartsData and _G.PartsData[pid]
-                if pdata then
-                    local px = draw_x + math.floor((item.col - 1) * mech_grid.cell_size * sx)
-                local py = draw_y + math.floor((item.row - 1) * mech_grid.cell_size * sy)
+            if pdata then
+                local px = draw_x + math.floor((item.col - 1) * mech_grid.cell_size * sx)
+                local py_top = draw_y + math.floor((mech_grid.rows - item.row) * mech_grid.cell_size * sy)
                 local pw = math.max(1, math.floor((item.w or 1) * mech_grid.cell_size * sx))
                 local ph = math.max(1, math.floor((item.h or 1) * mech_grid.cell_size * sy))
-                local drew = false
-                local info = {}
-                    local src = pdata._img_scaled or pdata._img
-                if pdata._img_scaled then
-                    local oksize, sw, sh = pcall(function() return pdata._img_scaled:getSize() end)
-                    table.insert(info, string.format("_img_scaled size=%s,%s", tostring(sw), tostring(sh)))
-                    if oksize and sw and sh then
-                        local dx = math.floor((pw - sw) / 2)
-                        local dy = math.floor((ph - sh) / 2)
-                        local draw_x = px + math.max(0, dx)
-                        local draw_y = py + math.max(0, dy)
-                        local ok, err = pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
-                        -- if drawing failed, we'll fallback silently
-                        drew = ok
-                        table.insert(info, string.format("draw_centered=%s", tostring(drew)))
-                    end
-                elseif pdata._img then
-                    local oksize, iw, ih = pcall(function() return pdata._img:getSize() end)
-                    table.insert(info, string.format("_img size=%s,%s", tostring(iw), tostring(ih)))
-                    if oksize and iw and ih then
-                        local dx = math.floor((pw - iw) / 2)
-                        local dy = math.floor((ph - ih) / 2)
-                        local draw_x = px + math.max(0, dx)
-                        local draw_y = py + math.max(0, dy)
-                        local ok, err = pcall(function() pdata._img:draw(draw_x, draw_y) end)
-                        -- if drawing failed, we'll fallback silently
-                        drew = ok
-                        table.insert(info, string.format("draw_centered=%s", tostring(drew)))
-                    end
-                else
-                    table.insert(info, "no_img")
+                local src = pdata._img_scaled or pdata._img
+                local oksize, iw, ih = false, nil, nil
+                if src then
+                    oksize, iw, ih = pcall(function() return src:getSize() end)
                 end
-                if not drew then
-                    -- 尝试更强的 fallback：建立临时缓冲区并在其上绘制，再把缓冲区 draw 回屏幕
-                    local buf_ok, buf = pcall(function() return gfx.image.new(pw, ph) end)
-                    if buf_ok and buf then
-                        local drew_buf = false
-                        local okpush, perr = pcall(function()
-                            gfx.pushContext(buf)
-                            gfx.clear(gfx.kColorClear)
-                            -- 在緩衝中以原始尺寸繪製（不縮放），並置中到緩衝內
+                local img_w, img_h = (oksize and iw) or 0, (oksize and ih) or 0
+                -- compute image draw Y using bottom-left anchor (may be negative offset)
+                local img_draw_x = px + math.max(0, math.floor((pw - img_w) / 2))
+                local img_draw_y = py_top + math.max(0, (ph - img_h))
+                table.insert(draw_list, { pid = pid, pdata = pdata, src = src, px = img_draw_x, py = img_draw_y, pw = pw, ph = ph, img_h = img_h })
+            end
+        end
+
+        -- sort by bottom Y (py + img_h) ascending so parts higher on screen draw first; lower (closer) draw last
+        table.sort(draw_list, function(a, b)
+            local ab = (a.py or 0) + (a.img_h or 0)
+            local bb = (b.py or 0) + (b.img_h or 0)
+            if ab == bb then
+                return (a.img_h or 0) < (b.img_h or 0)
+            end
+            return ab < bb
+        end)
+
+        for _, entry in ipairs(draw_list) do
+            local pid = entry.pid
+            local pdata = entry.pdata
+            local src = entry.src
+            local px = entry.px
+            local py_top = entry.py
+            local pw = entry.pw
+            local ph = entry.ph
+            local drew = false
+            if src then
+                local ok, err = pcall(function() src:draw(px, py_top) end)
+                drew = ok
+            end
+            if not drew then
+                -- fallback via temp buffer
+                local buf_ok, buf = pcall(function() return gfx.image.new(pw, ph) end)
+                if buf_ok and buf then
+                    local okpush = pcall(function()
+                        gfx.pushContext(buf)
+                        gfx.clear(gfx.kColorClear)
+                        if src then
                             local gotSize, sw, sh = pcall(function() return src:getSize() end)
                             if gotSize and sw and sh then
                                 local dx = math.floor((pw - sw) / 2)
@@ -353,25 +347,17 @@ function StateMission.draw()
                             else
                                 pcall(function() src:draw(0, 0) end)
                             end
-                            gfx.popContext()
-                        end)
-                        if not okpush then
-                            -- failed to push/pop context for temp buffer; silent fallback
-                        else
-                            local okdrawbuf, derrbuf = pcall(function() buf:draw(px, py) end)
-                            if okdrawbuf then
-                                drew = true
-                            end
                         end
+                        gfx.popContext()
+                    end)
+                    if okpush then
+                        pcall(function() buf:draw(px, py_top) end)
+                        drew = true
                     end
                 end
-                if not drew then
-                    -- 最後回退到文字標籤
-                    gfx.drawText(pid or "?", px, py)
-                end
-                -- debug info suppressed
-            else
-                gfx.drawText(pid or "?", draw_x, draw_y)
+            end
+            if not drew then
+                gfx.drawText(pid or "?", px, py_top)
             end
         end
     else

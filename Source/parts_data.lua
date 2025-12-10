@@ -33,7 +33,20 @@ local parts_data = {
             color = gfx.kColorBlack,
             image = "images/canon.png",
             placement_row = "TOP"
+    },
+    ["SWORD"] = {
+        name = "SWORD",
+        hp = 10,
+        weight = 5,
+        slot_x = 1,
+        slot_y = 1,
+            color = gfx.kColorBlack,
+            image = "images/sword.png",
+            placement_row = "TOP"
     }
+
+
+
 }
 
 return parts_data

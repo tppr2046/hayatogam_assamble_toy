@@ -23,7 +23,7 @@ StateHQ = {}
 local UI_AREA_Y_START = 160 
 local GRID_COLS = 3       
 local GRID_ROWS = 2       
-local GRID_CELL_SIZE = 32 
+local GRID_CELL_SIZE = 16 
 local GRID_START_X = 100  
 local GRID_START_Y = 40   
 
@@ -67,19 +67,13 @@ local function checkIfFits(part_data, start_col, start_row)
     if part_data.placement_row then
         local pr = part_data.placement_row
         if pr == "TOP" then
-            -- 允許的起始 row 必須在最上方（row 1）
-            if start_row > 1 then
+            -- TOP placement: the part's topmost occupied row must align with GRID_ROWS
+            if (start_row + h - 1) ~= GRID_ROWS then
                 return false, "Must place on TOP row"
             end
         elseif pr == "BOTTOM" then
-            -- 允許的起始 row 必須位於底排（當 GRID_ROWS==2 時為 row 2）
-            if start_row < GRID_ROWS then
-                -- if part height covers multiple rows, ensure it fits entirely within bottom
-                if (start_row + h - 1) < GRID_ROWS then
-                    return false, "Must place on BOTTOM row"
-                end
-            end
-            if GRID_ROWS == 2 and start_row ~= 2 and h == 1 then
+            -- BOTTOM placement: the part's origin must be on the bottom row (row == 1)
+            if start_row ~= 1 then
                 return false, "Must place on BOTTOM row"
             end
         end
@@ -223,21 +217,20 @@ function StateHQ.setup()
     if _G and _G.PartsData then
         for pid, pdata in pairs(_G.PartsData) do
             if pdata._img then
-                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
-                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
+                local gotSize, iw, ih = pcall(function() return pdata._img:getSize() end)
+                -- ensure buffer is at least the image size so larger-than-slot images (e.g., 32x16 SWORD) are fully visible
+                local sw = math.max((pdata.slot_x or 1) * GRID_CELL_SIZE, (gotSize and iw) or 0)
+                local sh = math.max((pdata.slot_y or 1) * GRID_CELL_SIZE, (gotSize and ih) or 0)
                 if sw > 0 and sh > 0 then
                     local ok, buf = pcall(function() return gfx.image.new(sw, sh) end)
                     if ok and buf then
                         gfx.pushContext(buf)
                         gfx.clear(gfx.kColorClear)
-                        -- Draw original into the buffer without scaling; center it if smaller
-                        local gotSize, iw, ih = pcall(function() return pdata._img:getSize() end)
                         if gotSize and iw and ih then
                             local dx = math.floor((sw - iw) / 2)
                             local dy = math.floor((sh - ih) / 2)
                             pcall(function() pdata._img:draw(math.max(0, dx), math.max(0, dy)) end)
                         else
-                            -- As a last resort try raw draw at 0,0
                             pcall(function() pdata._img:draw(0, 0) end)
                         end
                         gfx.popContext()
@@ -261,9 +254,11 @@ function StateHQ.update()
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
                 cursor_col = math.min(GRID_COLS, cursor_col + 1)
             elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-                cursor_row = math.max(1, cursor_row - 1)
-            elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+                -- Up should move the cursor visually up (increase row index in bottom-origin system)
                 cursor_row = math.min(GRID_ROWS, cursor_row + 1)
+            elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+                -- Down moves visually down (decrease row index)
+                cursor_row = math.max(1, cursor_row - 1)
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 嘗試放置邏輯
                 local part_id = _G.GameState.unlocked_parts[selected_part_index]
@@ -368,9 +363,9 @@ function StateHQ.update()
         elseif playdate.buttonJustPressed(playdate.kButtonRight) then
             cursor_col = math.min(GRID_COLS, cursor_col + 1)
         elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-            cursor_row = math.max(1, cursor_row - 1)
-        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
             cursor_row = math.min(GRID_ROWS, cursor_row + 1)
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            cursor_row = math.max(1, cursor_row - 1)
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
             -- 嘗試移除當前格子上的零件
             local idx, item = findEquippedPartAt(cursor_col, cursor_row)
@@ -420,7 +415,8 @@ function StateHQ.draw()
     -- 3. 繪製組裝游標 (白色方框，標示當前位置)
     if hq_mode == "EQUIP" and is_placing_part then
         local cursor_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-        local cursor_y = GRID_START_Y + (cursor_row - 1) * GRID_CELL_SIZE
+        -- convert row (origin at bottom-left) to top-based y for drawing
+        local cursor_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
         local part_id = _G.GameState and _G.GameState.unlocked_parts and _G.GameState.unlocked_parts[selected_part_index]
         local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
         if pdata and pdata._img_scaled then
@@ -428,7 +424,8 @@ function StateHQ.draw()
             local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
             -- if part would extend beyond grid bounds, clamp position for preview
             local preview_px = cursor_x
-            local preview_py = cursor_y
+            -- anchor bottom-left: compute draw_y so image bottom aligns with cell bottom
+            local preview_py = cursor_y + (GRID_CELL_SIZE - sh)
             pcall(function() pdata._img_scaled:draw(preview_px, preview_py) end)
             gfx.setColor(gfx.kColorBlack)
             drawDither(preview_px + 2, preview_py + 2, sw - 4, sh - 4)
@@ -462,7 +459,8 @@ function StateHQ.draw()
     -- 如果在 UNEQUIP 模式，繪製游標框並顯示要移除的零件資訊（若有）
     if hq_mode == "UNEQUIP" then
         local cursor_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-        local cursor_y = GRID_START_Y + (cursor_row - 1) * GRID_CELL_SIZE
+        -- convert row (bottom-origin) to top-based y for drawing
+        local cursor_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
         -- 用黑色框標示選取格
         gfx.setColor(gfx.kColorBlack)
         gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
@@ -530,36 +528,38 @@ function StateHQ.draw()
                     local pid = item.id
                     local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
                     local px = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
-                    local py = GRID_START_Y + (item.row - 1) * GRID_CELL_SIZE
+                    -- convert item.row (bottom-left origin) to top-based y
+                    local py_top = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
                     local pw = (item.w or 1) * GRID_CELL_SIZE
                     local ph = (item.h or 1) * GRID_CELL_SIZE
                     if pdata and pdata._img_scaled then
-                        -- draw the pre-rendered scaled image that fits the part cell area
-                        pcall(function() pdata._img_scaled:draw(px, py) end)
-                        -- overlay dither for style
+                        -- draw pre-rendered image; anchor bottom-left so full image visible
+                        local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
+                        if ok and iw and ih then
+                            local draw_x = px
+                            local draw_y = py_top + (GRID_CELL_SIZE - ih)
+                            pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
+                        else
+                            pcall(function() pdata._img_scaled:draw(px, py_top) end)
+                        end
                         gfx.setColor(gfx.kColorBlack)
-                        drawDither(px + 2, py + 2, pw - 4, ph - 4)
-                        -- draw bounding rect
+                        drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
                         gfx.setColor(gfx.kColorBlack)
-                        gfx.drawRect(px, py, pw, ph)
+                        gfx.drawRect(px, py_top, pw, ph)
                     elseif pdata and pdata._img then
-                        -- fallback: draw original centered into bounding box (no scaling)
+                        -- fallback: draw original with bottom-left anchoring (no scaling)
                         local iw, ih
                         local ok, a, b = pcall(function() return pdata._img:getSize() end)
                         if ok then iw, ih = a, b end
                         local draw_x = px
-                        local draw_y = py
-                        if iw and ih then
-                            draw_x = px + math.floor((pw - iw) / 2)
-                            draw_y = py + math.floor((ph - ih) / 2)
-                        end
+                        local draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
                         pcall(function() pdata._img:draw(draw_x, draw_y) end)
                         gfx.setColor(gfx.kColorBlack)
-                        drawDither(px + 2, py + 2, pw - 4, ph - 4)
+                        drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
                     else
                         -- no image: draw text label at the origin cell
                         gfx.setColor(gfx.kColorBlack)
-                        gfx.drawText(pid or "?", px + 2, py + 2)
+                        gfx.drawText(pid or "?", px + 2, py_top + 2)
                     end
                 end
     gfx.drawText("MECH STATS:", detail_x, detail_y)
