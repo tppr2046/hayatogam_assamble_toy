@@ -66,19 +66,38 @@ function StateMission.setup()
         local mech_grid = _G and _G.GameState and _G.GameState.mech_grid
         local eq = _G and _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
         if mech_grid and eq and _G.PartsData and (#eq > 0) then
-            local comp_w = mech_grid.cols * mech_grid.cell_size
-            local comp_h = mech_grid.rows * mech_grid.cell_size
+            -- Compute actual bounding box by checking all part images
+            local min_x, min_y, max_x, max_y = 0, 0, mech_grid.cols * mech_grid.cell_size, mech_grid.rows * mech_grid.cell_size
+            for _, item in ipairs(eq) do
+                local pid = item.id
+                local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
+                if pdata and pdata._img then
+                    local px = (item.col - 1) * mech_grid.cell_size
+                    local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size
+                    local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+                    if ok and iw and ih then
+                        local draw_y = py_top + (mech_grid.cell_size - ih)
+                        -- Expand bounding box to include full image
+                        if px < min_x then min_x = px end
+                        if draw_y < min_y then min_y = draw_y end
+                        if px + iw > max_x then max_x = px + iw end
+                        if draw_y + ih > max_y then max_y = draw_y + ih end
+                    end
+                end
+            end
+            local comp_w = math.max(1, max_x - min_x)
+            local comp_h = math.max(1, max_y - min_y)
             local okcomp, comp = pcall(function() return gfx.image.new(comp_w, comp_h) end)
             if okcomp and comp then
                 gfx.pushContext(comp)
                 gfx.clear(gfx.kColorClear)
-                -- draw each equipped part into comp; convert row origin (bottom-left) to top-based y
+                -- draw each equipped part into comp; adjust coordinates by min offsets
                 for _, item in ipairs(eq) do
                     local pid = item.id
                     local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
                     if pdata and pdata._img then
-                        local px = (item.col - 1) * mech_grid.cell_size
-                        local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size
+                        local px = (item.col - 1) * mech_grid.cell_size - min_x
+                        local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size - min_y
                         local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
                         local draw_x = px
                         local draw_y = py_top
@@ -181,7 +200,7 @@ function StateMission.update()
     if entity_controller then
         -- 使用 EntityController 進行精確碰撞
         -- 注意：EntityController.checkCollision(self, target_x, target_y, mech_vy_current, mech_y_old, mech_width, mech_height)
-        local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, MECH_WIDTH, MECH_HEIGHT)
+        local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, mech_draw_w or MECH_WIDTH, mech_draw_h or MECH_HEIGHT)
 
         -- 如果沒有水平阻擋，採用計算後的新 X；否則保留原地（阻擋水平移動）
         if not horizontal_block then
@@ -264,110 +283,23 @@ function StateMission.draw()
         entity_controller:draw(camera_x) 
     end
 
-    -- 2. 繪製機甲（使用容器方式直接繪製零件）
+    -- 2. 繪製機甲（使用預先組合的 mech image，確保碰撞框與視覺一致）
     local draw_x = mech_x - camera_x
     local draw_y = mech_y
-    -- 使用實際的繪製尺寸（若合成或 fallback 設定過會使用 mech_draw_w/mech_draw_h）
     local draw_w = mech_draw_w or MECH_WIDTH
     local draw_h = mech_draw_h or MECH_HEIGHT
-    -- 先清空機甲區域為白色背景，確保零件黑色像素可見
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRect(draw_x, draw_y, draw_w, draw_h)
-    -- 外框（黑色）
+    
+    -- 繪製碰撞框（調試用）
     gfx.setColor(gfx.kColorBlack)
     gfx.drawRect(draw_x, draw_y, draw_w, draw_h)
-
-    -- 使用容器方式繪製：直接在畫面上逐一繪製每個已裝備的零件（不嘗試合成至單一 image）
-    local mech_grid = _G and _G.GameState and _G.GameState.mech_grid
-    local eq = _G and _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
-    if mech_grid and eq and (#eq > 0) and _G.PartsData then
-        local comp_w = mech_grid.cols * mech_grid.cell_size
-        local comp_h = mech_grid.rows * mech_grid.cell_size
-        local sx = (mech_draw_w or MECH_WIDTH) / comp_w
-        local sy = (mech_draw_h or MECH_HEIGHT) / comp_h
-        -- build draw list with computed draw_y so we can sort by vertical position
-        local draw_list = {}
-        for _, item in ipairs(eq) do
-            local pid = item.id
-            local pdata = _G.PartsData and _G.PartsData[pid]
-            if pdata then
-                local px = draw_x + math.floor((item.col - 1) * mech_grid.cell_size * sx)
-                local py_top = draw_y + math.floor((mech_grid.rows - item.row) * mech_grid.cell_size * sy)
-                local pw = math.max(1, math.floor((item.w or 1) * mech_grid.cell_size * sx))
-                local ph = math.max(1, math.floor((item.h or 1) * mech_grid.cell_size * sy))
-                local src = pdata._img_scaled or pdata._img
-                local oksize, iw, ih = false, nil, nil
-                if src then
-                    oksize, iw, ih = pcall(function() return src:getSize() end)
-                end
-                local img_w, img_h = (oksize and iw) or 0, (oksize and ih) or 0
-                -- compute image draw Y using bottom-left anchor (may be negative offset)
-                local img_draw_x = px + math.max(0, math.floor((pw - img_w) / 2))
-                local img_draw_y = py_top + math.max(0, (ph - img_h))
-                table.insert(draw_list, { pid = pid, pdata = pdata, src = src, px = img_draw_x, py = img_draw_y, pw = pw, ph = ph, img_h = img_h })
-            end
-        end
-
-        -- sort by bottom Y (py + img_h) ascending so parts higher on screen draw first; lower (closer) draw last
-        table.sort(draw_list, function(a, b)
-            local ab = (a.py or 0) + (a.img_h or 0)
-            local bb = (b.py or 0) + (b.img_h or 0)
-            if ab == bb then
-                return (a.img_h or 0) < (b.img_h or 0)
-            end
-            return ab < bb
-        end)
-
-        for _, entry in ipairs(draw_list) do
-            local pid = entry.pid
-            local pdata = entry.pdata
-            local src = entry.src
-            local px = entry.px
-            local py_top = entry.py
-            local pw = entry.pw
-            local ph = entry.ph
-            local drew = false
-            if src then
-                local ok, err = pcall(function() src:draw(px, py_top) end)
-                drew = ok
-            end
-            if not drew then
-                -- fallback via temp buffer
-                local buf_ok, buf = pcall(function() return gfx.image.new(pw, ph) end)
-                if buf_ok and buf then
-                    local okpush = pcall(function()
-                        gfx.pushContext(buf)
-                        gfx.clear(gfx.kColorClear)
-                        if src then
-                            local gotSize, sw, sh = pcall(function() return src:getSize() end)
-                            if gotSize and sw and sh then
-                                local dx = math.floor((pw - sw) / 2)
-                                local dy = math.floor((ph - sh) / 2)
-                                pcall(function() src:draw(math.max(0, dx), math.max(0, dy)) end)
-                            else
-                                pcall(function() src:draw(0, 0) end)
-                            end
-                        end
-                        gfx.popContext()
-                    end)
-                    if okpush then
-                        pcall(function() buf:draw(px, py_top) end)
-                        drew = true
-                    end
-                end
-            end
-            if not drew then
-                gfx.drawText(pid or "?", px, py_top)
-            end
-        end
+    
+    -- 繪製組合後的機甲圖像
+    if mech_img then
+        pcall(function() mech_img:draw(draw_x, draw_y) end)
     else
-        -- 若沒有格子資訊，嘗試繪製已快取的 mech image
-        if mech_img then
-            pcall(function() mech_img:draw(draw_x, draw_y) end)
-        else
-            -- 備用: 繪製機甲方塊
-            gfx.fillRect(draw_x, draw_y, MECH_WIDTH, MECH_HEIGHT)
-        end
+        -- 備用: 繪製機甲方塊
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(draw_x, draw_y, draw_w, draw_h)
     end
     
     -- 3. 繪製 HUD (HP 條)

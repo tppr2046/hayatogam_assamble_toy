@@ -19,13 +19,13 @@ return {
                 {type = "WALL", x = 600, y = 150, height = 70, width = 10, is_pushable = false}
             },
             
+            -- 任務敵人
+            enemies = {
+                {type = "BASIC_ENEMY", x = 300, y = 0},
+                {type = "BASIC_ENEMY", x = 450, y = 0}
+            },
+            
             mission_objects = {} 
-        },
-        
-        -- 任務目標
-        enemies = {
-            {type = "BASIC_ENEMY", x = 300, y = 200},
-            {type = "BASIC_ENEMY", x = 450, y = 200}
         },
         
         reward_money = 50,
