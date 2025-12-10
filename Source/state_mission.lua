@@ -37,8 +37,11 @@ local UI_START_Y = GAME_HEIGHT + 5
 local selected_part_slot = nil  -- {col, row} 當前選中的零件格子
 local active_part_id = nil      -- 當前激活的零件 ID
 local sword_angle = 0            -- SWORD 旋轉角度 (0-180)
-local sword_is_attacking = false -- SWORD 是否正在攻擊（crank 轉動時）
+local sword_is_attacking = false -- SWORD 是否正在政擊（crank 轉動時）
 local sword_last_attack_angle = nil  -- 上次攻擊時的角度，用於檢測揮動完成
+local player_hit_shake_timer = 0  -- 玩家受擊震動計時器
+local player_hit_shake_offset = 0  -- 玩家受擊震動偏移
+local gun_fire_timer = 0  -- GUN 發射計時器
 
 -- 可變的繪製寬高（預設為常數），若合成成功會改成合成尺寸
 local mech_draw_w = MECH_WIDTH
@@ -354,6 +357,44 @@ function StateMission.update()
         local damage = entity_controller:updateAll(dt, mech_x, mech_y, body_w, body_h, (_G.GameState and _G.GameState.mech_stats) or {})
         if damage and damage > 0 then
             current_hp = current_hp - damage
+            -- 觸發玩家受擊震動效果
+            player_hit_shake_timer = 0.3  -- 0.3 秒震動
+            player_hit_shake_offset = 0
+        end
+        
+        -- 更新玩家受擊震動效果
+        if player_hit_shake_timer > 0 then
+            player_hit_shake_timer = player_hit_shake_timer - dt
+            -- 震動效果：左右擺動
+            player_hit_shake_offset = math.sin(player_hit_shake_timer * 80) * 5
+        else
+            player_hit_shake_offset = 0
+        end
+        
+        -- GUN 自動發射功能
+        gun_fire_timer = gun_fire_timer + dt
+        local eq = _G.GameState.mech_stats.equipped_parts or {}
+        for _, item in ipairs(eq) do
+            local pdata = _G.PartsData and _G.PartsData[item.id]
+            if item.id == "GUN" and pdata and pdata.fire_cooldown then
+                if gun_fire_timer >= pdata.fire_cooldown then
+                    -- 發射砲彈
+                    local cell_size = mech_grid.cell_size
+                    local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                    local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+                    
+                    -- 使用 GUN 設定的速度參數
+                    local vx = pdata.projectile_vx or 150
+                    local vy = pdata.projectile_vy or -50
+                    local dmg = pdata.projectile_damage or 5
+                    
+                    -- 創建砲彈（is_player_bullet = true）
+                    entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg)
+                    
+                    gun_fire_timer = 0  -- 重置計時器
+                    break  -- 每次只發射一個 GUN
+                end
+            end
         end
         
         -- 檢查武器零件碰撞 (攻擊敵人)
@@ -446,7 +487,7 @@ function StateMission.draw()
     end
 
     -- 2. 繪製機甲（使用預先組合的 mech image，確保碰撞框與視覺一致）
-    local draw_x = mech_x - camera_x
+    local draw_x = mech_x - camera_x + player_hit_shake_offset  -- 添加震動偏移
     local draw_y = mech_y
     local draw_w = mech_draw_w or MECH_WIDTH
     local draw_h = mech_draw_h or MECH_HEIGHT

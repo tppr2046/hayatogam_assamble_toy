@@ -196,6 +196,15 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     return controller
 end
 
+-- 添加玩家砲彈
+function EntityController:addPlayerProjectile(x, y, vx, vy, damage)
+    local projectile = Projectile:init(x, y, vx, vy, damage, true, self.ground_y)
+    -- 設定與敵人砲彈相同的重力（使用世界重力 GRAVITY）
+    projectile.gravity = self.GRAVITY or 0.5
+    table.insert(self.projectiles, projectile)
+    print("LOG: Player fired projectile at (" .. math.floor(x) .. ", " .. math.floor(y) .. ")")
+end
+
 function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height, mech_stats)
     local mech_damage_taken = 0
 
@@ -217,13 +226,34 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         if p.active then
             p:update(dt, self.GRAVITY)
             
-            -- 檢查砲彈是否擊中機甲
+            -- 檢查敵人砲彈是否擊中機甲
             if not p.is_player_bullet and self:checkMechCollision(mech_x, mech_y, mech_width, mech_height, p.x, p.y, p.width, p.height) then
                 mech_damage_taken = mech_damage_taken + p.damage
                 p.active = false -- 擊中後銷毀
             end
             
-            -- TODO: 檢查砲彈是否擊中敵人
+            -- 檢查玩家砲彈是否擊中敵人
+            if p.is_player_bullet then
+                for _, enemy in ipairs(self.enemies) do
+                    if enemy.is_alive and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, p.x, p.y, p.width, p.height) then
+                        -- 擊中敵人
+                        enemy.hp = enemy.hp - p.damage
+                        p.active = false -- 砲彈銷毀
+                        
+                        -- 敵人受擊震動
+                        enemy.hit_shake_timer = 0.3
+                        enemy.hit_shake_offset_x = 0
+                        
+                        print("LOG: Player projectile hit enemy! HP=" .. math.floor(enemy.hp))
+                        
+                        if enemy.hp <= 0 then
+                            enemy.is_alive = false
+                            print("LOG: Enemy killed by player projectile")
+                        end
+                        break
+                    end
+                end
+            end
             
         else
             table.remove(self.projectiles, i) -- 移除不活躍的砲彈

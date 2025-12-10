@@ -13,7 +13,12 @@ local parts_data = {
             color = gfx.kColorBlack,
             image = "images/gun.png",
         -- placement_row: "TOP", "BOTTOM", or "BOTH"
-        placement_row = "BOTH"
+        placement_row = "TOP",
+        -- GUN 特有屬性：砲彈發射
+        fire_cooldown = 1.0,  -- 每 1 秒發射一次
+        projectile_vx = 50,  -- 砲彈水平速度
+        projectile_vy = -2,  -- 砲彈垂直速度（負值=向上）
+        projectile_damage = 5  -- 砲彈傷害
     },
     ["WHEEL"] = {
         name = "WHEEL",
