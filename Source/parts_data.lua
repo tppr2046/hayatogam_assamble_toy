@@ -38,7 +38,11 @@ local parts_data = {
         slot_y = 1,
             color = gfx.kColorBlack,
             image = "images/canon.png",
-            placement_row = "TOP"
+            placement_row = "TOP",
+        -- CANON 特有屬性：砲彈發射
+        fire_cooldown = 0.5,  -- 每 0.5 秒可以發射一次
+        projectile_speed = 200,  -- 砲彈速度
+        projectile_damage = 10  -- 砲彈傷害
     },
     ["SWORD"] = {
         name = "SWORD",

@@ -7,6 +7,202 @@ local gfx = playdate.graphics
 local EnemyData = import "enemy_data" -- 確保載入敵人數據
 
 EntityController = {}
+MechController = {}  -- 新增：機甲控制器
+
+-- [[ ========================================== ]]
+-- [[  MechController 類別 (機甲零件控制) ]]
+-- [[ ========================================== ]]
+
+function MechController:init()
+    local mc = {
+        -- 零件狀態
+        active_part_id = nil,
+        selected_part_slot = nil,  -- {col, row}
+        
+        -- SWORD 相關
+        sword_angle = 0,
+        sword_is_attacking = false,
+        sword_last_attack_angle = nil,
+        
+        -- CANON 相關
+        canon_angle = 0,
+        canon_fire_timer = 0,
+        
+        -- GUN 相關
+        gun_fire_timer = 0,
+        
+        -- 玩家受擊效果
+        hit_shake_timer = 0,
+        hit_shake_offset = 0
+    }
+    setmetatable(mc, { __index = MechController })
+    return mc
+end
+
+-- 處理零件選擇和激活
+function MechController:handleSelection(mech_stats)
+    local UI_GRID_COLS = 3
+    local UI_GRID_ROWS = 2
+    
+    if not self.active_part_id then
+        -- 未激活：方向鍵選擇
+        if playdate.buttonJustPressed(playdate.kButtonUp) then
+            if not self.selected_part_slot then
+                self.selected_part_slot = {col = 1, row = 1}
+            else
+                self.selected_part_slot.row = math.min(UI_GRID_ROWS, self.selected_part_slot.row + 1)
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            if self.selected_part_slot then
+                self.selected_part_slot.row = math.max(1, self.selected_part_slot.row - 1)
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
+            if not self.selected_part_slot then
+                self.selected_part_slot = {col = 1, row = 1}
+            else
+                self.selected_part_slot.col = math.max(1, self.selected_part_slot.col - 1)
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonRight) then
+            if not self.selected_part_slot then
+                self.selected_part_slot = {col = 1, row = 1}
+            else
+                self.selected_part_slot.col = math.min(UI_GRID_COLS, self.selected_part_slot.col + 1)
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- 激活選中的零件
+            if self.selected_part_slot and mech_stats then
+                local eq = mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    local slot_w = item.w or 1
+                    local slot_h = item.h or 1
+                    if self.selected_part_slot.col >= item.col and self.selected_part_slot.col < item.col + slot_w and
+                       self.selected_part_slot.row >= item.row and self.selected_part_slot.row < item.row + slot_h then
+                        self.active_part_id = item.id
+                        break
+                    end
+                end
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonB) then
+            self.selected_part_slot = nil
+        end
+    else
+        -- 已激活：按 B 取消
+        if playdate.buttonJustPressed(playdate.kButtonB) then
+            self.active_part_id = nil
+        end
+    end
+end
+
+-- 處理零件操作（返回移動增量）
+function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
+    local dx = 0
+    local MOVE_SPEED = 2.0
+    
+    if self.active_part_id == "WHEEL" then
+        -- WHEEL：左右移動
+        if playdate.buttonIsPressed(playdate.kButtonLeft) then
+            dx = dx - MOVE_SPEED
+        end
+        if playdate.buttonIsPressed(playdate.kButtonRight) then
+            dx = dx + MOVE_SPEED
+        end
+        
+    elseif self.active_part_id == "SWORD" then
+        -- SWORD：crank 旋轉
+        local crankChange = playdate.getCrankChange()
+        if crankChange and math.abs(crankChange) > 0 then
+            self.sword_angle = self.sword_angle + crankChange
+            if self.sword_angle < 0 then self.sword_angle = 0 end
+            if self.sword_angle > 180 then self.sword_angle = 180 end
+            
+            if not self.sword_last_attack_angle or math.abs(self.sword_angle - self.sword_last_attack_angle) >= 30 then
+                self.sword_is_attacking = true
+                self.sword_last_attack_angle = self.sword_angle
+            else
+                self.sword_is_attacking = false
+            end
+        else
+            self.sword_is_attacking = false
+        end
+        
+    elseif self.active_part_id == "CANON" then
+        -- CANON：crank 旋轉 + A 發射
+        local crankChange = playdate.getCrankChange()
+        if crankChange and math.abs(crankChange) > 0 then
+            self.canon_angle = self.canon_angle + crankChange
+            while self.canon_angle < 0 do self.canon_angle = self.canon_angle + 360 end
+            while self.canon_angle >= 360 do self.canon_angle = self.canon_angle - 360 end
+        end
+        
+        if playdate.buttonJustPressed(playdate.kButtonA) then
+            local pdata = _G.PartsData and _G.PartsData["CANON"]
+            if pdata and self.canon_fire_timer >= (pdata.fire_cooldown or 0.5) then
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    if item.id == "CANON" then
+                        local cell_size = mech_grid.cell_size
+                        local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                        local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+                        
+                        local speed = pdata.projectile_speed or 200
+                        local angle_rad = math.rad(self.canon_angle)
+                        local vx = math.cos(angle_rad) * speed
+                        local vy = -math.sin(angle_rad) * speed
+                        local dmg = pdata.projectile_damage or 10
+                        
+                        entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg)
+                        self.canon_fire_timer = 0
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    return dx
+end
+
+-- 更新零件計時器和自動功能
+function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
+    -- 更新 CANON 冷卻
+    self.canon_fire_timer = self.canon_fire_timer + dt
+    
+    -- GUN 自動發射
+    self.gun_fire_timer = self.gun_fire_timer + dt
+    local eq = _G.GameState.mech_stats.equipped_parts or {}
+    for _, item in ipairs(eq) do
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        if item.id == "GUN" and pdata and pdata.fire_cooldown then
+            if self.gun_fire_timer >= pdata.fire_cooldown then
+                local cell_size = mech_grid.cell_size
+                local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+                
+                local vx = pdata.projectile_vx or 150
+                local vy = pdata.projectile_vy or -50
+                local dmg = pdata.projectile_damage or 5
+                
+                entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg)
+                self.gun_fire_timer = 0
+                break
+            end
+        end
+    end
+    
+    -- 更新受擊震動
+    if self.hit_shake_timer > 0 then
+        self.hit_shake_timer = self.hit_shake_timer - dt
+        self.hit_shake_offset = math.sin(self.hit_shake_timer * 80) * 5
+    else
+        self.hit_shake_offset = 0
+    end
+end
+
+-- 觸發受擊效果
+function MechController:onHit()
+    self.hit_shake_timer = 0.3
+    self.hit_shake_offset = 0
+end
 
 -- [[ ========================================== ]]
 -- [[  Projectile 類別 (砲彈) ]]

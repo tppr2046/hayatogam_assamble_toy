@@ -34,14 +34,9 @@ local UI_GRID_ROWS = 2
 local UI_CELL_SIZE = 20
 local UI_START_X = 10
 local UI_START_Y = GAME_HEIGHT + 5
-local selected_part_slot = nil  -- {col, row} 當前選中的零件格子
-local active_part_id = nil      -- 當前激活的零件 ID
-local sword_angle = 0            -- SWORD 旋轉角度 (0-180)
-local sword_is_attacking = false -- SWORD 是否正在政擊（crank 轉動時）
-local sword_last_attack_angle = nil  -- 上次攻擊時的角度，用於檢測揮動完成
-local player_hit_shake_timer = 0  -- 玩家受擊震動計時器
-local player_hit_shake_offset = 0  -- 玩家受擊震動偏移
-local gun_fire_timer = 0  -- GUN 發射計時器
+
+-- 機甲控制器（零件管理）
+local mech_controller = nil
 
 -- 可變的繪製寬高（預設為常數），若合成成功會改成合成尺寸
 local mech_draw_w = MECH_WIDTH
@@ -170,11 +165,8 @@ function StateMission.setup()
     mech_y_old = mech_y
     camera_x = 0
 
-    -- 初始化控制 UI
-    selected_part_slot = nil
-    active_part_id = nil
-    sword_angle = 0
-    sword_is_attacking = false
+    -- 初始化機甲控制器
+    mech_controller = MechController:init()
 
     -- 初始化 HP (從全域 GameState 獲取組裝後的 HP)
     local stats = (_G and _G.GameState and _G.GameState.mech_stats) or {}
@@ -188,93 +180,15 @@ function StateMission.update()
     -- 0. 記錄舊的 Y 座標 (用於 EntityController 碰撞檢查)
     mech_y_old = mech_y
 
-    -- 1. 處理輸入
+    -- 1. 處理輸入 (使用 MechController)
     local dx = 0
+    local mech_grid = _G.GameState.mech_grid
     
-    -- 控制介面選擇邏輯
-    if not active_part_id then
-        -- 未激活零件：使用方向鍵選擇格子
-        if playdate.buttonJustPressed(playdate.kButtonUp) then
-            if not selected_part_slot then
-                selected_part_slot = {col = 1, row = 1}
-            else
-                selected_part_slot.row = math.min(UI_GRID_ROWS, selected_part_slot.row + 1)
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            if selected_part_slot then
-                selected_part_slot.row = math.max(1, selected_part_slot.row - 1)
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
-            if not selected_part_slot then
-                selected_part_slot = {col = 1, row = 1}
-            else
-                selected_part_slot.col = math.max(1, selected_part_slot.col - 1)
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-            if not selected_part_slot then
-                selected_part_slot = {col = 1, row = 1}
-            else
-                selected_part_slot.col = math.min(UI_GRID_COLS, selected_part_slot.col + 1)
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonA) then
-            -- 按 A 激活選中的零件（檢查選中格子及其所屬零件的所有格子）
-            if selected_part_slot then
-                local eq = _G.GameState.mech_stats.equipped_parts
-                -- 找出選中格子對應的零件（檢查零件佔用的所有格子）
-                for _, item in ipairs(eq) do
-                    local slot_w = item.w or 1
-                    local slot_h = item.h or 1
-                    -- 檢查選中的格子是否在零件佔用範圍內
-                    if selected_part_slot.col >= item.col and selected_part_slot.col < item.col + slot_w and
-                       selected_part_slot.row >= item.row and selected_part_slot.row < item.row + slot_h then
-                        active_part_id = item.id
-                        break
-                    end
-                end
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonB) then
-            -- 按 B 取消選擇
-            selected_part_slot = nil
-        end
-    else
-        -- 已激活零件：根據零件類型處理操作
-        if active_part_id == "WHEEL" then
-            -- WHEEL：左右方向鍵移動
-            if playdate.buttonIsPressed(playdate.kButtonLeft) then
-                dx = dx - MOVE_SPEED
-                last_input = "Left"
-            end
-            if playdate.buttonIsPressed(playdate.kButtonRight) then
-                dx = dx + MOVE_SPEED
-                last_input = "Right"
-            end
-        elseif active_part_id == "SWORD" then
-            -- SWORD：使用 crank 旋轉 (0-180度)
-            local crankChange = playdate.getCrankChange()
-            if crankChange and math.abs(crankChange) > 0 then
-                local old_angle = sword_angle
-                sword_angle = sword_angle + crankChange
-                -- 限制在 0-180 度範圍
-                if sword_angle < 0 then sword_angle = 0 end
-                if sword_angle > 180 then sword_angle = 180 end
-                
-                -- 檢查是否揮動了足夠角度（30度）來觸發新攻擊
-                if not sword_last_attack_angle or math.abs(sword_angle - sword_last_attack_angle) >= 30 then
-                    sword_is_attacking = true
-                    sword_last_attack_angle = sword_angle
-                else
-                    sword_is_attacking = false
-                end
-            else
-                sword_is_attacking = false
-            end
-        end
-        
-        -- 按 B 取消激活
-        if playdate.buttonJustPressed(playdate.kButtonB) then
-            active_part_id = nil
-        end
-    end
+    -- 處理零件選擇和激活
+    mech_controller:handleSelection(_G.GameState.mech_stats)
+    
+    -- 處理零件操作（獲取移動增量）
+    dx = mech_controller:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
     
     -- 2. 應用物理和碰撞檢測
     
@@ -358,55 +272,22 @@ function StateMission.update()
         if damage and damage > 0 then
             current_hp = current_hp - damage
             -- 觸發玩家受擊震動效果
-            player_hit_shake_timer = 0.3  -- 0.3 秒震動
-            player_hit_shake_offset = 0
+            mech_controller:onHit()
         end
         
-        -- 更新玩家受擊震動效果
-        if player_hit_shake_timer > 0 then
-            player_hit_shake_timer = player_hit_shake_timer - dt
-            -- 震動效果：左右擺動
-            player_hit_shake_offset = math.sin(player_hit_shake_timer * 80) * 5
-        else
-            player_hit_shake_offset = 0
-        end
-        
-        -- GUN 自動發射功能
-        gun_fire_timer = gun_fire_timer + dt
-        local eq = _G.GameState.mech_stats.equipped_parts or {}
-        for _, item in ipairs(eq) do
-            local pdata = _G.PartsData and _G.PartsData[item.id]
-            if item.id == "GUN" and pdata and pdata.fire_cooldown then
-                if gun_fire_timer >= pdata.fire_cooldown then
-                    -- 發射砲彈
-                    local cell_size = mech_grid.cell_size
-                    local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
-                    local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
-                    
-                    -- 使用 GUN 設定的速度參數
-                    local vx = pdata.projectile_vx or 150
-                    local vy = pdata.projectile_vy or -50
-                    local dmg = pdata.projectile_damage or 5
-                    
-                    -- 創建砲彈（is_player_bullet = true）
-                    entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg)
-                    
-                    gun_fire_timer = 0  -- 重置計時器
-                    break  -- 每次只發射一個 GUN
-                end
-            end
-        end
+        -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）
+        mech_controller:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
         
         -- 檢查武器零件碰撞 (攻擊敵人)
         -- SWORD 只在轉動時才攻擊
         local weapon_parts = {}
-        if sword_is_attacking then
+        if mech_controller.sword_is_attacking then
             local eq = _G.GameState.mech_stats.equipped_parts or {}
             for _, item in ipairs(eq) do
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata and pdata.attack and pdata.attack > 0 then
                     -- 武器只在激活時才有攻擊判定
-                    if active_part_id == item.id then
+                    if mech_controller.active_part_id == item.id then
                     -- 計算武器在世界座標的位置
                     local cell_size = mech_grid.cell_size
                     local wx = mech_x + (item.col - 1) * cell_size
@@ -426,7 +307,7 @@ function StateMission.update()
                             local sword_length = math.max(iw, ih)  -- 劍的長度
                             
                             -- 根據當前角度計算劍尖位置（0度=向右，逆時針旋轉）
-                            local angle_rad = math.rad(sword_angle)
+                            local angle_rad = math.rad(mech_controller.sword_angle)
                             local tip_x = center_x + math.cos(angle_rad) * sword_length
                             local tip_y = center_y - math.sin(angle_rad) * sword_length
                             
@@ -487,7 +368,7 @@ function StateMission.draw()
     end
 
     -- 2. 繪製機甲（使用預先組合的 mech image，確保碰撞框與視覺一致）
-    local draw_x = mech_x - camera_x + player_hit_shake_offset  -- 添加震動偏移
+    local draw_x = mech_x - camera_x + mech_controller.hit_shake_offset  -- 添加震動偏移
     local draw_y = mech_y
     local draw_w = mech_draw_w or MECH_WIDTH
     local draw_h = mech_draw_h or MECH_HEIGHT
@@ -499,12 +380,12 @@ function StateMission.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.drawRect(draw_x, draw_y, body_w, body_h)
     
-    -- 如果 SWORD 激活，分別繪製零件（避免重複）
-    if active_part_id == "SWORD" then
-        -- 手動繪製所有非 SWORD 零件
+    -- 如果 SWORD 或 CANON 激活，分別繪製零件（避免重複）
+    if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" then
+        -- 手動繪製所有非激活零件
         local eq = _G.GameState.mech_stats.equipped_parts or {}
         for _, item in ipairs(eq) do
-            if item.id ~= "SWORD" then
+            if item.id ~= mech_controller.active_part_id then
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata and pdata._img then
                     local cell_size = mech_grid.cell_size
@@ -530,7 +411,7 @@ function StateMission.draw()
     end
     
     -- 如果 SWORD 已激活，額外繪製旋轉後的 SWORD
-    if active_part_id == "SWORD" and _G.PartsData and _G.PartsData["SWORD"] then
+    if mech_controller.active_part_id == "SWORD" and _G.PartsData and _G.PartsData["SWORD"] then
         local sword_data = _G.PartsData["SWORD"]
         if sword_data._img then
             -- 找到 SWORD 在 mech 上的位置
@@ -561,7 +442,7 @@ function StateMission.draw()
                         local dy_from_pivot = img_center_y - pivot_y
                         
                         -- 將角度轉換為弧度（注意：往後旋轉是負角度）
-                        local angle_rad = math.rad(-sword_angle)
+                        local angle_rad = math.rad(-mech_controller.sword_angle)
                         
                         -- 旋轉向量
                         local cos_a = math.cos(angle_rad)
@@ -574,7 +455,56 @@ function StateMission.draw()
                         local new_center_y = pivot_y + rotated_dy
                         
                         -- drawRotated 以圖片中心為軸旋轉，所以傳入新的中心位置
-                        sword_data._img:drawRotated(new_center_x, new_center_y, -sword_angle)
+                        sword_data._img:drawRotated(new_center_x, new_center_y, -mech_controller.sword_angle)
+                    end
+                    gfx.popContext()
+                    break
+                end
+            end
+        end
+    end
+    
+    -- 如果 CANON 已激活，額外繪製旋轉後的 CANON
+    if mech_controller.active_part_id == "CANON" and _G.PartsData and _G.PartsData["CANON"] then
+        local canon_data = _G.PartsData["CANON"]
+        if canon_data._img then
+            -- 找到 CANON 在 mech 上的位置
+            local eq = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.id == "CANON" then
+                    local mech_grid = _G.GameState.mech_grid
+                    local cell_size = mech_grid.cell_size
+                    -- 計算 CANON 在 mech image 中的位置
+                    local cx = (item.col - 1) * cell_size
+                    local cy = (mech_grid.rows - item.row) * cell_size
+                    -- 計算 CANON 格子的中心點（旋轉軸心）
+                    local pivot_x = draw_x + cx + cell_size / 2
+                    local pivot_y = draw_y + cy + cell_size / 2
+                    
+                    gfx.pushContext()
+                    local ok, iw, ih = pcall(function() return canon_data._img:getSize() end)
+                    if ok and iw and ih then
+                        -- 手動計算旋轉後的繪製位置（與 SWORD 相同邏輯）
+                        local original_x = draw_x + cx
+                        local original_y = draw_y + cy + cell_size - ih
+                        
+                        local img_center_x = original_x + iw / 2
+                        local img_center_y = original_y + ih / 2
+                        local dx_from_pivot = img_center_x - pivot_x
+                        local dy_from_pivot = img_center_y - pivot_y
+                        
+                        -- CANON 可以 360 度旋轉，向後旋轉用負角度
+                        local angle_rad = math.rad(-mech_controller.canon_angle)
+                        
+                        local cos_a = math.cos(angle_rad)
+                        local sin_a = math.sin(angle_rad)
+                        local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
+                        local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
+                        
+                        local new_center_x = pivot_x + rotated_dx
+                        local new_center_y = pivot_y + rotated_dy
+                        
+                        canon_data._img:drawRotated(new_center_x, new_center_y, -mech_controller.canon_angle)
                     end
                     gfx.popContext()
                     break
@@ -613,12 +543,12 @@ function StateMission.draw()
     
     -- 找出選中格子對應的零件ID（用於高亮所有佔用格子）
     local selected_part_id_for_highlight = nil
-    if selected_part_slot then
+    if mech_controller.selected_part_slot then
         for _, item in ipairs(eq) do
             local slot_w = item.w or 1
             local slot_h = item.h or 1
-            if selected_part_slot.col >= item.col and selected_part_slot.col < item.col + slot_w and
-               selected_part_slot.row >= item.row and selected_part_slot.row < item.row + slot_h then
+            if mech_controller.selected_part_slot.col >= item.col and mech_controller.selected_part_slot.col < item.col + slot_w and
+               mech_controller.selected_part_slot.row >= item.row and mech_controller.selected_part_slot.row < item.row + slot_h then
                 selected_part_id_for_highlight = item.id
                 break
             end
@@ -658,7 +588,7 @@ function StateMission.draw()
             gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
             
             -- 當前選中格子繪製粗外框
-            if selected_part_slot and selected_part_slot.col == c and selected_part_slot.row == r then
+            if mech_controller.selected_part_slot and mech_controller.selected_part_slot.col == c and mech_controller.selected_part_slot.row == r then
                 gfx.setLineWidth(3)
                 gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
                 gfx.setLineWidth(1)  -- 恢復預設線寬
@@ -679,10 +609,10 @@ function StateMission.draw()
     
     -- 顯示當前激活的零件資訊
     local info_x = UI_START_X + UI_GRID_COLS * (UI_CELL_SIZE + 5) + 10
-    if active_part_id then
-        gfx.drawText("Active: " .. active_part_id, info_x, UI_START_Y)
-        if active_part_id == "SWORD" then
-            gfx.drawText("Angle: " .. math.floor(sword_angle), info_x, UI_START_Y + 15)
+    if mech_controller.active_part_id then
+        gfx.drawText("Active: " .. mech_controller.active_part_id, info_x, UI_START_Y)
+        if mech_controller.active_part_id == "SWORD" then
+            gfx.drawText("Angle: " .. math.floor(mech_controller.sword_angle), info_x, UI_START_Y + 15)
         end
     else
         gfx.drawText("Select part (A)", info_x, UI_START_Y)
