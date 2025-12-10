@@ -97,6 +97,15 @@ function Enemy:update(dt, mech_x, controller)
     
     self.move_timer = self.move_timer + dt
     self.fire_timer = self.fire_timer + dt
+    
+    -- 更新受擊震動效果（添加安全檢查）
+    if self.hit_shake_timer and self.hit_shake_timer > 0 then
+        self.hit_shake_timer = self.hit_shake_timer - dt
+        -- 震動效果：左右擺動（增加振幅到 5 像素，增加頻率）
+        self.hit_shake_offset_x = math.sin(self.hit_shake_timer * 80) * 5
+    else
+        self.hit_shake_offset_x = 0
+    end
 
     -- 左右移動邏輯 (BASIC_ENEMY)
     if self.type_id == "BASIC_ENEMY" then
@@ -147,7 +156,7 @@ end
 
 function Enemy:draw(camera_x)
     if not self.is_alive then return end
-    local screen_x = self.x - camera_x
+    local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)  -- 應用震動偏移
     gfx.setColor(gfx.kColorBlack)
     -- 繪製敵人模型
     gfx.fillRect(screen_x, self.y, self.width, self.height) 
@@ -161,8 +170,11 @@ end
 -- [[  EntityController 類別 (實體總控制器) ]]
 -- [[ ========================================== ]]
 
-function EntityController:init(scene_data, enemies_data, player_move_speed)
-    local safe_ground_y = (scene_data and scene_data.ground_y) or 240 
+function EntityController:init(scene_data, enemies_data, player_move_speed, ui_offset)
+    local ui_offset = ui_offset or 0  -- UI 區域偏移量
+    local safe_ground_y = (scene_data and scene_data.ground_y) or 240
+    -- 將地面往上移動 ui_offset
+    safe_ground_y = safe_ground_y - ui_offset
     
     local controller = {
         obstacles = (scene_data and scene_data.obstacles) or {},
@@ -229,13 +241,58 @@ function EntityController:checkMechCollision(mech_x, mech_y, mech_w, mech_h, ent
            mech_y + mech_h > entity_y
 end
 
+-- 檢查武器零件是否擊中敵人，並造成傷害
+-- weapon_parts: 陣列，每個元素包含 {x, y, w, h, attack}
+function EntityController:checkWeaponCollision(weapon_parts)
+    local damage_dealt = 0
+    
+    for _, weapon in ipairs(weapon_parts or {}) do
+        if not weapon.x or not weapon.y or not weapon.w or not weapon.h then
+            goto next_weapon
+        end
+        
+        for i, enemy in ipairs(self.enemies) do
+            if enemy.is_alive then
+                -- AABB 碰撞檢查
+                local collision = weapon.x < enemy.x + enemy.width and
+                                 weapon.x + weapon.w > enemy.x and
+                                 weapon.y < enemy.y + enemy.height and
+                                 weapon.y + weapon.h > enemy.y
+                
+                if collision then
+                    -- 擊中敵人，扣除 HP
+                    local attack = weapon.attack or 0
+                    enemy.hp = enemy.hp - attack
+                    damage_dealt = damage_dealt + attack
+                    
+                    -- 調試輸出：顯示被攻擊敵人的 HP
+                    print("LOG: Enemy hit! Type=" .. (enemy.type_id or "unknown") .. ", HP=" .. math.floor(enemy.hp) .. "/" .. (EnemyData[enemy.type_id] and EnemyData[enemy.type_id].hp or "?") .. ", Damage=" .. attack)
+                    
+                    -- 受擊效果：震動
+                    enemy.hit_shake_timer = 0.3  -- 0.3 秒震動（增加持續時間）
+                    enemy.hit_shake_offset_x = 0
+                    
+                    if enemy.hp <= 0 then
+                        enemy.is_alive = false
+                        print("LOG: Enemy killed at x=" .. math.floor(enemy.x))
+                    end
+                end
+            end
+        end
+        
+        ::next_weapon::
+    end
+    
+    return damage_dealt
+end
+
 
 function EntityController:draw(camera_x)
     local ground_y = self.ground_y
     gfx.setColor(gfx.kColorBlack)
     
-    -- 繪製地面
-    gfx.fillRect(0, ground_y, 400, 240 - ground_y) 
+    -- 繪製地面（只繪製一條橫線）
+    gfx.drawLine(0, ground_y, 400, ground_y) 
 
     -- 繪製障礙物 (原有的邏輯保持不變)
     for i, obs in ipairs(self.obstacles) do
