@@ -266,22 +266,32 @@ function StateHQ.setup()
             end
             -- 載入 CLAW 的額外圖片
             if pid == "CLAW" then
+                print("DEBUG: Loading CLAW extra images")
                 if pdata.arm_image then
                     local arm_img = gfx.image.new(pdata.arm_image)
                     if arm_img then
                         pdata._arm_img = arm_img
+                        print("DEBUG: Loaded arm_image:", pdata.arm_image)
+                    else
+                        print("ERROR: Failed to load arm_image:", pdata.arm_image)
                     end
                 end
                 if pdata.upper_image then
                     local upper_img = gfx.image.new(pdata.upper_image)
                     if upper_img then
                         pdata._upper_img = upper_img
+                        print("DEBUG: Loaded upper_image:", pdata.upper_image)
+                    else
+                        print("ERROR: Failed to load upper_image:", pdata.upper_image)
                     end
                 end
                 if pdata.lower_image then
                     local lower_img = gfx.image.new(pdata.lower_image)
                     if lower_img then
                         pdata._lower_img = lower_img
+                        print("DEBUG: Loaded lower_image:", pdata.lower_image)
+                    else
+                        print("ERROR: Failed to load lower_image:", pdata.lower_image)
                     end
                 end
             end
@@ -550,6 +560,12 @@ function StateHQ.draw()
                 local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
                 local draw_y = preview_y + (GRID_CELL_SIZE - sh)
                 pcall(function() pdata._img_scaled:draw(preview_x, draw_y) end)
+                -- CLAW 特殊處理：繪製額外部件
+                if part_id == "CLAW" then
+                    if pdata._arm_img then pcall(function() pdata._arm_img:draw(preview_x, draw_y) end) end
+                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(preview_x, draw_y) end) end
+                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(preview_x, draw_y) end) end
+                end
                 gfx.setColor(gfx.kColorBlack)
                 drawDither(preview_x + 2, draw_y + 2, sw - 4, sh - 4)
                 gfx.setColor(gfx.kColorBlack)
@@ -565,6 +581,12 @@ function StateHQ.draw()
                     draw_y = preview_y + math.floor((GRID_CELL_SIZE - ih) / 2)
                 end
                 pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                -- CLAW 特殊處理：繪製額外部件
+                if part_id == "CLAW" then
+                    if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
+                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
+                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
+                end
                 gfx.setColor(gfx.kColorBlack)
                 drawDither(preview_x + 2, preview_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
                 gfx.setColor(gfx.kColorBlack)
@@ -681,6 +703,19 @@ function StateHQ.draw()
                             else
                                 pcall(function() pdata._img_scaled:draw(px, py_top) end)
                             end
+                            
+                            -- 繪製 CLAW 的額外部件
+                            if pid == "CLAW" then
+                                if pdata._arm_img then
+                                    pcall(function() pdata._arm_img:draw(px, py_top) end)
+                                end
+                                if pdata._upper_img then
+                                    pcall(function() pdata._upper_img:draw(px, py_top) end)
+                                end
+                                if pdata._lower_img then
+                                    pcall(function() pdata._lower_img:draw(px, py_top) end)
+                                end
+                            end
                         elseif pdata and pdata._img then
                             -- fallback: draw original with bottom-left anchoring (no scaling)
                             local iw, ih
@@ -696,6 +731,19 @@ function StateHQ.draw()
                                 draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
                             end
                             pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                            
+                            -- 繪製 CLAW 的額外部件
+                            if pid == "CLAW" then
+                                if pdata._arm_img then
+                                    pcall(function() pdata._arm_img:draw(draw_x, draw_y) end)
+                                end
+                                if pdata._upper_img then
+                                    pcall(function() pdata._upper_img:draw(draw_x, draw_y) end)
+                                end
+                                if pdata._lower_img then
+                                    pcall(function() pdata._lower_img:draw(draw_x, draw_y) end)
+                                end
+                            end
                         else
                             -- no image: draw text label at the origin cell
                             gfx.setColor(gfx.kColorBlack)
@@ -731,6 +779,20 @@ function StateHQ.draw()
                             else
                                 pcall(function() pdata._img_scaled:draw(px, py_top) end)
                             end
+                            
+                            -- 繪製 CLAW 的額外部件
+                            if pid == "CLAW" then
+                                if pdata._arm_img then
+                                    pcall(function() pdata._arm_img:draw(px, py_top) end)
+                                end
+                                if pdata._upper_img then
+                                    pcall(function() pdata._upper_img:draw(px, py_top) end)
+                                end
+                                if pdata._lower_img then
+                                    pcall(function() pdata._lower_img:draw(px, py_top) end)
+                                end
+                            end
+                            
                             gfx.setColor(gfx.kColorBlack)
                             drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
                             gfx.setColor(gfx.kColorBlack)
@@ -750,6 +812,14 @@ function StateHQ.draw()
                                 draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
                             end
                             pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                            -- CLAW 特殊處理：繪製額外部件
+                            if pid == "CLAW" then
+                                print("DEBUG: Drawing CLAW extras at", draw_x, draw_y)
+                                print("DEBUG: _arm_img=", pdata._arm_img, "_upper_img=", pdata._upper_img, "_lower_img=", pdata._lower_img)
+                                if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
+                                if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
+                                if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
+                            end
                             gfx.setColor(gfx.kColorBlack)
                             drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
                         else
