@@ -1,7 +1,6 @@
 -- state_hq.lua (Version 8.4 - 恢復所有繪圖與操作邏輯)
 
-import "CoreLibs/graphics"
-import "module_ui" 
+import "CoreLibs/graphics" 
 
 local gfx = playdate.graphics  
 local default_font = gfx.font.systemFont
@@ -21,12 +20,22 @@ StateHQ = {}
 -- 網格組裝常數與狀態
 -- ==========================================
 local SCREEN_WIDTH = 400
+local SCREEN_HEIGHT = 240
+local UI_HEIGHT = 64  -- 操作介面高度
+local GAME_HEIGHT = SCREEN_HEIGHT - UI_HEIGHT  -- 實際遊戲畫面高度
 local GRID_COLS = 3       
 local GRID_ROWS = 2       
 local GRID_CELL_SIZE = 16 
 local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
 local GRID_START_X = (SCREEN_WIDTH - GRID_WIDTH) / 2  -- 置中
-local GRID_START_Y = 100  -- 往下移動，為預覽留出空間   
+local GRID_START_Y = 100  -- 往下移動，為預覽留出空間
+
+-- UI 控制介面相關
+local UI_GRID_COLS = 3
+local UI_GRID_ROWS = 2
+local UI_CELL_SIZE = 20
+local UI_START_X = 10
+local UI_START_Y = GAME_HEIGHT + 5   
 
 local GRID_MAP = {}       
 local cursor_col = 1      
@@ -464,10 +473,7 @@ function StateHQ.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font) 
     
-    -- 1. 繪製組裝網格背景 
-    if ModuleUI and ModuleUI.drawUIBackground then
-        ModuleUI.drawUIBackground() 
-    end
+    -- 1. 繪製組裝網格背景
     
     -- 2. 繪製機甲網格邊框 (作為機甲本體的佔位符)
     local mech_image_x = GRID_START_X
@@ -598,18 +604,18 @@ function StateHQ.draw()
     local detail_x = 250
     local detail_y = 30
     
-                -- 繪製格子格線（只繪製上半部 row=2 的格線）
-                for r = 2, GRID_ROWS do
-                    for c = 1, GRID_COLS do
-                        local cell_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
-                        local cell_y = GRID_START_Y + (r - 1) * GRID_CELL_SIZE
-                        gfx.setColor(gfx.kColorBlack)
-                        gfx.drawRect(cell_x, cell_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-                    end
-                end
+    -- 繪製格子格線（上下兩排都顯示）
+    for r = 1, GRID_ROWS do
+        for c = 1, GRID_COLS do
+            local cell_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
+            local cell_y = GRID_START_Y + (r - 1) * GRID_CELL_SIZE
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawRect(cell_x, cell_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+        end
+    end
     
-                -- 繪製已放置的零件，每個零件只繪製一次，佔據 w x h 格
-                -- 分兩階段繪製：先下排(row=1)再上排(row=2)
+    -- 繪製已放置的零件，每個零件只繪製一次，佔據 w x h 格
+    -- 分兩階段繪製：先下排(row=1)再上排(row=2)
                 local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
                 
                 -- 第一階段：繪製下排零件（row=1，無格線和 Dither）
@@ -749,6 +755,78 @@ function StateHQ.draw()
             local menu_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - text_width) / 2
             gfx.drawText(text, menu_x, menu_y + (i - 1) * 12)
         end
+    end
+    
+    -- 8. 繪製控制介面 UI（下半部）
+    -- 繪製 3x2 控制格子
+    local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
+    
+    -- 找出選中格子對應的零件ID（用於高亮所有佔用格子）
+    local selected_part_id_for_highlight = nil
+    if selected_category and selected_part_index and not cursor_on_ready then
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        local part_id = parts_list and parts_list[selected_part_index]
+        selected_part_id_for_highlight = part_id
+    end
+    
+    for r = 1, UI_GRID_ROWS do
+        for c = 1, UI_GRID_COLS do
+            local cx = UI_START_X + (c - 1) * (UI_CELL_SIZE + 5)
+            local cy = UI_START_Y + (UI_GRID_ROWS - r) * (UI_CELL_SIZE + 5)
+            
+            -- 檢查此格是否有零件以及屬於哪個零件
+            local part_id = nil
+            local is_in_selected_part = false
+            for _, item in ipairs(eq) do
+                local slot_w = item.w or 1
+                local slot_h = item.h or 1
+                if c >= item.col and c < item.col + slot_w and
+                   r >= item.row and r < item.row + slot_h then
+                    part_id = item.id
+                    -- 檢查是否屬於選中的零件
+                    if selected_part_id_for_highlight and item.id == selected_part_id_for_highlight then
+                        is_in_selected_part = true
+                    end
+                    break
+                end
+            end
+            
+            -- 繪製格子（高亮選中零件的所有格子）
+            if is_in_selected_part then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
+                gfx.setColor(gfx.kColorWhite)
+            else
+                gfx.setColor(gfx.kColorBlack)
+            end
+            gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
+            
+            -- 顯示零件名稱縮寫（只在零件的起始格顯示）
+            if part_id then
+                for _, item in ipairs(eq) do
+                    if item.id == part_id and item.col == c and item.row == r then
+                        local label = string.sub(part_id, 1, 1)
+                        gfx.setColor(gfx.kColorBlack)
+                        gfx.drawText(label, cx + 6, cy + 6)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 顯示當前選中的零件資訊
+    local info_x = UI_START_X + UI_GRID_COLS * (UI_CELL_SIZE + 5) + 10
+    if selected_category and selected_part_index and not cursor_on_ready then
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        local part_id = parts_list and parts_list[selected_part_index]
+        if part_id then
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawText("Selected: " .. part_id, info_x, UI_START_Y)
+        end
+    else
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText("Select category", info_x, UI_START_Y)
     end
 end
 
