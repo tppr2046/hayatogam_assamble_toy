@@ -4,6 +4,7 @@ import "CoreLibs/graphics"
 
 local gfx = playdate.graphics  
 local default_font = gfx.font.systemFont
+local MissionData = import "mission_data"  -- 載入任務資料（必須在檔案頂部）
 
 -- 確保字形載入成功
 local custom_font_path = 'fonts/Charlie Ninja' 
@@ -197,6 +198,19 @@ end
 function StateHQ.setup()
     gfx.setFont(font) 
     
+    -- DEBUG: 檢查 MissionData
+    print("DEBUG HQ: MissionData exists? " .. tostring(MissionData ~= nil))
+    if MissionData then
+        local keys = {}
+        for k, v in pairs(MissionData) do
+            table.insert(keys, tostring(k))
+        end
+        print("DEBUG HQ: MissionData keys = " .. table.concat(keys, ", "))
+    end
+    
+    -- 將 MissionData 存到全域，供其他模組使用
+    _G.MissionData = MissionData
+    
     -- 確保必要的全域變數存在
     _G.GameState = _G.GameState or {}
     -- 組織零件為分類（TOP 和 BOTTOM）
@@ -360,6 +374,9 @@ function StateHQ.update()
                 elseif playdate.buttonJustPressed(playdate.kButtonA) then
                     if menu_option_index == 1 then
                         -- Start Mission
+                        -- 設置當前任務 ID（目前只有 M001）
+                        _G.GameState = _G.GameState or {}
+                        _G.GameState.current_mission = "M001"
                         setState(_G.StateMission)
                     else
                         -- Back to equip
@@ -827,6 +844,23 @@ function StateHQ.draw()
     else
         gfx.setColor(gfx.kColorBlack)
         gfx.drawText("Select category", info_x, UI_START_Y)
+    end
+    
+    -- 9. 顯示關卡簡介（下半部右側）
+    local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or "M001"
+    if MissionData and MissionData[mission_id] then
+        local mission = MissionData[mission_id]
+        local brief_x = info_x
+        local brief_y = UI_START_Y + 25
+        
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText("MISSION:", brief_x, brief_y)
+        gfx.drawText(mission.name or "Unknown", brief_x, brief_y + 12)
+        
+        if mission.objective then
+            gfx.drawText("Objective:", brief_x, brief_y + 30)
+            gfx.drawText(mission.objective.description or "", brief_x, brief_y + 42)
+        end
     end
 end
 

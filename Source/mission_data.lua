@@ -1,12 +1,18 @@
 -- mission_data.lua
 -- 導出所有任務的目標、場景配置和獎勵 (已移除中文字符)
 
-return {
+local missions = {
     ["M001"] = {
         id = "M001", 
         name = "TRAINING MISSION 1", 
         category = "ELIMINATION", 
         description = "Eliminate all incoming trainer units and learn movement controls.",
+        
+        -- 關卡目標
+        objective = {
+            type = "ELIMINATE_ALL",  -- 可選: "ELIMINATE_ALL", "DELIVER_STONE"
+            description = "Defeat all enemies"
+        },
         
         -- 關卡場景設定
         scene = {
@@ -22,14 +28,19 @@ return {
                 { x = 400, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
             },
             
-            -- 任務敵人
+            -- 任務敵人（添加測試敵人）
             enemies = {
+                { type = "BASIC_ENEMY", x = 300, y = 0 },
+                { type = "BASIC_ENEMY", x = 500, y = 0 },
             },
             
-            mission_objects = {} 
+            -- 石頭目標地點（用於 DELIVER_STONE 目標）
+            delivery_zone = nil  -- { x = 600, y = 200, width = 40, height = 40 }
         },
         
         reward_money = 50,
         reward_part_id = "MISSILE_V2"
     }
 }
+
+return missions

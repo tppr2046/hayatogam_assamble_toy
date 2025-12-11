@@ -10,7 +10,7 @@ local font = custom_font or gfx.font.systemFont
 
 StateMenu = {}
 
-local menu_options = {"START ASSEMBLY", "OPTIONS", "EXIT"}
+local menu_options = {"NEW GAME", "CONTINUE", "CREDITS"}
 local selected_index = 1
 local menu_x = 100
 local menu_y_start = 100
@@ -41,13 +41,11 @@ function StateMenu.update()
     -- 處理 A 鍵確認
     if playdate.buttonJustPressed(playdate.kButtonA) then
         local selection = menu_options[selected_index]
-        if selection == "START ASSEMBLY" then
-            -- 確保呼叫全域函式 setState
-            setState(StateHQ) 
-        elseif selection == "OPTIONS" then
-            print("Action: Go to Options (Not implemented)")
-        elseif selection == "EXIT" then
-            playdate.stop() -- 結束模擬器
+        if selection == "NEW GAME" or selection == "CONTINUE" then
+            -- 進入選擇紀錄檔畫面
+            setState(_G.StateSaveSelect)
+        elseif selection == "CREDITS" then
+            print("Action: Show Credits (Not implemented)")
         end
     end
 end

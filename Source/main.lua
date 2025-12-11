@@ -23,8 +23,10 @@ _G.PartsData = pd or _G.PartsData or {}
 
 -- 載入狀態模組 
 _G.StateMenu = import "state_menu"
+_G.StateSaveSelect = import "state_save_select"
 _G.StateHQ = import "state_hq"
 _G.StateMission = import "state_mission"
+_G.StateResult = import "state_result"
 
 -- ==========================================
 -- 3. 遊戲狀態機變數
@@ -39,11 +41,13 @@ local current_state = _G.StateMenu
 -- ------------------------------------------
 -- ==========================================
 
-function setState(newState)
+function setState(newState, ...)
     local function nameOf(s)
         if s == _G.StateMenu then return "StateMenu" end
+        if s == _G.StateSaveSelect then return "StateSaveSelect" end
         if s == _G.StateHQ then return "StateHQ" end
         if s == _G.StateMission then return "StateMission" end
+        if s == _G.StateResult then return "StateResult" end
         return tostring(s)
     end
 
@@ -60,7 +64,7 @@ function setState(newState)
     if current_state then
         print("LOG: setState calling setup for:", nameOf(current_state))
         if current_state.setup then
-            current_state.setup()
+            current_state.setup(...)  -- 傳遞額外參數
             print("LOG: setState setup complete for:", nameOf(current_state))
         else
             print("LOG: new state has no setup() function:", nameOf(current_state))

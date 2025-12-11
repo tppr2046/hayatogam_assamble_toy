@@ -5,7 +5,12 @@ import "CoreLibs/animation"
 import "CoreLibs/animator"
 import "module_entities" 
 -- 載入任務資料，用於獲取敵人列表
-local MissionData = import "mission_data" 
+-- 使用 require 代替 import，因為 mission_data 需要返回值
+local MissionData = import("mission_data")
+if not MissionData then
+    print("ERROR: Failed to import mission_data")
+    MissionData = {}
+end
 local StateHQ = _G.StateHQ -- 假設 StateHQ 已在 main.lua 中設定為全域
 
 local gfx = playdate.graphics
@@ -63,6 +68,7 @@ local entity_controller = nil
 
 local current_hp = 0 -- 追蹤機甲當前 HP
 local max_hp = 1     -- 機甲最大 HP (在 setup 中獲取)
+local current_mission_id = nil -- 當前任務 ID（用於檢查目標）
 
 
 -- ==========================================
@@ -172,18 +178,37 @@ function StateMission.setup()
 
     -- 初始化機甲位置：如果場景有 ground 資訊則放在地面，否則靠畫面底部
     -- determine current scene: prefer selected mission in GameState, otherwise first mission in MissionData
+    -- 使用全域的 MissionData（從 state_hq 設置）
+    local MissionDataToUse = _G.MissionData or MissionData
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or nil
-    if not mission_id then
-        for k, v in pairs(MissionData) do
+    print("DEBUG: mission_id from GameState = " .. tostring(mission_id))
+    print("DEBUG: Using global MissionData? " .. tostring(_G.MissionData ~= nil))
+    print("DEBUG: MissionDataToUse exists? " .. tostring(MissionDataToUse ~= nil))
+    if MissionDataToUse then
+        local keys = {}
+        for k, v in pairs(MissionDataToUse) do
+            table.insert(keys, tostring(k))
+        end
+        print("DEBUG: MissionDataToUse keys = " .. table.concat(keys, ", "))
+    end
+    if not mission_id and MissionDataToUse then
+        for k, v in pairs(MissionDataToUse) do
             mission_id = k
+            print("DEBUG: Using fallback mission_id = " .. tostring(mission_id))
             break
         end
     end
-    if mission_id and MissionData[mission_id] and MissionData[mission_id].scene then
-        current_scene = MissionData[mission_id].scene
+    print("DEBUG: Final mission_id = " .. tostring(mission_id))
+    if mission_id and MissionDataToUse and MissionDataToUse[mission_id] and MissionDataToUse[mission_id].scene then
+        current_scene = MissionDataToUse[mission_id].scene
+        print("DEBUG: Scene loaded: width=" .. tostring(current_scene.width) .. ", ground_y=" .. tostring(current_scene.ground_y))
+    else
+        print("DEBUG: WARNING - No scene loaded!")
     end
 
     -- Initialize entity controller for the current scene (so ground/obstacles/enemies draw)
+    -- 儲存當前任務 ID 用於目標檢查
+    current_mission_id = mission_id
     if current_scene and EntityController then
         local enemies = (current_scene.enemies) or {}
         entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED, UI_HEIGHT)
@@ -487,10 +512,56 @@ function StateMission.update()
         timer = timer - 1 
     end
     
-    -- 6. 遊戲結束/勝利條件檢查 (簡化：HP <= 0 則遊戲結束)
+    -- 6. 遊戲結束/勝利條件檢查
     if current_hp <= 0 then
         print("GAME OVER: Mech destroyed!")
-        setState(StateHQ) -- 返回 HQ
+        setState(_G.StateResult, false, "Mech destroyed!") -- 失敗，顯示結果畫面
+        return
+    end
+    
+    -- 7. 檢查關卡目標是否完成
+    local MissionDataToUse = _G.MissionData or MissionData
+    if MissionDataToUse and current_mission_id then
+        local mission = MissionDataToUse[current_mission_id]
+        if mission and mission.objective then
+            local obj = mission.objective
+            
+            -- 目標類型：打倒所有敵人
+            if obj.type == "ELIMINATE_ALL" then
+                if entity_controller and entity_controller.enemies then
+                    local all_defeated = true
+                    for _, enemy in ipairs(entity_controller.enemies) do
+                        if enemy.hp and enemy.hp > 0 then
+                            all_defeated = false
+                            break
+                        end
+                    end
+                    
+                    if all_defeated and #entity_controller.enemies > 0 then
+                        print("MISSION SUCCESS: All enemies defeated!")
+                        setState(_G.StateResult, true, obj.description or "Mission Complete!")
+                        return
+                    end
+                end
+            
+            -- 目標類型：把石頭放到指定地點
+            elseif obj.type == "DELIVER_STONE" then
+                if mission.delivery_zone and entity_controller and entity_controller.stones then
+                    local zone = mission.delivery_zone
+                    for _, stone in ipairs(entity_controller.stones) do
+                        -- 檢查石頭是否在目標區域內
+                        if stone.x and stone.y then
+                            if stone.x >= zone.x and stone.x < zone.x + zone.width and
+                               stone.y >= zone.y and stone.y < zone.y + zone.height then
+                                print("MISSION SUCCESS: Stone delivered to target zone!")
+                                setState(_G.StateResult, true, obj.description or "Mission Complete!")
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 end
 
