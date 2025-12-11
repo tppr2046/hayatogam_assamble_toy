@@ -131,15 +131,26 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         
     elseif self.active_part_id == "CANON" then
         -- CANON：crank 旋轉 + A 發射
+        local pdata = _G.PartsData and _G.PartsData["CANON"]
+        local angle_range = pdata and pdata.angle_range or 90  -- 預設 90 度範圍
+        local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 15  -- 預設 crank 轉 1 圈產生 15 度變化
+        
         local crankChange = playdate.getCrankChange()
         if crankChange and math.abs(crankChange) > 0 then
-            self.canon_angle = self.canon_angle + crankChange
-            while self.canon_angle < 0 do self.canon_angle = self.canon_angle + 360 end
-            while self.canon_angle >= 360 do self.canon_angle = self.canon_angle - 360 end
+            -- crank 轉動量轉換為 canon 角度變化：crankChange 是度數，除以 360 得到圈數，乘以 crank_ratio 得到 canon 角度變化
+            local canon_delta = (crankChange / 360.0) * crank_ratio
+            self.canon_angle = self.canon_angle + canon_delta
+            
+            -- 限制角度在範圍內（-angle_range/2 到 +angle_range/2）
+            local half_range = angle_range / 2
+            if self.canon_angle > half_range then
+                self.canon_angle = half_range
+            elseif self.canon_angle < -half_range then
+                self.canon_angle = -half_range
+            end
         end
         
         if playdate.buttonJustPressed(playdate.kButtonA) then
-            local pdata = _G.PartsData and _G.PartsData["CANON"]
             if pdata and self.canon_fire_timer >= (pdata.fire_cooldown or 0.5) then
                 local eq = _G.GameState.mech_stats.equipped_parts or {}
                 for _, item in ipairs(eq) do

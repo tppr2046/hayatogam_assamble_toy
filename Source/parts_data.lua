@@ -47,7 +47,10 @@ local parts_data = {
         fire_cooldown = 0.5,  -- 每 0.5 秒可以發射一次
         projectile_damage = 10,  -- 砲彈傷害
         projectile_speed_mult = 30,  -- 速度倍率（相對於基準速度）
-        projectile_grav_mult = 20  -- 重力倍率（相對於世界重力 0.5）
+        projectile_grav_mult = 20,  -- 重力倍率（相對於世界重力 0.5）
+        -- CANON 轉動控制
+        angle_range = 90,  -- 轉動角度範圍（總範圍，-45 到 +45 度）
+        crank_degrees_per_rotation = 15  -- crank 轉 1 圈（360度）產生的 canon 角度變化
     },
     ["SWORD"] = {
         name = "SWORD",
