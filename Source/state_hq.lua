@@ -20,22 +20,25 @@ StateHQ = {}
 -- ==========================================
 -- 網格組裝常數與狀態
 -- ==========================================
-local UI_AREA_Y_START = 160 
+local SCREEN_WIDTH = 400
 local GRID_COLS = 3       
 local GRID_ROWS = 2       
 local GRID_CELL_SIZE = 16 
-local GRID_START_X = 100  
-local GRID_START_Y = 40   
+local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
+local GRID_START_X = (SCREEN_WIDTH - GRID_WIDTH) / 2  -- 置中
+local GRID_START_Y = 100  -- 往下移動，為預覽留出空間   
 
 local GRID_MAP = {}       
 local cursor_col = 1      
 local cursor_row = 1      
+local cursor_on_ready = false  -- 游標是否在 READY 選項上
 
+local selected_category = nil   -- nil = 選擇分類, "TOP" or "BOTTOM" = 已選分類
 local selected_part_index = 1   
-local equipped_part_index = 1   
-local hq_mode = "EQUIP"         -- EQUIP (組裝模式), UNEQUIP (拆卸模式), MENU (底部選單)
+local hq_mode = "EQUIP"         -- EQUIP (組裝模式), UNEQUIP (拆卸模式), READY_MENU (READY選單)
 local menu_option_index = 1     
-local is_placing_part = false 
+local is_placing_part = false
+local show_ready_menu = false   -- 是否顯示 READY 選單 
 
 -- 放置失敗視覺/音效反饋
 local FLASH_DURATION = 12 -- 幀數
@@ -108,6 +111,24 @@ local function findEquippedPartAt(col, row)
     return nil
 end
 
+-- 尋找第一個空的格子（適合放置零件）
+local function findFirstEmptyCell(part_data)
+    local w = (part_data and part_data.slot_x) or 1
+    local h = (part_data and part_data.slot_y) or 1
+    
+    -- 優先從左上角開始尋找
+    for r = GRID_ROWS, 1, -1 do  -- 從上到下（row 2, 1）
+        for c = 1, GRID_COLS do  -- 從左到右
+            local can_fit, reason = checkIfFits(part_data, c, r)
+            if can_fit then
+                return c, r
+            end
+        end
+    end
+    -- 沒有空位，返回中間位置
+    return 2, 2
+end
+
 -- 從 equipped_parts 刪除指定索引的零件，並把 GRID_MAP 與 mech_stats 更新
 local function removeEquippedPart(index)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
@@ -169,23 +190,33 @@ function StateHQ.setup()
     
     -- 確保必要的全域變數存在
     _G.GameState = _G.GameState or {}
-    -- 若有零件資料，將解鎖清單預設為 PartsData 的 key 清單
-    if not _G.GameState.unlocked_parts then
+    -- 組織零件為分類（TOP 和 BOTTOM）
+    if not _G.GameState.parts_by_category then
+        local top_parts = {}
+        local bottom_parts = {}
         if _G.PartsData and next(_G.PartsData) then
-            local list = {}
-            for k, _ in pairs(_G.PartsData) do
-                table.insert(list, k)
+            for pid, pdata in pairs(_G.PartsData) do
+                if pdata.placement_row == "TOP" or pdata.placement_row == "BOTH" then
+                    table.insert(top_parts, pid)
+                end
+                if pdata.placement_row == "BOTTOM" or pdata.placement_row == "BOTH" then
+                    table.insert(bottom_parts, pid)
+                end
             end
-            _G.GameState.unlocked_parts = list
-        else
-            _G.GameState.unlocked_parts = {"ARM-01", "LEG-02", "CORE-03"}
         end
+        _G.GameState.parts_by_category = {
+            TOP = top_parts,
+            BOTTOM = bottom_parts
+        }
     end
 
     _G.GameState.mech_stats = _G.GameState.mech_stats or { total_hp = 100, total_weight = 0, equipped_parts = {} }
     _G.GameState.mech_stats.equipped_parts = _G.GameState.mech_stats.equipped_parts or {}
     
     hq_mode = "EQUIP" -- 確保從組裝模式開始
+    selected_category = nil  -- 重置分類選擇
+    cursor_on_ready = false
+    show_ready_menu = false
 
     -- 初始化 GRID_MAP（row-major），nil 表示空
     GRID_MAP = {}
@@ -265,120 +296,138 @@ end
 
 function StateHQ.update()
     
-    local unlocked_parts_count = _G.GameState and #(_G.GameState.unlocked_parts or {}) or 0
-
     if hq_mode == "EQUIP" then
         if is_placing_part then
-            -- 模式 1A: 零件放置中 (移動網格游標)
+            -- 零件放置中：移動網格游標
             if playdate.buttonJustPressed(playdate.kButtonLeft) then
                 cursor_col = math.max(1, cursor_col - 1)
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
                 cursor_col = math.min(GRID_COLS, cursor_col + 1)
             elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-                -- Up should move the cursor visually up (increase row index in bottom-origin system)
                 cursor_row = math.min(GRID_ROWS, cursor_row + 1)
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                -- Down moves visually down (decrease row index)
                 cursor_row = math.max(1, cursor_row - 1)
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 嘗試放置邏輯
-                local part_id = _G.GameState.unlocked_parts[selected_part_index]
-                local part_data = _G.PartsData and _G.PartsData[part_id]
-                local can_fit, reason = checkIfFits(part_data, cursor_col, cursor_row)
-                
-                if can_fit then
-                    -- 實際記錄放置：標記 GRID_MAP 並將零件加入 GameState
-                    local w = part_data.slot_x or 1
-                    local h = part_data.slot_y or 1
-                    for r = cursor_row, cursor_row + h - 1 do
-                        for c = cursor_col, cursor_col + w - 1 do
-                            GRID_MAP[r][c] = part_id
+                -- 嘗試放置
+                if selected_category then
+                    local parts_list = _G.GameState.parts_by_category[selected_category]
+                    local part_id = parts_list[selected_part_index]
+                    local part_data = _G.PartsData and _G.PartsData[part_id]
+                    local can_fit, reason = checkIfFits(part_data, cursor_col, cursor_row)
+                    
+                    if can_fit then
+                        local w = part_data.slot_x or 1
+                        local h = part_data.slot_y or 1
+                        for r = cursor_row, cursor_row + h - 1 do
+                            for c = cursor_col, cursor_col + w - 1 do
+                                GRID_MAP[r][c] = part_id
+                            end
                         end
-                    end
-
-                    -- 記錄到 equipped_parts（包含原點位置與尺寸）
-                    table.insert(_G.GameState.mech_stats.equipped_parts, { id = part_id, col = cursor_col, row = cursor_row, w = w, h = h })
-
-                    -- 更新 mech_stats（例如增加 HP、重量等，若 part_data 有對應欄位）
-                    if part_data.hp then
-                        _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) + part_data.hp
-                    end
-                    if part_data.weight then
-                        _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
-                    end
-
-                    is_placing_part = false
-                    print("LOG: Part placed successfully:", part_id, "at", cursor_col, cursor_row)
-                else
-                    print("LOG: Placement failed: " .. reason)
-                    -- 觸發閃爍提示並嘗試播放音效
-                    flash_timer = FLASH_DURATION
-                    flash_col = cursor_col
-                    flash_row = cursor_row
-                    if placeFailSFX then
-                        pcall(function() placeFailSFX:play() end)
+                        table.insert(_G.GameState.mech_stats.equipped_parts, { id = part_id, col = cursor_col, row = cursor_row, w = w, h = h })
+                        if part_data.hp then
+                            _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) + part_data.hp
+                        end
+                        if part_data.weight then
+                            _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
+                        end
+                        is_placing_part = false
+                    else
+                        flash_timer = FLASH_DURATION
+                        flash_col = cursor_col
+                        flash_row = cursor_row
                     end
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                is_placing_part = false -- 取消放置
+                is_placing_part = false
+            end
+        elseif cursor_on_ready then
+            -- 游標在 READY 上
+            if show_ready_menu then
+                -- READY 選單打開
+                if playdate.buttonJustPressed(playdate.kButtonDown) then
+                    menu_option_index = math.min(2, menu_option_index + 1)
+                elseif playdate.buttonJustPressed(playdate.kButtonUp) then
+                    menu_option_index = math.max(1, menu_option_index - 1)
+                elseif playdate.buttonJustPressed(playdate.kButtonA) then
+                    if menu_option_index == 1 then
+                        -- Start Mission
+                        setState(_G.StateMission)
+                    else
+                        -- Back to equip
+                        show_ready_menu = false
+                        cursor_on_ready = false
+                    end
+                elseif playdate.buttonJustPressed(playdate.kButtonB) then
+                    show_ready_menu = false
+                end
+            else
+                -- 選單未打開
+                if playdate.buttonJustPressed(playdate.kButtonUp) then
+                    cursor_on_ready = false
+                    -- 回到最後選中的零件（使用儲存的 last_part_index）
+                    if last_part_index then
+                        selected_part_index = last_part_index
+                    end
+                elseif playdate.buttonJustPressed(playdate.kButtonA) then
+                    show_ready_menu = true
+                    menu_option_index = 1
+                end
+            end
+        elseif not selected_category then
+            -- 選擇分類
+            if playdate.buttonJustPressed(playdate.kButtonUp) then
+                if cursor_on_ready then
+                    cursor_on_ready = false
+                    selected_part_index = 2  -- 回到最後一個分類
+                else
+                    selected_part_index = (selected_part_index == 1) and 2 or 1
+                end
+            elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+                if selected_part_index == 2 then
+                    cursor_on_ready = true
+                    last_part_index = 2  -- 記住最後位置
+                else
+                    selected_part_index = 2
+                end
+            elseif playdate.buttonJustPressed(playdate.kButtonA) then
+                selected_category = (selected_part_index == 1) and "TOP" or "BOTTOM"
+                selected_part_index = 1
             end
         else
-            -- 模式 1B: 零件選擇/模式切換
+            -- 已選分類，選擇零件或移動到 READY
+            local parts_list = _G.GameState.parts_by_category[selected_category]
+            local parts_count = #parts_list
+            
             if playdate.buttonJustPressed(playdate.kButtonUp) then
                 selected_part_index = math.max(1, selected_part_index - 1)
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                selected_part_index = math.min(unlocked_parts_count, selected_part_index + 1)
-            elseif playdate.buttonJustPressed(playdate.kButtonLeft) or playdate.buttonJustPressed(playdate.kButtonRight) then
-                -- L/R 鍵: 左鍵進入 UNEQUIP，右鍵進入 MENU
-                if playdate.buttonJustPressed(playdate.kButtonLeft) then
-                    hq_mode = "UNEQUIP"
+                if selected_part_index < parts_count then
+                    selected_part_index = selected_part_index + 1
                 else
-                    hq_mode = "MENU"
+                    cursor_on_ready = true
+                    last_part_index = selected_part_index  -- 記住最後的零件索引
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                if selected_part_index >= 1 and selected_part_index <= unlocked_parts_count then
-                    is_placing_part = true -- 進入放置模式
+                -- 選中零件，自動找到第一個空格子並進入放置模式
+                local parts_list = _G.GameState.parts_by_category[selected_category]
+                local part_id = parts_list[selected_part_index]
+                local part_data = _G.PartsData and _G.PartsData[part_id]
+                
+                if part_data then
+                    -- 找到第一個空格子
+                    local empty_col, empty_row = findFirstEmptyCell(part_data)
+                    cursor_col = empty_col
+                    cursor_row = empty_row
+                    is_placing_part = true
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                hq_mode = "MENU" -- 進入底部選單
+                selected_category = nil
+                selected_part_index = 1
             end
         end
     
     elseif hq_mode == "UNEQUIP" then
-        -- 模式 2: 拆卸零件邏輯 (簡化)
-        if playdate.buttonJustPressed(playdate.kButtonLeft) or playdate.buttonJustPressed(playdate.kButtonRight) then
-            hq_mode = "EQUIP"
-        end
-        -- ... 其他拆卸邏輯
-        
-    elseif hq_mode == "MENU" then
-        -- 模式 3: 底部選單操作
-        local menu_count = #MENU_OPTIONS
-        if playdate.buttonJustPressed(playdate.kButtonUp) then
-            menu_option_index = math.max(1, menu_option_index - 1)
-        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            menu_option_index = math.min(menu_count, menu_option_index + 1)
-        elseif playdate.buttonJustPressed(playdate.kButtonA) then
-            -- 執行選單動作
-            local action = MENU_OPTIONS[menu_option_index].action
-            if action == "MISSION_SELECT" then
-                -- ❗ 關鍵：跳轉到 StateMission
-                print("LOG: HQ menu ACTION MISSION_SELECT selected. menu_option_index:", menu_option_index)
-                if _G and _G.StateMission then
-                    print("LOG: _G.StateMission found. Calling setState(_G.StateMission)")
-                else
-                    print("ERROR: _G.StateMission is nil! Cannot switch to mission state.")
-                end
-                setState(_G.StateMission)
-            elseif action == "CONTINUE" then
-                hq_mode = "EQUIP" -- 返回組裝
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonB) then
-            hq_mode = "EQUIP" -- 返回組裝模式
-        end
-    
-    elseif hq_mode == "UNEQUIP" then
-        -- UNEQUIP 模式：在網格上選取已放置的零件並移除
+        -- 拆卸模式
         if playdate.buttonJustPressed(playdate.kButtonLeft) then
             cursor_col = math.max(1, cursor_col - 1)
         elseif playdate.buttonJustPressed(playdate.kButtonRight) then
@@ -388,18 +437,16 @@ function StateHQ.update()
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
             cursor_row = math.max(1, cursor_row - 1)
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
-            -- 嘗試移除當前格子上的零件
             local idx, item = findEquippedPartAt(cursor_col, cursor_row)
             if idx and item then
                 removeEquippedPart(idx)
-            else
-                print("LOG: No part at selected cell to remove.")
             end
         elseif playdate.buttonJustPressed(playdate.kButtonB) then
-            hq_mode = "EQUIP" -- 返回組裝模式
+            hq_mode = "EQUIP"
         end
     end
-    -- 更新 flash 計時器（每幀減少）
+    
+    -- 更新 flash 計時器
     if flash_timer and flash_timer > 0 then
         flash_timer = flash_timer - 1
         if flash_timer <= 0 then
@@ -429,51 +476,58 @@ function StateHQ.draw()
     local mech_height = GRID_CELL_SIZE * GRID_ROWS
     
     gfx.drawRect(mech_image_x, mech_image_y, mech_width, mech_height)
-    gfx.drawText("MECH ASSEMBLY GRID", mech_image_x + 5, mech_image_y + 5)
+--    gfx.drawText("MECH ASSEMBLY GRID", mech_image_x + 5, mech_image_y + 5)
     
     -- Grid and parts rendering handled below (draw grid lines, then draw each equipped part once)
     
-    -- 3. 繪製組裝游標 (白色方框，標示當前位置)
-    if hq_mode == "EQUIP" and is_placing_part then
-        local cursor_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-        -- convert row (origin at bottom-left) to top-based y for drawing
-        local cursor_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
-        local part_id = _G.GameState and _G.GameState.unlocked_parts and _G.GameState.unlocked_parts[selected_part_index]
+    -- 3. 繪製零件預覽 (選中零件後，即使沒進入放置模式也顯示預覽)
+    if hq_mode == "EQUIP" and selected_category and selected_part_index and not cursor_on_ready then
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        local part_id = parts_list and parts_list[selected_part_index]
         local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
-        if pdata and pdata._img_scaled then
-            local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
-            local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
-            -- if part would extend beyond grid bounds, clamp position for preview
-            local preview_px = cursor_x
-            -- anchor bottom-left: compute draw_y so image bottom aligns with cell bottom
-            local preview_py = cursor_y + (GRID_CELL_SIZE - sh)
-            pcall(function() pdata._img_scaled:draw(preview_px, preview_py) end)
-            gfx.setColor(gfx.kColorBlack)
-            drawDither(preview_px + 2, preview_py + 2, sw - 4, sh - 4)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawRect(preview_px, preview_py, sw, sh)
-        elseif pdata and pdata._img then
-            local iw, ih
-            local ok, a, b = pcall(function() return pdata._img:getSize() end)
-            if ok then iw, ih = a, b end
-            local draw_x = cursor_x
-            local draw_y = cursor_y
-            if iw and ih then
-                draw_x = cursor_x + math.floor((GRID_CELL_SIZE - iw) / 2)
-                draw_y = cursor_y + math.floor((GRID_CELL_SIZE - ih) / 2)
+        
+        if pdata then
+            local preview_x, preview_y
+            
+            if is_placing_part then
+                -- 放置模式：預覽在游標位置
+                preview_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
+                preview_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
+            else
+                -- 非放置模式：預覽顯示在組裝格上方（置中）
+                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
+                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
+                local grid_width = GRID_COLS * GRID_CELL_SIZE
+                preview_x = GRID_START_X + (grid_width - sw) / 2
+                preview_y = GRID_START_Y - sh - 40  -- 組裝格上方，留40像素間距
             end
-            pcall(function() pdata._img:draw(draw_x, draw_y) end)
-            gfx.setColor(gfx.kColorBlack)
-            drawDither(cursor_x + 2, cursor_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-        else
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-            gfx.setColor(gfx.kColorBlack)
-            drawDither(cursor_x + 2, cursor_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
+            
+            -- 繪製預覽圖片
+            if pdata._img_scaled then
+                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
+                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
+                local draw_y = preview_y + (GRID_CELL_SIZE - sh)
+                pcall(function() pdata._img_scaled:draw(preview_x, draw_y) end)
+                gfx.setColor(gfx.kColorBlack)
+                drawDither(preview_x + 2, draw_y + 2, sw - 4, sh - 4)
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawRect(preview_x, draw_y, sw, sh)
+            elseif pdata._img then
+                local iw, ih
+                local ok, a, b = pcall(function() return pdata._img:getSize() end)
+                if ok then iw, ih = a, b end
+                local draw_x = preview_x
+                local draw_y = preview_y
+                if iw and ih then
+                    draw_x = preview_x + math.floor((GRID_CELL_SIZE - iw) / 2)
+                    draw_y = preview_y + math.floor((GRID_CELL_SIZE - ih) / 2)
+                end
+                pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                gfx.setColor(gfx.kColorBlack)
+                drawDither(preview_x + 2, preview_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawRect(preview_x, preview_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+            end
         end
     end
 
@@ -512,29 +566,40 @@ function StateHQ.draw()
         gfx.drawText("X", fx + math.floor(GRID_CELL_SIZE/2) - 3, fy + math.floor(GRID_CELL_SIZE/2) - 6)
     end
     
-    -- 4. 繪製零件清單 (左側)
-    gfx.drawText("PARTS LIST:", 10, 30)
+    -- 4. 繪製零件清單 (左側) - 分類顯示
+    gfx.drawText("PARTS:", 10, 30)
     local list_y = 50
     local line_height = 15
-    local unlocked_parts = _G.GameState and _G.GameState.unlocked_parts or {}
     
-    for i, part_id in ipairs(unlocked_parts) do
-        local display_text = part_id 
-        local current_y = list_y + (i - 1) * line_height
-        
-        if hq_mode == "EQUIP" and not is_placing_part and i == selected_part_index then
-            display_text = "> " .. display_text .. " <"
+    if not selected_category then
+        -- 顯示分類選擇
+        local categories = {"TOP PARTS", "BOTTOM PARTS"}
+        for i = 1, 2 do
+            local text = categories[i]
+            if i == selected_part_index then
+                text = "> " .. text .. " <"
+            end
+            gfx.drawText(text, 10, list_y + (i - 1) * line_height)
         end
-        -- Only show the part name in the left list (no thumbnail)
-        gfx.drawText(display_text, 10, current_y)
+    else
+        -- 顯示選中分類的零件
+        gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        for i, part_id in ipairs(parts_list) do
+            local text = part_id
+            if i == selected_part_index and not cursor_on_ready then
+                text = "> " .. text .. " <"
+            end
+            gfx.drawText(text, 10, list_y + (i - 1) * line_height)
+        end
     end
     
     -- 5. 繪製零件詳細資訊 / 狀態 (右側)
     local detail_x = 250
     local detail_y = 30
     
-                -- 繪製格子格線
-                for r = 1, GRID_ROWS do
+                -- 繪製格子格線（只繪製上半部 row=2 的格線）
+                for r = 2, GRID_ROWS do
                     for c = 1, GRID_COLS do
                         local cell_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
                         local cell_y = GRID_START_Y + (r - 1) * GRID_CELL_SIZE
@@ -544,100 +609,145 @@ function StateHQ.draw()
                 end
     
                 -- 繪製已放置的零件，每個零件只繪製一次，佔據 w x h 格
+                -- 分兩階段繪製：先下排(row=1)再上排(row=2)
                 local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
+                
+                -- 第一階段：繪製下排零件（row=1，無格線和 Dither）
                 for _, item in ipairs(eq) do
-                    local pid = item.id
-                    local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
-                    local px = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
-                    -- convert item.row (bottom-left origin) to top-based y
-                    local py_top = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
-                    local pw = (item.w or 1) * GRID_CELL_SIZE
-                    local ph = (item.h or 1) * GRID_CELL_SIZE
-                    if pdata and pdata._img_scaled then
-                        -- draw pre-rendered image; anchor bottom-left so full image visible
-                        local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
-                        if ok and iw and ih then
+                    if item.row == 1 then
+                        local pid = item.id
+                        local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
+                        local px = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
+                        -- convert item.row (bottom-left origin) to top-based y
+                        local py_top = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
+                        local pw = (item.w or 1) * GRID_CELL_SIZE
+                        local ph = (item.h or 1) * GRID_CELL_SIZE
+                        if pdata and pdata._img_scaled then
+                            -- draw pre-rendered image; anchor bottom-left so full image visible
+                            local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
+                            if ok and iw and ih then
+                                local draw_x = px
+                                local draw_y
+                                if pdata.align_image_top then
+                                    -- 圖片上緣對齊格子上緣（用於 FEET）
+                                    draw_y = py_top
+                                else
+                                    -- 預設：圖片底部對齊格子底部
+                                    draw_y = py_top + (GRID_CELL_SIZE - ih)
+                                end
+                                pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
+                            else
+                                pcall(function() pdata._img_scaled:draw(px, py_top) end)
+                            end
+                        elseif pdata and pdata._img then
+                            -- fallback: draw original with bottom-left anchoring (no scaling)
+                            local iw, ih
+                            local ok, a, b = pcall(function() return pdata._img:getSize() end)
+                            if ok then iw, ih = a, b end
                             local draw_x = px
                             local draw_y
                             if pdata.align_image_top then
-                                -- 圖片上緣對齊格子上緣（用於 FEET）
+                                -- 圖片上緣對齊格子上緣（用於 FEET 等超出格子的零件）
                                 draw_y = py_top
                             else
                                 -- 預設：圖片底部對齊格子底部
-                                draw_y = py_top + (GRID_CELL_SIZE - ih)
+                                draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
                             end
-                            pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
+                            pcall(function() pdata._img:draw(draw_x, draw_y) end)
                         else
-                            pcall(function() pdata._img_scaled:draw(px, py_top) end)
+                            -- no image: draw text label at the origin cell
+                            gfx.setColor(gfx.kColorBlack)
+                            gfx.drawText(pid or "?", px + 2, py_top + 2)
                         end
-                        gfx.setColor(gfx.kColorBlack)
-                        drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
-                        gfx.setColor(gfx.kColorBlack)
-                        gfx.drawRect(px, py_top, pw, ph)
-                    elseif pdata and pdata._img then
-                        -- fallback: draw original with bottom-left anchoring (no scaling)
-                        local iw, ih
-                        local ok, a, b = pcall(function() return pdata._img:getSize() end)
-                        if ok then iw, ih = a, b end
-                        local draw_x = px
-                        local draw_y
-                        if pdata.align_image_top then
-                            -- 圖片上緣對齊格子上緣（用於 FEET 等超出格子的零件）
-                            draw_y = py_top
-                        else
-                            -- 預設：圖片底部對齊格子底部
-                            draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
-                        end
-                        pcall(function() pdata._img:draw(draw_x, draw_y) end)
-                        gfx.setColor(gfx.kColorBlack)
-                        drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
-                    else
-                        -- no image: draw text label at the origin cell
-                        gfx.setColor(gfx.kColorBlack)
-                        gfx.drawText(pid or "?", px + 2, py_top + 2)
                     end
                 end
+                
+                -- 第二階段：繪製上排零件（row=2，有格線和 Dither）
+                for _, item in ipairs(eq) do
+                    if item.row == 2 then
+                        local pid = item.id
+                        local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
+                        local px = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
+                        -- convert item.row (bottom-left origin) to top-based y
+                        local py_top = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
+                        local pw = (item.w or 1) * GRID_CELL_SIZE
+                        local ph = (item.h or 1) * GRID_CELL_SIZE
+                        if pdata and pdata._img_scaled then
+                            -- draw pre-rendered image; anchor bottom-left so full image visible
+                            local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
+                            if ok and iw and ih then
+                                local draw_x = px
+                                local draw_y
+                                if pdata.align_image_top then
+                                    -- 圖片上緣對齊格子上緣（用於 FEET）
+                                    draw_y = py_top
+                                else
+                                    -- 預設：圖片底部對齊格子底部
+                                    draw_y = py_top + (GRID_CELL_SIZE - ih)
+                                end
+                                pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
+                            else
+                                pcall(function() pdata._img_scaled:draw(px, py_top) end)
+                            end
+                            gfx.setColor(gfx.kColorBlack)
+                            drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
+                            gfx.setColor(gfx.kColorBlack)
+                            gfx.drawRect(px, py_top, pw, ph)
+                        elseif pdata and pdata._img then
+                            -- fallback: draw original with bottom-left anchoring (no scaling)
+                            local iw, ih
+                            local ok, a, b = pcall(function() return pdata._img:getSize() end)
+                            if ok then iw, ih = a, b end
+                            local draw_x = px
+                            local draw_y
+                            if pdata.align_image_top then
+                                -- 圖片上緣對齊格子上緣（用於 FEET 等超出格子的零件）
+                                draw_y = py_top
+                            else
+                                -- 預設：圖片底部對齊格子底部
+                                draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
+                            end
+                            pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                            gfx.setColor(gfx.kColorBlack)
+                            drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
+                        else
+                            -- no image: draw text label at the origin cell
+                            gfx.setColor(gfx.kColorBlack)
+                            gfx.drawText(pid or "?", px + 2, py_top + 2)
+                        end
+                    end
+                end
+    
+    -- 6. 繪製機甲狀態
     gfx.drawText("MECH STATS:", detail_x, detail_y)
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
     gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y + 20)
     gfx.drawText("Weight: " .. stats.total_weight, detail_x, detail_y + 40)
     
-    -- 6. 繪製 UI 說明 (底部)
-    local action_text = ""
-    local dpad_text = ""
-    local ui_base_y = UI_AREA_Y_START + 5
+    -- 7. 繪製 READY 選項（置中在組裝格下方）
+    local ready_y = GRID_START_Y + GRID_ROWS * GRID_CELL_SIZE + 10
+    local ready_text = "READY"
+    if cursor_on_ready then
+        ready_text = "> " .. ready_text .. " <"
+    end
+    local ready_text_width = gfx.getTextSize(ready_text)
+    local ready_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - ready_text_width) / 2
+    gfx.drawText(ready_text, ready_x, ready_y)
     
-    if hq_mode == "EQUIP" then
-        if is_placing_part then
-            action_text = "A to CONFIRM; B to CANCEL placement"
-            dpad_text = "U/D/L/R move cursor"
-        else
-            action_text = "A to SELECT part; B for MENU"
-            dpad_text = "U/D select part; L/R for UNEQUIP/MENU"
-        end
-        gfx.drawText(action_text, 10, ui_base_y)
-        gfx.drawText(dpad_text, 10, ui_base_y + 15)
-        
-    elseif hq_mode == "UNEQUIP" then
-        action_text = "A to UNEQUIP; B for MENU"
-        dpad_text = "U/D select part; L/R for EQUIP"
-        gfx.drawText(action_text, 10, ui_base_y)
-        gfx.drawText(dpad_text, 10, ui_base_y + 15)
-    -- 注意: 輸入處理在 update() 中統一處理，draw() 僅負責繪製
-
-        
-    elseif hq_mode == "MENU" then
-        -- 僅繪製選單內容，輸入在 update() 中處理
-        gfx.drawText("MENU:", 10, ui_base_y)
-        local menu_x = 10
-        local menu_y = ui_base_y + 18
-        local menu_line_h = 14
-        for i, opt in ipairs(MENU_OPTIONS) do
-            local text = opt.name
+    -- 如果顯示 READY 選單
+    if show_ready_menu then
+        local menu_y = ready_y + 15
+        local options = {"Start Mission", "Back to equip"}
+        for i = 1, 2 do
+            local text = options[i]
             if i == menu_option_index then
-                text = "> " .. text .. " <"
+                text = "> " .. text
+            else
+                text = "  " .. text
             end
-            gfx.drawText(text, menu_x, menu_y + (i - 1) * menu_line_h)
+            local text_width = gfx.getTextSize(text)
+            local menu_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - text_width) / 2
+            gfx.drawText(text, menu_x, menu_y + (i - 1) * 12)
         end
     end
 end
