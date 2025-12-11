@@ -31,6 +31,10 @@ function MechController:init()
         -- GUN 相關
         gun_fire_timer = 0,
         
+        -- FEET 相關（跳躍）
+        velocity_y = 0,  -- 垂直速度
+        is_grounded = true,  -- 是否在地面上
+        
         -- 玩家受擊效果
         hit_shake_timer = 0,
         hit_shake_offset = 0
@@ -162,6 +166,24 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                 end
             end
         end
+    elseif self.active_part_id == "FEET" then
+        -- FEET：左右移動 + 跳躍
+        local pdata = _G.PartsData and _G.PartsData["FEET"]
+        local move_speed = (pdata and pdata.move_speed) or 3.0
+        
+        if playdate.buttonIsPressed(playdate.kButtonLeft) then
+            dx = dx - move_speed
+        end
+        if playdate.buttonIsPressed(playdate.kButtonRight) then
+            dx = dx + move_speed
+        end
+        
+        -- A 鍵跳躍（只有在地面時才能跳）
+        if playdate.buttonJustPressed(playdate.kButtonA) and self.is_grounded then
+            local jump_vel = (pdata and pdata.jump_velocity) or -8.0
+            self.velocity_y = jump_vel
+            self.is_grounded = false
+        end
     end
     
     return dx
@@ -204,6 +226,20 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
         self.hit_shake_offset = math.sin(self.hit_shake_timer * 80) * 5
     else
         self.hit_shake_offset = 0
+    end
+    
+    -- 更新 FEET 跳躍物理（重力）
+    if self.active_part_id == "FEET" and not self.is_grounded then
+        local gravity = (entity_controller and entity_controller.GRAVITY) or 0.5
+        self.velocity_y = self.velocity_y + gravity
+    end
+end
+
+-- 更新跳躍的地面狀態（由 state_mission 調用）
+function MechController:updateGroundState(is_grounded)
+    if is_grounded then
+        self.is_grounded = true
+        self.velocity_y = 0
     end
 end
 

@@ -88,7 +88,14 @@ function StateMission.setup()
                     local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size
                     local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
                     if ok and iw and ih then
-                        local draw_y = py_top + (mech_grid.cell_size - ih)
+                        local draw_y
+                        if pdata.align_image_top then
+                            -- 圖片上緣對齊格子上緣（用於 FEET）
+                            draw_y = py_top
+                        else
+                            -- 預設：圖片底部對齊格子底部
+                            draw_y = py_top + (mech_grid.cell_size - ih)
+                        end
                         -- Expand bounding box to include full image
                         if px < min_x then min_x = px end
                         if draw_y < min_y then min_y = draw_y end
@@ -99,6 +106,7 @@ function StateMission.setup()
             end
             local comp_w = math.max(1, max_x - min_x)
             local comp_h = math.max(1, max_y - min_y)
+            print(string.format("Composite image: w=%s, h=%s, min_x=%s, min_y=%s, max_x=%s, max_y=%s", tostring(comp_w), tostring(comp_h), tostring(min_x), tostring(min_y), tostring(max_x), tostring(max_y)))
             local okcomp, comp = pcall(function() return gfx.image.new(comp_w, comp_h) end)
             if okcomp and comp then
                 gfx.pushContext(comp)
@@ -112,9 +120,17 @@ function StateMission.setup()
                         local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size - min_y
                         local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
                         local draw_x = px
-                        local draw_y = py_top
+                        local draw_y
                         if ok and iw and ih then
-                            draw_y = py_top + (mech_grid.cell_size - ih)
+                            if pdata.align_image_top then
+                                -- 圖片上緣對齊格子上緣（用於 FEET）
+                                draw_y = py_top
+                            else
+                                -- 預設：圖片底部對齊格子底部
+                                draw_y = py_top + (mech_grid.cell_size - ih)
+                            end
+                        else
+                            draw_y = py_top
                         end
                         pcall(function() pdata._img:draw(draw_x, draw_y) end)
                     end
@@ -192,8 +208,13 @@ function StateMission.update()
     
     -- 2. 應用物理和碰撞檢測
     
-    -- 應用重力
-    mech_vy = mech_vy + GRAVITY
+    -- 如果 FEET 激活且有跳躍速度，使用 FEET 的跳躍物理
+    if mech_controller.active_part_id == "FEET" and mech_controller.velocity_y ~= 0 then
+        mech_vy = mech_controller.velocity_y
+    else
+        -- 否則應用一般重力
+        mech_vy = mech_vy + GRAVITY
+    end
     
     -- 計算新的位置
     local new_x = mech_x + dx
@@ -204,17 +225,38 @@ function StateMission.update()
     local body_w = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
     local body_h = (mech_grid and mech_grid.rows or 2) * (mech_grid and mech_grid.cell_size or 16)
     
+    -- 如果裝備 FEET，計算包含 FEET 的總高度
+    local total_h = body_h
+    local feet_extra_height = 0
+    if _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts then
+        for _, item in ipairs(_G.GameState.mech_stats.equipped_parts) do
+            if item.id == "FEET" then
+                local feet_data = _G.PartsData and _G.PartsData["FEET"]
+                if feet_data and feet_data._img then
+                    local ok, iw, ih = pcall(function() return feet_data._img:getSize() end)
+                    if ok and iw and ih then
+                        feet_extra_height = ih - (mech_grid and mech_grid.cell_size or 16)
+                        if feet_extra_height > 0 then
+                            total_h = total_h + feet_extra_height
+                        end
+                    end
+                end
+                break
+            end
+        end
+    end
+    
     local ground_level
     if entity_controller then
         -- 使用 EntityController 的地面（已經上移 UI_HEIGHT）
-        ground_level = entity_controller.ground_y - body_h
+        ground_level = entity_controller.ground_y - total_h
     else
-        ground_level = GAME_HEIGHT - body_h - 10
+        ground_level = GAME_HEIGHT - total_h - 10
     end
     
     if entity_controller then
-        -- 使用 EntityController 進行精確碰撞（使用本體碰撞框）
-        local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, body_w, body_h)
+        -- 使用 EntityController 進行精確碰撞（使用包含 FEET 的總高度）
+        local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, body_w, total_h)
 
         -- 如果沒有水平阻擋，採用計算後的新 X；否則保留原地（阻擋水平移動）
         if not horizontal_block then
@@ -228,11 +270,13 @@ function StateMission.update()
             mech_y = vertical_stop
             mech_vy = 0
             is_on_ground = true
+            mech_controller:updateGroundState(true)  -- 通知 MechController 已著地
         elseif new_y >= ground_level then
             -- 撞到地圖的「地面」
             mech_y = ground_level
             mech_vy = 0
             is_on_ground = true
+            mech_controller:updateGroundState(true)  -- 通知 MechController 已著地
         else
             mech_y = new_y
             is_on_ground = false
@@ -369,31 +413,90 @@ function StateMission.draw()
 
     -- 2. 繪製機甲（使用預先組合的 mech image，確保碰撞框與視覺一致）
     local draw_x = mech_x - camera_x + mech_controller.hit_shake_offset  -- 添加震動偏移
+    
+    -- 計算 FEET 的額外高度（用於碰撞檢測）
+    local feet_extra_height = 0
+    local mech_grid = _G.GameState.mech_grid
+    if _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts then
+        for _, item in ipairs(_G.GameState.mech_stats.equipped_parts) do
+            if item.id == "FEET" then
+                local feet_data = _G.PartsData and _G.PartsData["FEET"]
+                if feet_data and feet_data._img then
+                    local ok, iw, ih = pcall(function() return feet_data._img:getSize() end)
+                    if ok and iw and ih then
+                        local cell_size = mech_grid and mech_grid.cell_size or 16
+                        feet_extra_height = ih - cell_size
+                        if feet_extra_height < 0 then feet_extra_height = 0 end
+                    end
+                end
+                break
+            end
+        end
+    end
+    
+    -- 繪製位置直接使用 mech_y（本體位置），零件座標系統會處理對齊
     local draw_y = mech_y
+    local body_draw_y = mech_y  -- 與 draw_y 相同，用於零件座標計算
     local draw_w = mech_draw_w or MECH_WIDTH
     local draw_h = mech_draw_h or MECH_HEIGHT
     
-    -- 繪製本體碰撞框（調試用 - 3x2 格）
-    local mech_grid = _G.GameState.mech_grid
+    -- 繪製碰撞框（調試用 - 包含 FEET 的完整高度）
     local body_w = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
     local body_h = (mech_grid and mech_grid.rows or 2) * (mech_grid and mech_grid.cell_size or 16)
+    
+    -- 計算包含 FEET 的總高度（用於碰撞檢測）
+    local total_h = body_h + feet_extra_height
+    
     gfx.setColor(gfx.kColorBlack)
-    gfx.drawRect(draw_x, draw_y, body_w, body_h)
+    gfx.drawRect(draw_x, body_draw_y, body_w, total_h)
+    print(string.format("Collision box: x=%s, y=%s, w=%s, h=%s (body_h=%s + feet_extra=%s)", tostring(draw_x), tostring(body_draw_y), tostring(body_w), tostring(total_h), tostring(body_h), tostring(feet_extra_height)))
     
     -- 如果 SWORD 或 CANON 激活，分別繪製零件（避免重複）
     if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" then
         -- 手動繪製所有非激活零件
+        -- 分兩階段：先繪製下排零件（如 FEET），再繪製上排零件，避免重疊
         local eq = _G.GameState.mech_stats.equipped_parts or {}
+        
+        -- 第一階段：繪製下排零件（row = 1）
         for _, item in ipairs(eq) do
-            if item.id ~= mech_controller.active_part_id then
+            if item.id ~= mech_controller.active_part_id and item.row == 1 then
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata and pdata._img then
                     local cell_size = mech_grid.cell_size
                     local px = draw_x + (item.col - 1) * cell_size
-                    local py_top = draw_y + (mech_grid.rows - item.row) * cell_size
+                    local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
                     local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
                     if ok and iw and ih then
-                        local part_y = py_top + (cell_size - ih)
+                        local part_y
+                        if pdata.align_image_top then
+                            part_y = py_top
+                        else
+                            local offset_y = pdata.image_offset_y or 0
+                            part_y = py_top + (cell_size - ih) + offset_y
+                        end
+                        pcall(function() pdata._img:draw(px, part_y) end)
+                    end
+                end
+            end
+        end
+        
+        -- 第二階段：繪製上排零件（row = 2）
+        for _, item in ipairs(eq) do
+            if item.id ~= mech_controller.active_part_id and item.row == 2 then
+                local pdata = _G.PartsData and _G.PartsData[item.id]
+                if pdata and pdata._img then
+                    local cell_size = mech_grid.cell_size
+                    local px = draw_x + (item.col - 1) * cell_size
+                    local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
+                    local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+                    if ok and iw and ih then
+                        local part_y
+                        if pdata.align_image_top then
+                            part_y = py_top
+                        else
+                            local offset_y = pdata.image_offset_y or 0
+                            part_y = py_top + (cell_size - ih) + offset_y
+                        end
                         pcall(function() pdata._img:draw(px, part_y) end)
                     end
                 end
@@ -534,10 +637,6 @@ function StateMission.draw()
     end
 
     -- 4. 繪製控制介面 UI
-    -- 繪製分隔線
-    gfx.setColor(gfx.kColorBlack)
-    gfx.drawLine(0, GAME_HEIGHT, SCREEN_WIDTH, GAME_HEIGHT)
-    
     -- 繪製 3x2 控制格子
     local eq = _G.GameState.mech_stats.equipped_parts or {}
     

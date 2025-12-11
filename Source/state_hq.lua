@@ -537,7 +537,14 @@ function StateHQ.draw()
                         local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
                         if ok and iw and ih then
                             local draw_x = px
-                            local draw_y = py_top + (GRID_CELL_SIZE - ih)
+                            local draw_y
+                            if pdata.align_image_top then
+                                -- 圖片上緣對齊格子上緣（用於 FEET）
+                                draw_y = py_top
+                            else
+                                -- 預設：圖片底部對齊格子底部
+                                draw_y = py_top + (GRID_CELL_SIZE - ih)
+                            end
                             pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
                         else
                             pcall(function() pdata._img_scaled:draw(px, py_top) end)
@@ -552,7 +559,14 @@ function StateHQ.draw()
                         local ok, a, b = pcall(function() return pdata._img:getSize() end)
                         if ok then iw, ih = a, b end
                         local draw_x = px
-                        local draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
+                        local draw_y
+                        if pdata.align_image_top then
+                            -- 圖片上緣對齊格子上緣（用於 FEET 等超出格子的零件）
+                            draw_y = py_top
+                        else
+                            -- 預設：圖片底部對齊格子底部
+                            draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
+                        end
                         pcall(function() pdata._img:draw(draw_x, draw_y) end)
                         gfx.setColor(gfx.kColorBlack)
                         drawDither(px + 2, py_top + 2, pw - 4, ph - 4)

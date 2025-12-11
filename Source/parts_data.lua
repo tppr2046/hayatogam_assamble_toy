@@ -14,6 +14,7 @@ local parts_data = {
             image = "images/gun.png",
         -- placement_row: "TOP", "BOTTOM", or "BOTH"
         placement_row = "TOP",
+        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- GUN 特有屬性：砲彈發射
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
         projectile_damage = 5,  -- 砲彈傷害
@@ -28,7 +29,9 @@ local parts_data = {
         slot_y = 1,
             color = gfx.kColorBlack,
             image = "images/wheel.png",
-            placement_row = "BOTTOM"
+            placement_row = "BOTTOM",
+        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        move_speed = 2.0  -- 左右移動速度
     },
     ["CANON"] = {
         name = "CANON",
@@ -39,6 +42,7 @@ local parts_data = {
             color = gfx.kColorBlack,
             image = "images/canon.png",
             placement_row = "TOP",
+        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- CANON 特有屬性：砲彈發射
         fire_cooldown = 0.5,  -- 每 0.5 秒可以發射一次
         projectile_damage = 10,  -- 砲彈傷害
@@ -54,9 +58,23 @@ local parts_data = {
         slot_y = 1,
             color = gfx.kColorBlack,
             image = "images/sword.png",
-            placement_row = "TOP"
+            placement_row = "TOP",
+        align_image_top = false  -- 圖片底部對齊格子底部（預設行為）
+    },
+    ["FEET"] = {
+        name = "FEET",
+        hp = 12,
+        weight = 7,
+        slot_x = 3,
+        slot_y = 1,
+            color = gfx.kColorBlack,
+            image = "images/feet.png",
+            placement_row = "BOTTOM",
+        -- FEET 特有屬性
+        align_image_top = true,  -- 圖片上緣對齊格子上緣（圖片下半部會超出格子）
+        move_speed = 3.0,  -- 左右移動速度
+        jump_velocity = -8.0  -- 跳躍初速度（負值=向上）
     }
-
 
 
 }
