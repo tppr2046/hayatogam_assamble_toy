@@ -144,13 +144,18 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                         local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
                         local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
                         
-                        local speed = pdata.projectile_speed or 200
+                        -- 使用與敵人相同的計算方式
+                        local base_speed = entity_controller.player_move_speed or 2.0
+                        local speed_mult = pdata.projectile_speed_mult or 1.0
+                        local speed = base_speed * speed_mult
+                        
                         local angle_rad = math.rad(self.canon_angle)
                         local vx = math.cos(angle_rad) * speed
                         local vy = -math.sin(angle_rad) * speed
                         local dmg = pdata.projectile_damage or 10
+                        local grav_mult = pdata.projectile_grav_mult or 1.0
                         
-                        entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg)
+                        entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult)
                         self.canon_fire_timer = 0
                         break
                     end
@@ -178,11 +183,15 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
                 local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
                 local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
                 
-                local vx = pdata.projectile_vx or 150
-                local vy = pdata.projectile_vy or -50
+                -- 使用與敵人相同的計算方式
+                local base_speed = entity_controller.player_move_speed or 2.0
+                local speed_mult = pdata.projectile_speed_mult or 1.0
+                local vx = base_speed * speed_mult  -- 水平發射
+                local vy = 0  -- GUN 直射，垂直速度為 0
                 local dmg = pdata.projectile_damage or 5
+                local grav_mult = pdata.projectile_grav_mult or 1.0
                 
-                entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg)
+                entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg, grav_mult)
                 self.gun_fire_timer = 0
                 break
             end
@@ -393,12 +402,14 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
 end
 
 -- 添加玩家砲彈
-function EntityController:addPlayerProjectile(x, y, vx, vy, damage)
+function EntityController:addPlayerProjectile(x, y, vx, vy, damage, grav_mult)
+    grav_mult = grav_mult or 1.0
+    
     local projectile = Projectile:init(x, y, vx, vy, damage, true, self.ground_y)
-    -- 設定與敵人砲彈相同的重力（使用世界重力 GRAVITY）
-    projectile.gravity = self.GRAVITY or 0.5
+    -- 設定重力（基準重力 * 重力倍率）
+    projectile.gravity = (self.GRAVITY or 0.5) * grav_mult
     table.insert(self.projectiles, projectile)
-    print("LOG: Player fired projectile at (" .. math.floor(x) .. ", " .. math.floor(y) .. ")")
+    print("LOG: Player fired projectile at (" .. math.floor(x) .. ", " .. math.floor(y) .. ") vx=" .. math.floor(vx) .. " grav_mult=" .. grav_mult)
 end
 
 function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height, mech_stats)

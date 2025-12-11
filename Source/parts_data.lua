@@ -16,9 +16,9 @@ local parts_data = {
         placement_row = "TOP",
         -- GUN 特有屬性：砲彈發射
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
-        projectile_vx = 50,  -- 砲彈水平速度
-        projectile_vy = -2,  -- 砲彈垂直速度（負值=向上）
-        projectile_damage = 5  -- 砲彈傷害
+        projectile_damage = 5,  -- 砲彈傷害
+        projectile_speed_mult = 25,  -- 速度倍率（相對於基準速度）
+        projectile_grav_mult = 1.0  -- 重力倍率（相對於世界重力 0.5）
     },
     ["WHEEL"] = {
         name = "WHEEL",
@@ -41,8 +41,9 @@ local parts_data = {
             placement_row = "TOP",
         -- CANON 特有屬性：砲彈發射
         fire_cooldown = 0.5,  -- 每 0.5 秒可以發射一次
-        projectile_speed = 200,  -- 砲彈速度
-        projectile_damage = 10  -- 砲彈傷害
+        projectile_damage = 10,  -- 砲彈傷害
+        projectile_speed_mult = 30,  -- 速度倍率（相對於基準速度）
+        projectile_grav_mult = 20  -- 重力倍率（相對於世界重力 0.5）
     },
     ["SWORD"] = {
         name = "SWORD",
