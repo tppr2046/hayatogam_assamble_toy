@@ -22,10 +22,10 @@ function StateSaveSelect.update()
     elseif playdate.buttonJustPressed(playdate.kButtonDown) then
         selected_slot = math.min(SAVE_SLOTS, selected_slot + 1)
     elseif playdate.buttonJustPressed(playdate.kButtonA) then
-        -- 選擇存檔槽，進入 HQ
+        -- 選擇存檔槽，進入任務選擇畫面
         _G.GameState = _G.GameState or {}
         _G.GameState.current_save_slot = selected_slot
-        setState(_G.StateHQ)
+        setState(_G.StateMissionSelect)
     elseif playdate.buttonJustPressed(playdate.kButtonB) then
         -- 返回主選單（如果有的話）
         if _G.StateMenu then

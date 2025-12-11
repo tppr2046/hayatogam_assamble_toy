@@ -41,8 +41,7 @@ local UI_START_Y = GAME_HEIGHT + 5
 local GRID_MAP = {}       
 local cursor_col = 1      
 local cursor_row = 1      
-local cursor_on_ready = false  -- 游標是否在 READY 選項上
-
+local cursor_on_ready = false  -- 游標是否在 READY 選項上local cursor_on_back = false   -- 遊標是否在 BACK 選項上
 local selected_category = nil   -- nil = 選擇分類, "TOP" or "BOTTOM" = 已選分類
 local selected_part_index = 1   
 local hq_mode = "EQUIP"         -- EQUIP (組裝模式), UNEQUIP (拆卸模式), READY_MENU (READY選單)
@@ -239,6 +238,7 @@ function StateHQ.setup()
     hq_mode = "EQUIP" -- 確保從組裝模式開始
     selected_category = nil  -- 重置分類選擇
     cursor_on_ready = false
+    cursor_on_back = false
     show_ready_menu = false
 
     -- 初始化 GRID_MAP（row-major），nil 表示空
@@ -363,6 +363,19 @@ function StateHQ.update()
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
                 is_placing_part = false
             end
+        elseif cursor_on_back then
+            -- 游標在 BACK 上
+            print("DEBUG: cursor_on_back is true")
+            if playdate.buttonJustPressed(playdate.kButtonUp) then
+                print("DEBUG: BACK - Up pressed")
+                cursor_on_back = false
+                cursor_on_ready = true
+            elseif playdate.buttonJustPressed(playdate.kButtonA) then
+                -- 返回任務選擇畫面
+                print("DEBUG: BACK - A pressed, returning to mission select")
+                print("DEBUG: _G.StateMissionSelect = " .. tostring(_G.StateMissionSelect))
+                setState(_G.StateMissionSelect)
+            end
         elseif cursor_on_ready then
             -- 游標在 READY 上
             if show_ready_menu then
@@ -379,7 +392,7 @@ function StateHQ.update()
                         _G.GameState.current_mission = "M001"
                         setState(_G.StateMission)
                     else
-                        -- Back to equip
+                        -- Continue Assembly
                         show_ready_menu = false
                         cursor_on_ready = false
                     end
@@ -394,6 +407,12 @@ function StateHQ.update()
                     if last_part_index then
                         selected_part_index = last_part_index
                     end
+                elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+                    -- 從 READY 移動到 BACK
+                    print("DEBUG: Moving from READY to BACK")
+                    cursor_on_ready = false
+                    cursor_on_back = true
+                    print("DEBUG: cursor_on_back set to true")
                 elseif playdate.buttonJustPressed(playdate.kButtonA) then
                     show_ready_menu = true
                     menu_option_index = 1
@@ -756,6 +775,16 @@ function StateHQ.draw()
     local ready_text_width = gfx.getTextSize(ready_text)
     local ready_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - ready_text_width) / 2
     gfx.drawText(ready_text, ready_x, ready_y)
+    
+    -- 繪製 BACK 選項（在 READY 下方）
+    local back_y = ready_y + 15
+    local back_text = "BACK"
+    if cursor_on_back then
+        back_text = "> " .. back_text .. " <"
+    end
+    local back_text_width = gfx.getTextSize(back_text)
+    local back_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - back_text_width) / 2
+    gfx.drawText(back_text, back_x, back_y)
     
     -- 如果顯示 READY 選單
     if show_ready_menu then

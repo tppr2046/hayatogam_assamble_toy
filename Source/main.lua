@@ -24,6 +24,8 @@ _G.PartsData = pd or _G.PartsData or {}
 -- 載入狀態模組 
 _G.StateMenu = import "state_menu"
 _G.StateSaveSelect = import "state_save_select"
+_G.StateMissionSelect = import "state_mission_select"
+print("DEBUG main.lua: StateMissionSelect loaded = " .. tostring(_G.StateMissionSelect ~= nil))
 _G.StateHQ = import "state_hq"
 _G.StateMission = import "state_mission"
 _G.StateResult = import "state_result"
@@ -45,6 +47,7 @@ function setState(newState, ...)
     local function nameOf(s)
         if s == _G.StateMenu then return "StateMenu" end
         if s == _G.StateSaveSelect then return "StateSaveSelect" end
+        if s == _G.StateMissionSelect then return "StateMissionSelect" end
         if s == _G.StateHQ then return "StateHQ" end
         if s == _G.StateMission then return "StateMission" end
         if s == _G.StateResult then return "StateResult" end
