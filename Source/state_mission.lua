@@ -548,15 +548,25 @@ function StateMission.draw()
     -- gfx.drawRect(draw_x, body_draw_y, body_w, total_h)
     -- print(string.format("Collision box: x=%s, y=%s, w=%s, h=%s (body_h=%s + feet_extra=%s)", tostring(draw_x), tostring(body_draw_y), tostring(body_w), tostring(total_h), tostring(body_h), tostring(feet_extra_height)))
     
-    -- 如果 SWORD、CANON、FEET 或 CLAW 激活，分別繪製零件（避免重複）
-    if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" or mech_controller.active_part_id == "FEET" or mech_controller.active_part_id == "CLAW" then
-        -- 手動繪製所有非激活零件
+    -- 檢查是否需要手動繪製零件（當有特殊零件時，或有任何已裝備的零件時）
+    -- 總是使用手動繪製以確保激活零件正確顯示
+    local has_special_parts = false
+    local eq = _G.GameState.mech_stats.equipped_parts or {}
+    if #eq > 0 then
+        has_special_parts = true
+    end
+    
+    if has_special_parts then
+        -- 手動繪製所有零件（因為有需要特殊處理的零件）
         -- 分兩階段：先繪製下排零件（如 FEET），再繪製上排零件，避免重疊
         local eq = _G.GameState.mech_stats.equipped_parts or {}
         
         -- 第一階段：繪製下排零件（row = 1）
         for _, item in ipairs(eq) do
-            if item.id ~= mech_controller.active_part_id and item.row == 1 then
+            -- 有特殊激活繪製邏輯的零件：SWORD, CANON, FEET, CLAW
+            local has_special_render = (item.id == "SWORD" or item.id == "CANON" or item.id == "FEET" or item.id == "CLAW")
+            local should_skip = has_special_render and (item.id == mech_controller.active_part_id)
+            if not should_skip and item.row == 1 then
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata and pdata._img then
                     local cell_size = mech_grid.cell_size
@@ -627,7 +637,10 @@ function StateMission.draw()
         
         -- 第二階段：繪製上排零件（row = 2）
         for _, item in ipairs(eq) do
-            if item.id ~= mech_controller.active_part_id and item.row == 2 then
+            -- 有特殊激活繪製邏輯的零件：SWORD, CANON, FEET, CLAW
+            local has_special_render = (item.id == "SWORD" or item.id == "CANON" or item.id == "FEET" or item.id == "CLAW")
+            local should_skip = has_special_render and (item.id == mech_controller.active_part_id)
+            if not should_skip and item.row == 2 then
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata and pdata._img then
                     local cell_size = mech_grid.cell_size
