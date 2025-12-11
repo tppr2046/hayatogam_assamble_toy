@@ -1,4 +1,4 @@
-name=Hayatogam Assamble Toy
+name=Assamble Toy
 author=tppr2046
 description=A robot assembly and combat game for Playdate
 bundleID=com.tppr2046.hayatogamassamble
@@ -6,4 +6,4 @@ version=1.0.0
 buildNumber=1
 imagePath=icon
 pdxversion=30000
-buildtime=818778356
+buildtime=818778965
