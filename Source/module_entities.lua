@@ -34,6 +34,9 @@ function MechController:init()
         -- FEET 相關（跳躍）
         velocity_y = 0,  -- 垂直速度
         is_grounded = true,  -- 是否在地面上
+        feet_is_moving = false,  -- 是否正在移動
+        feet_move_direction = 0,  -- 移動方向：1=向右, -1=向左, 0=靜止
+        feet_animation = nil,  -- 動畫循環物件
         
         -- 玩家受擊效果
         hit_shake_timer = 0,
@@ -132,7 +135,8 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     elseif self.active_part_id == "CANON" then
         -- CANON：crank 旋轉 + A 發射
         local pdata = _G.PartsData and _G.PartsData["CANON"]
-        local angle_range = pdata and pdata.angle_range or 90  -- 預設 90 度範圍
+        local angle_min = pdata and pdata.angle_min or -45  -- 預設 -45 度
+        local angle_max = pdata and pdata.angle_max or 45  -- 預設 +45 度
         local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 15  -- 預設 crank 轉 1 圈產生 15 度變化
         
         local crankChange = playdate.getCrankChange()
@@ -141,12 +145,11 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             local canon_delta = (crankChange / 360.0) * crank_ratio
             self.canon_angle = self.canon_angle + canon_delta
             
-            -- 限制角度在範圍內（-angle_range/2 到 +angle_range/2）
-            local half_range = angle_range / 2
-            if self.canon_angle > half_range then
-                self.canon_angle = half_range
-            elseif self.canon_angle < -half_range then
-                self.canon_angle = -half_range
+            -- 限制角度在範圍內
+            if self.canon_angle > angle_max then
+                self.canon_angle = angle_max
+            elseif self.canon_angle < angle_min then
+                self.canon_angle = angle_min
             end
         end
         
@@ -182,12 +185,22 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         local pdata = _G.PartsData and _G.PartsData["FEET"]
         local move_speed = (pdata and pdata.move_speed) or 3.0
         
+        local moving = false
+        local direction = 0
+        
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
             dx = dx - move_speed
+            moving = true
+            direction = -1
         end
         if playdate.buttonIsPressed(playdate.kButtonRight) then
             dx = dx + move_speed
+            moving = true
+            direction = 1
         end
+        
+        self.feet_is_moving = moving
+        self.feet_move_direction = direction
         
         -- A 鍵跳躍（只有在地面時才能跳）
         if playdate.buttonJustPressed(playdate.kButtonA) and self.is_grounded then

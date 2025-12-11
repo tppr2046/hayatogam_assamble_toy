@@ -49,7 +49,8 @@ local parts_data = {
         projectile_speed_mult = 30,  -- 速度倍率（相對於基準速度）
         projectile_grav_mult = 20,  -- 重力倍率（相對於世界重力 0.5）
         -- CANON 轉動控制
-        angle_range = 90,  -- 轉動角度範圍（總範圍，-45 到 +45 度）
+        angle_min = 0,  -- 最小角度（度）
+        angle_max = 90,  -- 最大角度（度）
         crank_degrees_per_rotation = 15  -- crank 轉 1 圈（360度）產生的 canon 角度變化
     },
     ["SWORD"] = {
@@ -76,7 +77,8 @@ local parts_data = {
         -- FEET 特有屬性
         align_image_top = true,  -- 圖片上緣對齊格子上緣（圖片下半部會超出格子）
         move_speed = 3.0,  -- 左右移動速度
-        jump_velocity = -8.0  -- 跳躍初速度（負值=向上）
+        jump_velocity = -8.0,  -- 跳躍初速度（負值=向上）
+        animation_walk = "images/feet_walk"  -- 行走動畫 imagetable 路徑
     }
 
 

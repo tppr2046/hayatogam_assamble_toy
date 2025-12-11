@@ -1,6 +1,8 @@
 -- state_mission.lua (整合 EntityController, 戰鬥與 HP 邏輯)
 
 import "CoreLibs/graphics"
+import "CoreLibs/animation"
+import "CoreLibs/animator"
 import "module_scene_data" 
 import "module_entities" 
 -- 載入任務資料，用於獲取敵人列表
@@ -41,6 +43,12 @@ local mech_controller = nil
 -- 可變的繪製寬高（預設為常數），若合成成功會改成合成尺寸
 local mech_draw_w = MECH_WIDTH
 local mech_draw_h = MECH_HEIGHT
+
+-- FEET 動畫相關
+local feet_imagetable = nil
+local feet_current_frame = 1  -- 當前幀 (1-based)
+local feet_frame_timer = 0    -- 計時器（毫秒）
+local feet_frame_delay = 100  -- 每幀延遲（毫秒）
 
 -- 任務狀態的局部變數
 local is_paused = false
@@ -146,6 +154,23 @@ function StateMission.setup()
         end
     end
 
+    -- 初始化 FEET 動畫（如果裝備了 FEET）
+    local feet_data = _G.PartsData and _G.PartsData["FEET"]
+    if feet_data and feet_data.animation_walk then
+        local anim_path = feet_data.animation_walk
+        local ok, imagetable = pcall(function() 
+            return gfx.imagetable.new(anim_path)
+        end)
+        if ok and imagetable then
+            local length_ok, length = pcall(function() return imagetable:getLength() end)
+            if length_ok and length and length > 0 then
+                feet_imagetable = imagetable
+                feet_current_frame = 1
+                feet_frame_timer = 0
+            end
+        end
+    end
+
     -- 初始化機甲位置：如果場景有 ground 資訊則放在地面，否則靠畫面底部
     -- determine current scene: prefer selected mission in GameState, otherwise first mission in MissionData
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or nil
@@ -195,6 +220,37 @@ function StateMission.update()
 
     -- 0. 記錄舊的 Y 座標 (用於 EntityController 碰撞檢查)
     mech_y_old = mech_y
+    
+    -- 0.1 更新 FEET 動畫
+    if feet_imagetable and mech_controller then
+        if mech_controller.feet_is_moving then
+            -- 移動時播放動畫
+            feet_frame_timer = feet_frame_timer + (1000 / 30)  -- 假設 30 FPS，每幀約 33ms
+            
+            if feet_frame_timer >= feet_frame_delay then
+                feet_frame_timer = 0
+                
+                local frame_count = feet_imagetable:getLength()
+                if mech_controller.feet_move_direction < 0 then
+                    -- 向左：倒帶播放 (3 -> 2 -> 1 -> 3 ...)
+                    feet_current_frame = feet_current_frame - 1
+                    if feet_current_frame < 1 then
+                        feet_current_frame = frame_count
+                    end
+                else
+                    -- 向右：正常播放 (1 -> 2 -> 3 -> 1 ...)
+                    feet_current_frame = feet_current_frame + 1
+                    if feet_current_frame > frame_count then
+                        feet_current_frame = 1
+                    end
+                end
+            end
+        else
+            -- 停止時重置動畫
+            feet_current_frame = 1
+            feet_frame_timer = 0
+        end
+    end
 
     -- 1. 處理輸入 (使用 MechController)
     local dx = 0
@@ -447,12 +503,13 @@ function StateMission.draw()
     -- 計算包含 FEET 的總高度（用於碰撞檢測）
     local total_h = body_h + feet_extra_height
     
-    gfx.setColor(gfx.kColorBlack)
-    gfx.drawRect(draw_x, body_draw_y, body_w, total_h)
-    print(string.format("Collision box: x=%s, y=%s, w=%s, h=%s (body_h=%s + feet_extra=%s)", tostring(draw_x), tostring(body_draw_y), tostring(body_w), tostring(total_h), tostring(body_h), tostring(feet_extra_height)))
+    -- 畫出碰撞框 (用於除錯) - 已關閉
+    -- gfx.setColor(gfx.kColorBlack)
+    -- gfx.drawRect(draw_x, body_draw_y, body_w, total_h)
+    -- print(string.format("Collision box: x=%s, y=%s, w=%s, h=%s (body_h=%s + feet_extra=%s)", tostring(draw_x), tostring(body_draw_y), tostring(body_w), tostring(total_h), tostring(body_h), tostring(feet_extra_height)))
     
-    -- 如果 SWORD 或 CANON 激活，分別繪製零件（避免重複）
-    if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" then
+    -- 如果 SWORD、CANON 或 FEET 激活，分別繪製零件（避免重複）
+    if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" or mech_controller.active_part_id == "FEET" then
         -- 手動繪製所有非激活零件
         -- 分兩階段：先繪製下排零件（如 FEET），再繪製上排零件，避免重疊
         local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -474,7 +531,18 @@ function StateMission.draw()
                             local offset_y = pdata.image_offset_y or 0
                             part_y = py_top + (cell_size - ih) + offset_y
                         end
-                        pcall(function() pdata._img:draw(px, part_y) end)
+                        
+                        -- 特殊處理 FEET 動畫
+                        if item.id == "FEET" and feet_imagetable and mech_controller.feet_is_moving then
+                            -- 播放動畫（使用當前幀索引）
+                            local frame_image = feet_imagetable:getImage(feet_current_frame)
+                            if frame_image then
+                                pcall(function() frame_image:draw(px, part_y) end)
+                            end
+                        else
+                            -- 使用靜態圖片
+                            pcall(function() pdata._img:draw(px, part_y) end)
+                        end
                     end
                 end
             end
@@ -610,6 +678,45 @@ function StateMission.draw()
                         canon_data._img:drawRotated(new_center_x, new_center_y, -mech_controller.canon_angle)
                     end
                     gfx.popContext()
+                    break
+                end
+            end
+        end
+    end
+    
+    -- 如果 FEET 已激活，額外繪製 FEET（使用動畫或靜態圖片）
+    if mech_controller.active_part_id == "FEET" and _G.PartsData and _G.PartsData["FEET"] then
+        local feet_data = _G.PartsData["FEET"]
+        if feet_data._img then
+            -- 找到 FEET 在 mech 上的位置
+            local eq = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.id == "FEET" then
+                    local mech_grid = _G.GameState.mech_grid
+                    local cell_size = mech_grid.cell_size
+                    local px = draw_x + (item.col - 1) * cell_size
+                    local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
+                    
+                    local ok, iw, ih = pcall(function() return feet_data._img:getSize() end)
+                    if ok and iw and ih then
+                        local part_y
+                        if feet_data.align_image_top then
+                            part_y = py_top
+                        else
+                            local offset_y = feet_data.image_offset_y or 0
+                            part_y = py_top + (cell_size - ih) + offset_y
+                        end
+                        
+                        -- 如果移動中且有動畫，使用動畫幀
+                        if feet_imagetable and mech_controller.feet_is_moving then
+                            local frame_image = feet_imagetable:getImage(feet_current_frame)
+                            if frame_image then
+                                pcall(function() frame_image:draw(px, part_y) end)
+                            end
+                        else
+                            pcall(function() feet_data._img:draw(px, part_y) end)
+                        end
+                    end
                     break
                 end
             end
