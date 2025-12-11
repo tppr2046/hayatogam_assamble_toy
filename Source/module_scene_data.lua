@@ -14,13 +14,17 @@ SceneData = {
 
         -- 障礙物定義
         obstacles = {
-            { x = 350, width = 50, height = 30 },
-            { x = 550, width = 80, height = 60 },
+
+        },
+        
+        -- 可互動物件（石頭）
+        stones = {
+            { x = 400, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
         },
 
         -- 測試用敵人列表
         enemies = {
-            { x = 300, y = 0, type = "BASIC_ENEMY" },
+
         },
     }
 }

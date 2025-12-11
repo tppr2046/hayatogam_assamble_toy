@@ -15,14 +15,15 @@ return {
             
             -- 場景障礙物件
             obstacles = {
-                {type = "CRATE", x = 350, y = 200, height = 20, width = 50, is_pushable = true},
-                {type = "WALL", x = 600, y = 150, height = 70, width = 10, is_pushable = false}
+            },
+            
+            -- 可互動物件（石頭）
+            stones = {
+                { x = 400, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
             },
             
             -- 任務敵人
             enemies = {
-                {type = "BASIC_ENEMY", x = 300, y = 0},
-                {type = "BASIC_ENEMY", x = 450, y = 0}
             },
             
             mission_objects = {} 

@@ -9,10 +9,6 @@ import "CoreLibs/timer"
 -- ==========================================
 -- 2. 載入遊戲資料與狀態模組
 -- ==========================================
--- 載入資料模組
--- ❗ 假設 module_scene_data 存在
-_G.SceneData = import "module_scene_data"
-
 -- 關鍵修正：初始化全域遊戲資料 (確保所有必要的結構存在)
 _G.GameState = _G.GameState or {}
 _G.GameState.mech_stats = _G.GameState.mech_stats or {

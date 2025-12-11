@@ -210,6 +210,27 @@ function StateHQ.setup()
                     print("WARN: failed to load image for part", pid, pdata.image, err)
                 end
             end
+            -- 載入 CLAW 的額外圖片
+            if pid == "CLAW" then
+                if pdata.arm_image then
+                    local arm_img = gfx.image.new(pdata.arm_image)
+                    if arm_img then
+                        pdata._arm_img = arm_img
+                    end
+                end
+                if pdata.upper_image then
+                    local upper_img = gfx.image.new(pdata.upper_image)
+                    if upper_img then
+                        pdata._upper_img = upper_img
+                    end
+                end
+                if pdata.lower_image then
+                    local lower_img = gfx.image.new(pdata.lower_image)
+                    if lower_img then
+                        pdata._lower_img = lower_img
+                    end
+                end
+            end
         end
     end
     -- Pre-render scaled images that match grid cell sizes so a part that is w x h

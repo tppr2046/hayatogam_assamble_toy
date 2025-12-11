@@ -1,7 +1,6 @@
 -- module_entities.lua (最終穩定版 - 修正 'continue' 為 'goto'，新增 Enemy/Projectile 基礎)
 
 import "CoreLibs/graphics"
-import "module_scene_data" 
 
 local gfx = playdate.graphics
 local EnemyData = import "enemy_data" -- 確保載入敵人數據
@@ -37,6 +36,13 @@ function MechController:init()
         feet_is_moving = false,  -- 是否正在移動
         feet_move_direction = 0,  -- 移動方向：1=向右, -1=向左, 0=靜止
         feet_animation = nil,  -- 動畫循環物件
+        
+        -- CLAW 相關
+        claw_arm_angle = 0,  -- 臂的旋轉角度
+        claw_arm_angle_prev = 0,  -- 上一幀的臂角度（用於計算旋轉速度）
+        claw_grip_angle = 0,  -- 爪子的開合角度（0=閉合，max=張開）
+        claw_grip_angle_prev = 0,  -- 上一幀的爪子角度（用於檢測開合狀態變化）
+        claw_grabbed_stone = nil,  -- 當前抓住的石頭
         
         -- 玩家受擊效果
         hit_shake_timer = 0,
@@ -208,6 +214,89 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             self.velocity_y = jump_vel
             self.is_grounded = false
         end
+        
+    elseif self.active_part_id == "CLAW" then
+        -- CLAW：上下鍵控制臂旋轉 + crank 控制爪子開合
+        local pdata = _G.PartsData and _G.PartsData["CLAW"]
+        local arm_angle_min = pdata and pdata.arm_angle_min or -90
+        local arm_angle_max = pdata and pdata.arm_angle_max or 90
+        local arm_rotate_speed = pdata and pdata.arm_rotate_speed or 2.0
+        local claw_angle_min = pdata and pdata.claw_angle_min or 0
+        local claw_angle_max = pdata and pdata.claw_angle_max or 45
+        local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 30
+        
+        -- 上下鍵控制臂的旋轉
+        if playdate.buttonIsPressed(playdate.kButtonUp) then
+            self.claw_arm_angle = self.claw_arm_angle + arm_rotate_speed
+            if self.claw_arm_angle > arm_angle_max then
+                self.claw_arm_angle = arm_angle_max
+            end
+        elseif playdate.buttonIsPressed(playdate.kButtonDown) then
+            self.claw_arm_angle = self.claw_arm_angle - arm_rotate_speed
+            if self.claw_arm_angle < arm_angle_min then
+                self.claw_arm_angle = arm_angle_min
+            end
+        end
+        
+        -- Crank 控制爪子開合
+        local crankChange = playdate.getCrankChange()
+        if crankChange and math.abs(crankChange) > 0 then
+            local claw_delta = (crankChange / 360.0) * crank_ratio
+            self.claw_grip_angle = self.claw_grip_angle + claw_delta
+            
+            -- 限制爪子開合角度
+            if self.claw_grip_angle > claw_angle_max then
+                self.claw_grip_angle = claw_angle_max
+            elseif self.claw_grip_angle < claw_angle_min then
+                self.claw_grip_angle = claw_angle_min
+            end
+        end
+        
+        -- 自動抓取/投擲邏輯（基於爪子角度）
+        if entity_controller then
+            local grip_threshold = pdata and pdata.grab_threshold or 10  -- 從 parts_data 讀取抓取臨界值
+            
+            -- 檢測爪子從開啟變為關閉（抓取）
+            if self.claw_grip_angle_prev >= grip_threshold and self.claw_grip_angle < grip_threshold then
+                if not self.claw_grabbed_stone then
+                    -- 嘗試抓取
+                    self.try_grab = true
+                end
+            end
+            
+            -- 檢測爪子從關閉變為開啟（投擲）
+            if self.claw_grip_angle_prev < grip_threshold and self.claw_grip_angle >= grip_threshold then
+                if self.claw_grabbed_stone then
+                    -- 投擲石頭
+                    local stone = self.claw_grabbed_stone
+                    
+                    -- 計算拋射速度（根據臂的角度）
+                    local angle_rad = math.rad(self.claw_arm_angle)
+                    local launch_speed = 8
+                    
+                    -- 計算臂旋轉產生的額外速度（角速度轉線速度）
+                    -- 假設臂長約 30 像素
+                    local arm_length = 30
+                    local arm_angular_velocity = self.claw_arm_angle - self.claw_arm_angle_prev  -- 度/幀
+                    local arm_angular_velocity_rad = math.rad(arm_angular_velocity)  -- 弧度/幀
+                    local arm_tangent_velocity = arm_length * arm_angular_velocity_rad  -- 像素/幀
+                    
+                    -- 基礎投擲速度 + 臂旋轉產生的速度
+                    local vx = math.cos(angle_rad) * launch_speed + arm_tangent_velocity * math.cos(angle_rad + math.pi/2)
+                    local vy = -math.sin(angle_rad) * launch_speed + arm_tangent_velocity * (-math.sin(angle_rad + math.pi/2))
+                    
+                    stone:launch(vx, vy)
+                    self.claw_grabbed_stone = nil
+                    print("LOG: Released stone with vx=" .. math.floor(vx) .. ", vy=" .. math.floor(vy) .. " (arm angular vel=" .. math.floor(arm_angular_velocity) .. "°)")
+                end
+            end
+            
+            -- 更新上一幀的爪子角度
+            self.claw_grip_angle_prev = self.claw_grip_angle
+        end
+        
+        -- 更新上一幀的臂角度
+        self.claw_arm_angle_prev = self.claw_arm_angle
     end
     
     return dx
@@ -271,6 +360,33 @@ end
 function MechController:onHit()
     self.hit_shake_timer = 0.3
     self.hit_shake_offset = 0
+end
+
+-- 更新抓取的石頭位置（由 state_mission 調用）
+function MechController:updateGrabbedStone(claw_tip_x, claw_tip_y)
+    if self.claw_grabbed_stone then
+        self.claw_grabbed_stone.x = claw_tip_x - self.claw_grabbed_stone.width / 2
+        self.claw_grabbed_stone.y = claw_tip_y
+    end
+end
+
+-- 嘗試抓取石頭
+function MechController:tryGrabStone(claw_tip_x, claw_tip_y, stones, grab_range)
+    grab_range = grab_range or 20
+    for _, stone in ipairs(stones or {}) do
+        if not stone.is_grabbed then
+            local dx = (stone.x + stone.width/2) - claw_tip_x
+            local dy = (stone.y + stone.height/2) - claw_tip_y
+            local distance = math.sqrt(dx*dx + dy*dy)
+            if distance < grab_range and self.claw_grip_angle < 10 then  -- 爪子必須閉合才能抓
+                stone.is_grabbed = true
+                self.claw_grabbed_stone = stone
+                print("LOG: Grabbed stone at distance=" .. math.floor(distance))
+                return true
+            end
+        end
+    end
+    return false
 end
 
 -- [[ ========================================== ]]
@@ -432,6 +548,78 @@ function Enemy:draw(camera_x)
 end
 
 -- [[ ========================================== ]]
+-- [[  Stone 類別 (可互動石頭) ]]
+-- [[ ========================================== ]]
+
+Stone = {}
+
+function Stone:init(x, y, ground_y)
+    local stone_img = nil
+    pcall(function()
+        stone_img = playdate.graphics.image.new("images/stone")
+    end)
+    
+    local stone = {
+        x = x,
+        y = y,
+        width = 16,
+        height = 16,
+        vx = 0,
+        vy = 0,
+        is_grounded = (y >= ground_y - 16),
+        is_grabbed = false,  -- 是否被爪子抓住
+        ground_y = ground_y,
+        image = stone_img,
+        damage = 15  -- 砸到敵人的傷害
+    }
+    setmetatable(stone, { __index = Stone })
+    return stone
+end
+
+function Stone:update(dt, gravity)
+    if self.is_grabbed then
+        -- 被抓住時不更新物理
+        return
+    end
+    
+    -- 應用重力
+    if not self.is_grounded then
+        self.vy = self.vy + gravity
+        self.y = self.y + self.vy
+        
+        -- 地面碰撞
+        if self.y >= self.ground_y - self.height then
+            self.y = self.ground_y - self.height
+            self.vy = 0
+            self.vx = 0  -- 落地後停止
+            self.is_grounded = true
+        end
+    end
+    
+    -- 水平移動
+    self.x = self.x + self.vx
+end
+
+function Stone:draw(camera_x)
+    local screen_x = self.x - camera_x
+    if self.image then
+        pcall(function() self.image:draw(screen_x, self.y) end)
+    else
+        -- 備用：繪製方塊
+        playdate.graphics.setColor(playdate.graphics.kColorBlack)
+        playdate.graphics.fillRect(screen_x, self.y, self.width, self.height)
+    end
+end
+
+function Stone:launch(vx, vy)
+    -- 被拋出時設定速度
+    self.vx = vx
+    self.vy = vy
+    self.is_grounded = false
+    self.is_grabbed = false
+end
+
+-- [[ ========================================== ]]
 -- [[  EntityController 類別 (實體總控制器) ]]
 -- [[ ========================================== ]]
 
@@ -446,6 +634,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         ground_y = safe_ground_y,
         enemies = {}, -- 新增敵人列表
         projectiles = {}, -- 新增砲彈列表
+        stones = {},  -- 新增石頭列表
         GRAVITY = 0.5, -- 將重力常數傳入
         player_move_speed = player_move_speed or 2.0 -- 供敵人計算砲彈速度
     }
@@ -455,6 +644,14 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     for _, edata in ipairs(enemies_data or {}) do
         local enemy = Enemy:init(edata.x, edata.y, edata.type, safe_ground_y)
         table.insert(controller.enemies, enemy)
+    end
+    
+    -- 初始化石頭
+    local stones_data = (scene_data and scene_data.stones) or {}
+    for _, sdata in ipairs(stones_data) do
+        local stone_y = sdata.y == 0 and (safe_ground_y - 16) or sdata.y
+        local stone = Stone:init(sdata.x, stone_y, safe_ground_y)
+        table.insert(controller.stones, stone)
     end
     
     print("LOG: EntityController initialized with " .. #controller.obstacles .. " obstacles and " .. #controller.enemies .. " enemies.")
@@ -524,6 +721,37 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             
         else
             table.remove(self.projectiles, i) -- 移除不活躍的砲彈
+        end
+    end
+    
+    -- 3. 更新石頭
+    for i = #self.stones, 1, -1 do
+        local stone = self.stones[i]
+        stone:update(dt, self.GRAVITY)
+        
+        -- 檢查石頭是否與敵人碰撞（造成傷害）
+        if not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
+            for _, enemy in ipairs(self.enemies) do
+                if enemy.is_alive and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, stone.x, stone.y, stone.width, stone.height) then
+                    -- 石頭砸到敵人
+                    enemy.hp = enemy.hp - stone.damage
+                    enemy.hit_shake_timer = 0.3
+                    enemy.hit_shake_offset_x = 0
+                    
+                    print("LOG: Stone hit enemy! HP=" .. math.floor(enemy.hp))
+                    
+                    if enemy.hp <= 0 then
+                        enemy.is_alive = false
+                        print("LOG: Enemy killed by stone")
+                    end
+                    
+                    -- 石頭落地停止
+                    stone.vx = 0
+                    stone.vy = 0
+                    stone.is_grounded = true
+                    break
+                end
+            end
         end
     end
     
@@ -615,6 +843,11 @@ function EntityController:draw(camera_x)
         enemy:draw(camera_x)
     end
     
+    -- 繪製石頭
+    for _, stone in ipairs(self.stones) do
+        stone:draw(camera_x)
+    end
+    
     -- 繪製砲彈
     for _, projectile in ipairs(self.projectiles) do
         projectile:draw(camera_x)
@@ -633,8 +866,21 @@ local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_
     local final_y_stop = nil
     
     local safe_ground_y = self.ground_y or 240 
+    
+    -- 合併障礙物和石頭為檢查列表
+    local all_obstacles = {}
+    for _, obs in ipairs(self.obstacles) do
+        table.insert(all_obstacles, {x = obs.x, width = obs.width, height = obs.height})
+    end
+    -- 添加石頭作為障礙物（未被抓住且在地面上）
+    for _, stone in ipairs(self.stones or {}) do
+        if not stone.is_grabbed and stone.is_grounded then
+            local stone_height = stone.height
+            table.insert(all_obstacles, {x = stone.x, width = stone.width, height = stone_height})
+        end
+    end
 
-    for i, obs in ipairs(self.obstacles) do
+    for i, obs in ipairs(all_obstacles) do
         
         if not obs then goto next_collision_check end 
         

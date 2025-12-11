@@ -3,7 +3,6 @@
 import "CoreLibs/graphics"
 import "CoreLibs/animation"
 import "CoreLibs/animator"
-import "module_scene_data" 
 import "module_entities" 
 -- 載入任務資料，用於獲取敵人列表
 local MissionData = import "mission_data" 
@@ -378,6 +377,47 @@ function StateMission.update()
         -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）
         mech_controller:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
         
+        -- 更新 CLAW 抓取邏輯
+        if mech_controller.active_part_id == "CLAW" then
+            -- 計算爪子末端位置
+            local eq = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.id == "CLAW" then
+                    local pdata = _G.PartsData and _G.PartsData["CLAW"]
+                    if pdata and pdata._img and pdata._arm_img then
+                        local cell_size = mech_grid.cell_size
+                        local base_x = mech_x + (item.col - 1) * cell_size
+                        local base_y_top = mech_y + (mech_grid.rows - item.row) * cell_size
+                        local ok, base_w, base_h = pcall(function() return pdata._img:getSize() end)
+                        local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+                        
+                        if ok and base_w and base_h and arm_ok and arm_w and arm_h then
+                            local base_y = base_y_top + (cell_size - base_h)
+                            local pivot_x = base_x + base_w / 2
+                            local pivot_y = base_y + base_h / 2
+                            
+                            -- 計算臂末端（爪子位置）
+                            local angle_rad = math.rad(-mech_controller.claw_arm_angle)
+                            local cos_a = math.cos(angle_rad)
+                            local sin_a = math.sin(angle_rad)
+                            local claw_tip_x = pivot_x + arm_w * cos_a
+                            local claw_tip_y = pivot_y + arm_w * sin_a
+                            
+                            -- 如果有抓住石頭，更新石頭位置
+                            mech_controller:updateGrabbedStone(claw_tip_x, claw_tip_y)
+                            
+                            -- 如果按下 A 鍵嘗試抓取
+                            if mech_controller.try_grab then
+                                mech_controller:tryGrabStone(claw_tip_x, claw_tip_y, entity_controller.stones, 20)
+                                mech_controller.try_grab = false
+                            end
+                        end
+                    end
+                    break
+                end
+            end
+        end
+        
         -- 檢查武器零件碰撞 (攻擊敵人)
         -- SWORD 只在轉動時才攻擊
         local weapon_parts = {}
@@ -508,8 +548,8 @@ function StateMission.draw()
     -- gfx.drawRect(draw_x, body_draw_y, body_w, total_h)
     -- print(string.format("Collision box: x=%s, y=%s, w=%s, h=%s (body_h=%s + feet_extra=%s)", tostring(draw_x), tostring(body_draw_y), tostring(body_w), tostring(total_h), tostring(body_h), tostring(feet_extra_height)))
     
-    -- 如果 SWORD、CANON 或 FEET 激活，分別繪製零件（避免重複）
-    if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" or mech_controller.active_part_id == "FEET" then
+    -- 如果 SWORD、CANON、FEET 或 CLAW 激活，分別繪製零件（避免重複）
+    if mech_controller.active_part_id == "SWORD" or mech_controller.active_part_id == "CANON" or mech_controller.active_part_id == "FEET" or mech_controller.active_part_id == "CLAW" then
         -- 手動繪製所有非激活零件
         -- 分兩階段：先繪製下排零件（如 FEET），再繪製上排零件，避免重疊
         local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -539,6 +579,43 @@ function StateMission.draw()
                             if frame_image then
                                 pcall(function() frame_image:draw(px, part_y) end)
                             end
+                        -- 特殊處理 CLAW（繪製底座 + 臂 + 爪子）
+                        elseif item.id == "CLAW" then
+                            -- 繪製底座
+                            pcall(function() pdata._img:draw(px, part_y) end)
+                            -- 計算底座中心點
+                            local pivot_x = px + iw / 2
+                            local pivot_y = part_y + ih / 2
+                            -- 繪製臂和爪子（使用 MechController 的角度）
+                            if pdata._arm_img then
+                                local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+                                if arm_ok and arm_w and arm_h then
+                                    local angle_rad = math.rad(-mech_controller.claw_arm_angle)
+                                    local cos_a = math.cos(angle_rad)
+                                    local sin_a = math.sin(angle_rad)
+                                    local arm_center_offset_x = arm_w / 2
+                                    local rotated_dx = arm_center_offset_x * cos_a
+                                    local rotated_dy = arm_center_offset_x * sin_a
+                                    local arm_center_x = pivot_x + rotated_dx
+                                    local arm_center_y = pivot_y + rotated_dy
+                                    pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -mech_controller.claw_arm_angle) end)
+                                    -- 計算臂末端位置（爪子軸心）
+                                    local arm_end_rotated_dx = arm_w * cos_a
+                                    local arm_end_rotated_dy = arm_w * sin_a
+                                    local claw_pivot_x = pivot_x + arm_end_rotated_dx
+                                    local claw_pivot_y = pivot_y + arm_end_rotated_dy
+                                    -- 繪製上爪
+                                    if pdata._upper_img then
+                                        local total_angle = -mech_controller.claw_arm_angle - mech_controller.claw_grip_angle
+                                        pcall(function() pdata._upper_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+                                    end
+                                    -- 繪製下爪
+                                    if pdata._lower_img then
+                                        local total_angle = -mech_controller.claw_arm_angle + mech_controller.claw_grip_angle
+                                        pcall(function() pdata._lower_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+                                    end
+                                end
+                            end
                         else
                             -- 使用靜態圖片
                             pcall(function() pdata._img:draw(px, part_y) end)
@@ -565,7 +642,40 @@ function StateMission.draw()
                             local offset_y = pdata.image_offset_y or 0
                             part_y = py_top + (cell_size - ih) + offset_y
                         end
-                        pcall(function() pdata._img:draw(px, part_y) end)
+                        -- 特殊處理 CLAW
+                        if item.id == "CLAW" then
+                            pcall(function() pdata._img:draw(px, part_y) end)
+                            local pivot_x = px + iw / 2
+                            local pivot_y = part_y + ih / 2
+                            if pdata._arm_img then
+                                local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+                                if arm_ok and arm_w and arm_h then
+                                    local angle_rad = math.rad(-mech_controller.claw_arm_angle)
+                                    local cos_a = math.cos(angle_rad)
+                                    local sin_a = math.sin(angle_rad)
+                                    local arm_center_offset_x = arm_w / 2
+                                    local rotated_dx = arm_center_offset_x * cos_a
+                                    local rotated_dy = arm_center_offset_x * sin_a
+                                    local arm_center_x = pivot_x + rotated_dx
+                                    local arm_center_y = pivot_y + rotated_dy
+                                    pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -mech_controller.claw_arm_angle) end)
+                                    local arm_end_rotated_dx = arm_w * cos_a
+                                    local arm_end_rotated_dy = arm_w * sin_a
+                                    local claw_pivot_x = pivot_x + arm_end_rotated_dx
+                                    local claw_pivot_y = pivot_y + arm_end_rotated_dy
+                                    if pdata._upper_img then
+                                        local total_angle = -mech_controller.claw_arm_angle - mech_controller.claw_grip_angle
+                                        pcall(function() pdata._upper_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+                                    end
+                                    if pdata._lower_img then
+                                        local total_angle = -mech_controller.claw_arm_angle + mech_controller.claw_grip_angle
+                                        pcall(function() pdata._lower_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+                                    end
+                                end
+                            end
+                        else
+                            pcall(function() pdata._img:draw(px, part_y) end)
+                        end
                     end
                 end
             end
@@ -715,6 +825,94 @@ function StateMission.draw()
                             end
                         else
                             pcall(function() feet_data._img:draw(px, part_y) end)
+                        end
+                    end
+                    break
+                end
+            end
+        end
+    end
+    
+    -- 如果 CLAW 已激活，額外繪製 CLAW（底座 + 旋轉的臂 + 旋轉的爪子）
+    if mech_controller.active_part_id == "CLAW" and _G.PartsData and _G.PartsData["CLAW"] then
+        local claw_data = _G.PartsData["CLAW"]
+        if claw_data._img then
+            -- 找到 CLAW 在 mech 上的位置
+            local eq = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.id == "CLAW" then
+                    local mech_grid = _G.GameState.mech_grid
+                    local cell_size = mech_grid.cell_size
+                    
+                    -- 計算 CLAW 底座的位置
+                    local base_x = draw_x + (item.col - 1) * cell_size
+                    local base_y_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
+                    
+                    -- 繪製底座
+                    local ok, base_w, base_h = pcall(function() return claw_data._img:getSize() end)
+                    if ok and base_w and base_h then
+                        local base_y = base_y_top + (cell_size - base_h)
+                        pcall(function() claw_data._img:draw(base_x, base_y) end)
+                        
+                        -- 計算底座中心點（臂的旋轉軸心）
+                        local pivot_x = base_x + base_w / 2
+                        local pivot_y = base_y + base_h / 2
+                        
+                        -- 載入臂的圖片
+                        if claw_data.arm_image and claw_data._arm_img then
+                            local arm_ok, arm_w, arm_h = pcall(function() return claw_data._arm_img:getSize() end)
+                            if arm_ok and arm_w and arm_h then
+                                -- 臂的左邊緣對齊底座中心，以底座中心為軸旋轉
+                                -- 計算臂圖片中心點相對於底座中心的偏移
+                                local arm_center_offset_x = arm_w / 2  -- 臂中心在圖片中間
+                                local arm_center_offset_y = 0  -- Y 方向無偏移
+                                
+                                -- 旋轉偏移向量
+                                local angle_rad = math.rad(-mech_controller.claw_arm_angle)
+                                local cos_a = math.cos(angle_rad)
+                                local sin_a = math.sin(angle_rad)
+                                local rotated_dx = arm_center_offset_x * cos_a - arm_center_offset_y * sin_a
+                                local rotated_dy = arm_center_offset_x * sin_a + arm_center_offset_y * cos_a
+                                
+                                -- 臂圖片中心的最終位置
+                                local arm_center_x = pivot_x + rotated_dx
+                                local arm_center_y = pivot_y + rotated_dy
+                                
+                                -- 繪製旋轉的臂
+                                pcall(function() 
+                                    claw_data._arm_img:drawRotated(arm_center_x, arm_center_y, -mech_controller.claw_arm_angle)
+                                end)
+                                
+                                -- 計算臂末端位置（爪子的旋轉軸心）
+                                local arm_end_offset_x = arm_w  -- 臂的右邊緣
+                                local arm_end_offset_y = 0
+                                local arm_end_rotated_dx = arm_end_offset_x * cos_a - arm_end_offset_y * sin_a
+                                local arm_end_rotated_dy = arm_end_offset_x * sin_a + arm_end_offset_y * cos_a
+                                local claw_pivot_x = pivot_x + arm_end_rotated_dx
+                                local claw_pivot_y = pivot_y + arm_end_rotated_dy
+                                
+                                -- 繪製上爪（以臂末端為軸，加上自身旋轉角度）
+                                if claw_data.upper_image and claw_data._upper_img then
+                                    local upper_ok, upper_w, upper_h = pcall(function() return claw_data._upper_img:getSize() end)
+                                    if upper_ok and upper_w and upper_h then
+                                        local total_angle = -mech_controller.claw_arm_angle - mech_controller.claw_grip_angle
+                                        pcall(function()
+                                            claw_data._upper_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle)
+                                        end)
+                                    end
+                                end
+                                
+                                -- 繪製下爪（以臂末端為軸，反向旋轉）
+                                if claw_data.lower_image and claw_data._lower_img then
+                                    local lower_ok, lower_w, lower_h = pcall(function() return claw_data._lower_img:getSize() end)
+                                    if lower_ok and lower_w and lower_h then
+                                        local total_angle = -mech_controller.claw_arm_angle + mech_controller.claw_grip_angle
+                                        pcall(function()
+                                            claw_data._lower_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle)
+                                        end)
+                                    end
+                                end
+                            end
                         end
                     end
                     break
