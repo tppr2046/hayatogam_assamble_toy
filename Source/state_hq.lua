@@ -4,7 +4,7 @@ import "CoreLibs/graphics"
 
 local gfx = playdate.graphics  
 local default_font = gfx.font.systemFont
-local MissionData = import "mission_data"  -- 載入任務資料（必須在檔案頂部）
+-- MissionData 現在從 _G.MissionData 獲取（在 main.lua 中載入）
 
 -- 確保字形載入成功
 local custom_font_path = 'fonts/Charlie Ninja' 
@@ -197,27 +197,24 @@ end
 function StateHQ.setup()
     gfx.setFont(font) 
     
-    -- DEBUG: 檢查 MissionData
-    print("DEBUG HQ: MissionData exists? " .. tostring(MissionData ~= nil))
-    if MissionData then
-        local keys = {}
-        for k, v in pairs(MissionData) do
-            table.insert(keys, tostring(k))
-        end
-        print("DEBUG HQ: MissionData keys = " .. table.concat(keys, ", "))
+    -- 確保 MissionData 已在 main.lua 中載入
+    if not _G.MissionData then
+        print("ERROR HQ: _G.MissionData not found! Loading fallback...")
+        local md = import "mission_data"
+        _G.MissionData = md or {}
     end
-    
-    -- 將 MissionData 存到全域，供其他模組使用
-    _G.MissionData = MissionData
     
     -- 確保必要的全域變數存在
     _G.GameState = _G.GameState or {}
-    -- 組織零件為分類（TOP 和 BOTTOM）
-    if not _G.GameState.parts_by_category then
-        local top_parts = {}
-        local bottom_parts = {}
-        if _G.PartsData and next(_G.PartsData) then
-            for pid, pdata in pairs(_G.PartsData) do
+    _G.GameState.owned_parts = _G.GameState.owned_parts or {}
+    
+    -- 組織零件為分類（TOP 和 BOTTOM），只顯示已擁有的零件
+    local top_parts = {}
+    local bottom_parts = {}
+    if _G.PartsData and next(_G.PartsData) then
+        for pid, pdata in pairs(_G.PartsData) do
+            -- 只添加已擁有的零件
+            if _G.GameState.owned_parts[pid] then
                 if pdata.placement_row == "TOP" or pdata.placement_row == "BOTH" then
                     table.insert(top_parts, pid)
                 end
@@ -226,11 +223,12 @@ function StateHQ.setup()
                 end
             end
         end
-        _G.GameState.parts_by_category = {
-            TOP = top_parts,
-            BOTTOM = bottom_parts
-        }
     end
+    _G.GameState.parts_by_category = {
+        TOP = top_parts,
+        BOTTOM = bottom_parts
+    }
+    print("LOG: Available parts - TOP:", #top_parts, "BOTTOM:", #bottom_parts)
 
     _G.GameState.mech_stats = _G.GameState.mech_stats or { total_hp = 100, total_weight = 0, equipped_parts = {} }
     _G.GameState.mech_stats.equipped_parts = _G.GameState.mech_stats.equipped_parts or {}
@@ -397,9 +395,14 @@ function StateHQ.update()
                 elseif playdate.buttonJustPressed(playdate.kButtonA) then
                     if menu_option_index == 1 then
                         -- Start Mission
-                        -- 設置當前任務 ID（目前只有 M001）
+                        -- 使用從任務選擇畫面設置的任務 ID
                         _G.GameState = _G.GameState or {}
-                        _G.GameState.current_mission = "M001"
+                        -- 確保有 current_mission，否則使用預設值
+                        if not _G.GameState.current_mission then
+                            _G.GameState.current_mission = "M001"
+                            print("WARNING: No current_mission set, using M001 as fallback")
+                        end
+                        print("Starting mission:", _G.GameState.current_mission)
                         setState(_G.StateMission)
                     else
                         -- Continue Assembly

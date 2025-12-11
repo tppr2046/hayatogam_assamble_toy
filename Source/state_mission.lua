@@ -4,13 +4,7 @@ import "CoreLibs/graphics"
 import "CoreLibs/animation"
 import "CoreLibs/animator"
 import "module_entities" 
--- 載入任務資料，用於獲取敵人列表
--- 使用 require 代替 import，因為 mission_data 需要返回值
-local MissionData = import("mission_data")
-if not MissionData then
-    print("ERROR: Failed to import mission_data")
-    MissionData = {}
-end
+-- 任務資料從 _G.MissionData 獲取（在 main.lua 中載入）
 local StateHQ = _G.StateHQ -- 假設 StateHQ 已在 main.lua 中設定為全域
 
 local gfx = playdate.graphics
@@ -178,16 +172,18 @@ function StateMission.setup()
 
     -- 初始化機甲位置：如果場景有 ground 資訊則放在地面，否則靠畫面底部
     -- determine current scene: prefer selected mission in GameState, otherwise first mission in MissionData
-    -- 使用全域的 MissionData（從 state_hq 設置）
-    local MissionDataToUse = _G.MissionData or MissionData
+    -- 使用全域的 MissionData
+    local MissionDataToUse = _G.MissionData
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or nil
     print("DEBUG: mission_id from GameState = " .. tostring(mission_id))
     print("DEBUG: Using global MissionData? " .. tostring(_G.MissionData ~= nil))
+    print("DEBUG: Local MissionData? " .. tostring(MissionData ~= nil))
     print("DEBUG: MissionDataToUse exists? " .. tostring(MissionDataToUse ~= nil))
     if MissionDataToUse then
         local keys = {}
         for k, v in pairs(MissionDataToUse) do
             table.insert(keys, tostring(k))
+            print("DEBUG: Found mission key:", k, "scene exists?", v.scene ~= nil)
         end
         print("DEBUG: MissionDataToUse keys = " .. table.concat(keys, ", "))
     end
@@ -539,7 +535,7 @@ function StateMission.update()
                     
                     if all_defeated and #entity_controller.enemies > 0 then
                         print("MISSION SUCCESS: All enemies defeated!")
-                        setState(_G.StateResult, true, obj.description or "Mission Complete!")
+                        setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
                         return
                     end
                 end
@@ -554,7 +550,7 @@ function StateMission.update()
                             if stone.x >= zone.x and stone.x < zone.x + zone.width and
                                stone.y >= zone.y and stone.y < zone.y + zone.height then
                                 print("MISSION SUCCESS: Stone delivered to target zone!")
-                                setState(_G.StateResult, true, obj.description or "Mission Complete!")
+                                setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
                                 return
                             end
                         end

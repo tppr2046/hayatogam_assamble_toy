@@ -5,7 +5,7 @@ import "CoreLibs/graphics"
 import "CoreLibs/ui"
 
 local gfx = playdate.graphics
-local MissionData = import "mission_data"
+-- 任務資料從 _G.MissionData 獲取（在 main.lua 中載入）
 
 -- 狀態物件
 StateMissionSelect = {}
@@ -25,8 +25,8 @@ function StateMissionSelect:setup()
     FONT_SMALL = gfx.getFont("fonts/Exerion")
     FONT_LARGE = gfx.getFont("fonts/Charlie Ninja")
     
-    -- 將 MissionData 存到全域以供其他狀態使用
-    _G.MissionData = MissionData
+    -- 使用全域 MissionData
+    local MissionData = _G.MissionData or {}
     
     -- 建立任務列表（排序）
     mission_list = {}

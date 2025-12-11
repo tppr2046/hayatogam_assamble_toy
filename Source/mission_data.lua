@@ -39,7 +39,7 @@ local missions = {
         },
         
         reward_money = 50,
-        reward_part_id = "MISSILE_V2"
+        reward_part_id = "CLAW"
     }
 }
 

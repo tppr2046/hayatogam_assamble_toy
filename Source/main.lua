@@ -16,10 +16,32 @@ _G.GameState.mech_stats = _G.GameState.mech_stats or {
     total_weight = 0,
     equipped_parts = {}
 }
+-- 初始化擁有的零件（初始給予基本零件）
+_G.GameState.owned_parts = _G.GameState.owned_parts or {
+    FEET = true,
+    GUN = true,
+    SWORD = true,
+    WHEEL = true,
+    CANON = true
+}
 -- ❗ 假設 PartsData 存在
 -- 讀取零件資料模組（若不存在則回退為空表）
 local pd = import "parts_data"
 _G.PartsData = pd or _G.PartsData or {}
+
+-- 載入任務資料並設置為全域
+print("DEBUG main: Loading mission_data...")
+local md = import "mission_data"
+print("DEBUG main: mission_data loaded, type = " .. type(md))
+if md then
+    local count = 0
+    for k, v in pairs(md) do
+        count = count + 1
+        print("DEBUG main: mission_data[" .. tostring(k) .. "] exists")
+    end
+    print("DEBUG main: mission_data has " .. count .. " entries")
+end
+_G.MissionData = md or _G.MissionData or {}
 
 -- 載入狀態模組 
 _G.StateMenu = import "state_menu"
