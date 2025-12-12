@@ -374,6 +374,55 @@ function StateHQ.update()
                             _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
                         end
                         is_placing_part = false
+                        
+                        -- 安裝完成後，自動選取下一個未裝備的零件
+                        local parts_list = _G.GameState.parts_by_category[selected_category]
+                        local parts_count = parts_list and #parts_list or 0
+                        local found_next = false
+                        
+                        -- 從當前位置的下一個開始尋找未裝備的零件
+                        for i = selected_part_index + 1, parts_count do
+                            local check_part_id = parts_list[i]
+                            local is_equipped = false
+                            local eq = _G.GameState.mech_stats.equipped_parts or {}
+                            for _, item in ipairs(eq) do
+                                if item.id == check_part_id then
+                                    is_equipped = true
+                                    break
+                                end
+                            end
+                            if not is_equipped then
+                                selected_part_index = i
+                                found_next = true
+                                break
+                            end
+                        end
+                        
+                        -- 如果後面沒有未裝備的零件，從頭開始找
+                        if not found_next then
+                            for i = 1, selected_part_index - 1 do
+                                local check_part_id = parts_list[i]
+                                local is_equipped = false
+                                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                                for _, item in ipairs(eq) do
+                                    if item.id == check_part_id then
+                                        is_equipped = true
+                                        break
+                                    end
+                                end
+                                if not is_equipped then
+                                    selected_part_index = i
+                                    found_next = true
+                                    break
+                                end
+                            end
+                        end
+                        
+                        -- 如果所有零件都已裝備，則移動到 READY
+                        if not found_next then
+                            cursor_on_ready = true
+                            last_part_index = selected_part_index
+                        end
                     else
                         flash_timer = FLASH_DURATION
                         flash_col = cursor_col
