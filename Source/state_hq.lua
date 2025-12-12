@@ -213,13 +213,25 @@ function StateHQ.setup()
     local bottom_parts = {}
     if _G.PartsData and next(_G.PartsData) then
         for pid, pdata in pairs(_G.PartsData) do
-            -- 只添加已擁有的零件
+            -- 只添加已擁有且未裝備的零件
             if _G.GameState.owned_parts[pid] then
-                if pdata.placement_row == "TOP" or pdata.placement_row == "BOTH" then
-                    table.insert(top_parts, pid)
+                -- 檢查是否已裝備
+                local is_equipped = false
+                for _, item in ipairs(_G.GameState.mech_stats.equipped_parts or {}) do
+                    if item.id == pid then
+                        is_equipped = true
+                        break
+                    end
                 end
-                if pdata.placement_row == "BOTTOM" or pdata.placement_row == "BOTH" then
-                    table.insert(bottom_parts, pid)
+                
+                -- 只有未裝備的零件才添加到列表
+                if not is_equipped then
+                    if pdata.placement_row == "TOP" or pdata.placement_row == "BOTH" then
+                        table.insert(top_parts, pid)
+                    end
+                    if pdata.placement_row == "BOTTOM" or pdata.placement_row == "BOTH" then
+                        table.insert(bottom_parts, pid)
+                    end
                 end
             end
         end
@@ -457,18 +469,69 @@ function StateHQ.update()
             local parts_count = #parts_list
             
             if playdate.buttonJustPressed(playdate.kButtonUp) then
-                selected_part_index = math.max(1, selected_part_index - 1)
+                -- 向上移動，跳過已安裝的零件
+                local new_index = selected_part_index - 1
+                while new_index >= 1 do
+                    local check_part_id = parts_list[new_index]
+                    local is_equipped = false
+                    local eq = _G.GameState.mech_stats.equipped_parts or {}
+                    for _, item in ipairs(eq) do
+                        if item.id == check_part_id then
+                            is_equipped = true
+                            break
+                        end
+                    end
+                    if not is_equipped then
+                        selected_part_index = new_index
+                        break
+                    end
+                    new_index = new_index - 1
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                if selected_part_index < parts_count then
-                    selected_part_index = selected_part_index + 1
-                else
+                -- 向下移動，跳過已安裝的零件
+                local new_index = selected_part_index + 1
+                while new_index <= parts_count do
+                    local check_part_id = parts_list[new_index]
+                    local is_equipped = false
+                    local eq = _G.GameState.mech_stats.equipped_parts or {}
+                    for _, item in ipairs(eq) do
+                        if item.id == check_part_id then
+                            is_equipped = true
+                            break
+                        end
+                    end
+                    if not is_equipped then
+                        selected_part_index = new_index
+                        break
+                    end
+                    new_index = new_index + 1
+                end
+                -- 如果沒有找到未安裝的零件，移動到 READY
+                if new_index > parts_count then
                     cursor_on_ready = true
-                    last_part_index = selected_part_index  -- 記住最後的零件索引
+                    last_part_index = selected_part_index
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 選中零件，自動找到第一個空格子並進入放置模式
+                -- 選中零件，檢查是否已安裝
                 local parts_list = _G.GameState.parts_by_category[selected_category]
                 local part_id = parts_list[selected_part_index]
+                
+                -- 檢查是否已安裝
+                local is_equipped = false
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    if item.id == part_id then
+                        is_equipped = true
+                        break
+                    end
+                end
+                
+                -- 如果已安裝，不做任何事（無法選取）
+                if is_equipped then
+                    print("Part already equipped: " .. part_id)
+                    return
+                end
+                
                 local part_data = _G.PartsData and _G.PartsData[part_id]
                 
                 if part_data then
@@ -653,11 +716,31 @@ function StateHQ.draw()
         gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
         local parts_list = _G.GameState.parts_by_category[selected_category]
         for i, part_id in ipairs(parts_list) do
+            -- 檢查是否已安裝
+            local is_equipped = false
+            local eq = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.id == part_id then
+                    is_equipped = true
+                    break
+                end
+            end
+            
             local text = part_id
             if i == selected_part_index and not cursor_on_ready then
                 text = "> " .. text .. " <"
             end
-            gfx.drawText(text, 10, list_y + (i - 1) * line_height)
+            
+            local text_x = 10
+            local text_y = list_y + (i - 1) * line_height
+            gfx.drawText(text, text_x, text_y)
+            
+            -- 如果已安裝，繪製刪除線
+            if is_equipped then
+                local text_width = gfx.getTextSize(text)
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
+            end
         end
     end
     
