@@ -21,7 +21,8 @@ _G.GameState.owned_parts = _G.GameState.owned_parts or {
     GUN = true,
     CLAW = true,
     SWORD = true,
-    WHEEL = true,
+    WHEEL1 = true,
+    WHEEL2 = true,
     CANON = true
 }
 -- ❗ 假設 PartsData 存在

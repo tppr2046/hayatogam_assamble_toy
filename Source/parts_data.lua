@@ -5,6 +5,7 @@ local gfx = playdate.graphics
 local parts_data = {
     ["GUN"] = {
         name = "GUN",
+        part_type = "GUN",  -- 功能類別
         hp = 10,
         weight = 3,
         attack = 5,  -- 攻擊力
@@ -23,8 +24,9 @@ local parts_data = {
         projectile_speed_mult = 40,  -- 速度倍率（相對於基準速度）
         projectile_grav_mult = 0.2  -- 重力倍率（相對於世界重力 0.5）
     },
-    ["WHEEL"] = {
+    ["WHEEL1"] = {
         name = "WHEEL",
+        part_type = "WHEEL",  -- 功能類別
         hp = 12,
         weight = 4,
         slot_x = 3,
@@ -38,8 +40,26 @@ local parts_data = {
         ui_stick = "images/wheel_stick.png",
         move_speed = 2.0  -- 左右移動速度
     },
+    ["WHEEL2"] = {
+        name = "WHEEL",
+        part_type = "WHEEL",  -- 功能類別
+        hp = 12,
+        weight = 4,
+        slot_x = 3,
+        slot_y = 1,
+            color = gfx.kColorBlack,
+            image = "images/wheel2.png",
+            placement_row = "BOTTOM",
+        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        -- UI 操作介面圖片
+        ui_panel = "images/wheel_panel.png",
+        ui_stick = "images/wheel_stick.png",
+        move_speed = 2.0  -- 左右移動速度
+    },
+
     ["CANON"] = {
         name = "CANON",
+        part_type = "CANON",  -- 功能類別
         hp = 30,
         weight = 10,
         slot_x = 2,
@@ -62,6 +82,7 @@ local parts_data = {
     },
     ["SWORD"] = {
         name = "SWORD",
+        part_type = "SWORD",  -- 功能類別
         hp = 10,
         weight = 5,
         attack = 3,  -- 攻擊力
@@ -77,6 +98,7 @@ local parts_data = {
     },
     ["FEET"] = {
         name = "FEET",
+        part_type = "FEET",  -- 功能類別
         hp = 12,
         weight = 7,
         slot_x = 3,
@@ -95,6 +117,7 @@ local parts_data = {
     },
     ["CLAW"] = {
         name = "CLAW",
+        part_type = "CLAW",  -- 功能類別
         hp = 15,
         weight = 8,
         slot_x = 1,

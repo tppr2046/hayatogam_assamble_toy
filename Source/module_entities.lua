@@ -198,12 +198,26 @@ function MechController:handleSelection(mech_stats)
     end
 end
 
+-- 獲取當前激活零件的功能類型
+function MechController:getActivePartType()
+    if not self.active_part_id then
+        return nil
+    end
+    local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
+    return pdata and pdata.part_type
+end
+
 -- 處理零件操作（返回移動增量）
 function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
     local dx = 0
     local MOVE_SPEED = 2.0
     
-    if self.active_part_id == "WHEEL" then
+    local part_type = self:getActivePartType()
+    if not part_type then
+        return dx
+    end
+    
+    if part_type == "WHEEL" then
         -- WHEEL：左右移動
         -- WHEEL 是 3x1 格，寬度 = 3*32 + 2*5 = 106 像素
         -- wheel_stick 可以從最左移動到最右，範圍大約是 panel 寬度的一半，減去 stick 寬度的一半
@@ -225,7 +239,7 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             end
         end
         
-    elseif self.active_part_id == "SWORD" then
+    elseif part_type == "SWORD" then
         -- SWORD：crank 旋轉
         local crankChange = playdate.getCrankChange()
         if crankChange and math.abs(crankChange) > 0 then
@@ -243,7 +257,7 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             self.sword_is_attacking = false
         end
         
-    elseif self.active_part_id == "CANON" then
+    elseif part_type == "CANON" then
         -- CANON：crank 旋轉 + A 發射
         local pdata = _G.PartsData and _G.PartsData["CANON"]
         local angle_min = pdata and pdata.angle_min or -45  -- 預設 -45 度
@@ -295,7 +309,7 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         elseif playdate.buttonJustReleased(playdate.kButtonA) then
             self.canon_button_pressed = false
         end
-    elseif self.active_part_id == "FEET" then
+    elseif part_type == "FEET" then
         -- FEET：左右移動 + 跳躍
         local pdata = _G.PartsData and _G.PartsData["FEET"]
         local move_speed = (pdata and pdata.move_speed) or 3.0
@@ -324,7 +338,7 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             self.is_grounded = false
         end
         
-    elseif self.active_part_id == "CLAW" then
+    elseif part_type == "CLAW" then
         -- CLAW：上下鍵控制臂旋轉 + crank 控制爪子開合
         local pdata = _G.PartsData and _G.PartsData["CLAW"]
         local arm_angle_min = pdata and pdata.arm_angle_min or -90
@@ -451,7 +465,8 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
     end
     
     -- 更新 FEET 跳躍物理（重力）
-    if self.active_part_id == "FEET" and not self.is_grounded then
+    local part_type_for_gravity = self:getActivePartType()
+    if part_type_for_gravity == "FEET" and not self.is_grounded then
         local gravity = (entity_controller and entity_controller.GRAVITY) or 0.5
         self.velocity_y = self.velocity_y + gravity
     end
@@ -1094,7 +1109,9 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     
     -- 第一階段：繪製下排零件（row = 1）
     for _, item in ipairs(eq) do
-        local has_special_render = (item.id == "SWORD" or item.id == "CANON" or item.id == "FEET" or item.id == "CLAW")
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        local part_type = pdata and pdata.part_type
+        local has_special_render = (part_type == "SWORD" or part_type == "CANON" or part_type == "FEET" or part_type == "CLAW")
         local should_skip = has_special_render and (item.id == self.active_part_id)
         if not should_skip and item.row == 1 then
             self:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
@@ -1103,7 +1120,9 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     
     -- 第二階段：繪製上排零件（row = 2）
     for _, item in ipairs(eq) do
-        local has_special_render = (item.id == "SWORD" or item.id == "CANON" or item.id == "FEET" or item.id == "CLAW")
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        local part_type = pdata and pdata.part_type
+        local has_special_render = (part_type == "SWORD" or part_type == "CANON" or part_type == "FEET" or part_type == "CLAW")
         local should_skip = has_special_render and (item.id == self.active_part_id)
         if not should_skip and item.row == 2 then
             self:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
@@ -1126,6 +1145,7 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     local pdata = _G.PartsData and _G.PartsData[item.id]
     if not pdata or not pdata._img then return end
     
+    local part_type = pdata.part_type
     local cell_size = mech_grid.cell_size
     local px = draw_x + (item.col - 1) * cell_size
     local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
@@ -1141,13 +1161,13 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     end
     
     -- 特殊處理 FEET 動畫
-    if item.id == "FEET" and feet_imagetable and self.feet_is_moving then
+    if part_type == "FEET" and feet_imagetable and self.feet_is_moving then
         local frame_image = feet_imagetable:getImage(feet_current_frame)
         if frame_image then
             pcall(function() frame_image:draw(px, part_y) end)
         end
     -- 特殊處理 CLAW（繪製底座 + 臂 + 爪子）
-    elseif item.id == "CLAW" then
+    elseif part_type == "CLAW" then
         self:drawClaw(px, part_y, iw, ih, pdata)
     else
         -- 使用靜態圖片
@@ -1206,8 +1226,9 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
     if not pdata or not pdata._img then return end
     
     local cell_size = mech_grid.cell_size
+    local part_type = pdata.part_type
     
-    if item.id == "SWORD" then
+    if part_type == "SWORD" then
         -- 計算 SWORD 位置
         local sx = (item.col - 1) * cell_size
         local sy = (mech_grid.rows - item.row) * cell_size
@@ -1234,7 +1255,7 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
         end
         gfx.popContext()
         
-    elseif item.id == "CANON" then
+    elseif part_type == "CANON" then
         -- 計算 CANON 位置
         local cx = (item.col - 1) * cell_size
         local cy = (mech_grid.rows - item.row) * cell_size
@@ -1261,7 +1282,7 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
         end
         gfx.popContext()
         
-    elseif item.id == "FEET" then
+    elseif part_type == "FEET" then
         -- 繪製 FEET
         local px = draw_x + (item.col - 1) * cell_size
         local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
@@ -1284,8 +1305,8 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
                 pcall(function() pdata._img:draw(px, part_y) end)
             end
         end
-        
-    elseif item.id == "CLAW" then
+    
+    elseif part_type == "CLAW" then
         -- 繪製 CLAW
         local base_x = draw_x + (item.col - 1) * cell_size
         local base_y_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
@@ -1399,10 +1420,11 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
     -- 顯示激活零件資訊
     local info_x = ui_start_x + ui_grid_cols * ui_cell_size + 10
     if self.active_part_id then
+        local part_type_for_info = self:getActivePartType()
         gfx.drawText("Active: " .. self.active_part_id, info_x, ui_start_y)
-        if self.active_part_id == "SWORD" then
+        if part_type_for_info == "SWORD" then
             gfx.drawText("Angle: " .. math.floor(self.sword_angle), info_x, ui_start_y + 15)
-        elseif self.active_part_id == "CANON" then
+        elseif part_type_for_info == "CANON" then
             gfx.drawText("Angle: " .. math.floor(self.canon_angle), info_x, ui_start_y + 15)
         end
     else
