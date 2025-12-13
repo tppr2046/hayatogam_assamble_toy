@@ -164,7 +164,7 @@ function StateShop.draw()
         local owned = _G.GameState.owned_parts[part_id]
         if owned then
             text = text .. " [OWNED]"
-            cost_text = "OWNED"  -- 已擁有不能購買
+            cost_text = ""  -- 已擁有不能購買
         end
         
         -- 顯示選擇標記（只在焦點不在 BACK 時）

@@ -69,8 +69,8 @@ local parts_data = {
         move_speed = 2.0  -- 左右移動速度
     },
 
-    ["CANON"] = {
-        name = "CANON",
+    ["CANON1"] = {
+        name = "CANON1",
         part_type = "CANON",  -- 功能類別
         hp = 30,
         weight = 10,
@@ -96,6 +96,35 @@ local parts_data = {
         angle_max = 90,  -- 最大角度（度）
         crank_degrees_per_rotation = 15  -- crank 轉 1 圈（360度）產生的 canon 角度變化
     },
+  ["CANON2"] = {
+        name = "CANON2",
+        part_type = "CANON",  -- 功能類別
+        hp = 30,
+        weight = 10,
+        slot_x = 2,
+        slot_y = 1,
+        -- 購買成本
+        cost_steel = 50,
+        cost_copper = 30,
+        cost_rubber = 10,
+            color = gfx.kColorBlack,
+            image = "images/canon.png",
+            placement_row = "TOP",
+        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        -- UI 操作介面圖片
+        ui_panel = "images/canon_panel.png",
+        -- CANON 特有屬性：砲彈發射
+        fire_cooldown = 1,  -- 每 0.5 秒可以發射一次
+        projectile_damage = 20,  -- 砲彈傷害
+        projectile_speed_mult = 20,  -- 速度倍率（相對於基準速度）
+        projectile_grav_mult = 25,  -- 重力倍率（相對於世界重力 0.5）
+        -- CANON 轉動控制
+        angle_min = 0,  -- 最小角度（度）
+        angle_max = 90,  -- 最大角度（度）
+        crank_degrees_per_rotation = 15  -- crank 轉 1 圈（360度）產生的 canon 角度變化
+    },
+
+
     ["SWORD"] = {
         name = "SWORD",
         part_type = "SWORD",  -- 功能類別
