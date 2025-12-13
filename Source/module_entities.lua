@@ -1337,11 +1337,6 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
     local gfx = playdate.graphics
     local eq = mech_stats.equipped_parts or {}
     
-    print("DEBUG: selected_part_slot = " .. tostring(self.selected_part_slot))
-    if self.selected_part_slot then
-        print("DEBUG: selected_part_slot.col = " .. self.selected_part_slot.col .. ", row = " .. self.selected_part_slot.row)
-    end
-    
     -- 找出選中格子對應的零件ID（優先使用激活的零件，其次使用選中的零件）
     local selected_part_id_for_highlight = self.active_part_id
     if not selected_part_id_for_highlight and self.selected_part_slot then
@@ -1356,21 +1351,15 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         end
     end
     
-    print("DEBUG: active_part_id = " .. tostring(self.active_part_id))
-    print("DEBUG: selected_part_id_for_highlight = " .. tostring(selected_part_id_for_highlight))
-    
     -- 繪製控制格子和介面圖
-    print("DEBUG mission: Drawing UI grid, eq has " .. #eq .. " parts")
     for _, item in ipairs(eq) do
-        print("  Part: " .. item.id .. " at col=" .. item.col .. " row=" .. item.row .. " w=" .. (item.w or 1))
+        -- Part info logging removed
     end
     
     for r = 1, ui_grid_rows do
         for c = 1, ui_grid_cols do
             local cx = ui_start_x + (c - 1) * ui_cell_size
             local cy = ui_start_y + (ui_grid_rows - r) * ui_cell_size
-            
-            print("DEBUG mission: Drawing UI cell r=" .. r .. " c=" .. c .. " at x=" .. cx .. " y=" .. cy)
             
             -- 查找是否有零件在這個列和對應的排
             -- r=2 對應組裝格 row=2（上排），r=1 對應組裝格 row=1（下排）
@@ -1380,7 +1369,6 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                 -- 檢查此列是否在零件範圍內，且零件的 row 與控制介面的 r 對應
                 if item.row == r and c >= item.col and c < item.col + slot_w then
                     found_part = item
-                    print("DEBUG mission UI: Found " .. item.id .. " (row=" .. item.row .. ") at UI r=" .. r .. " c=" .. c)
                     break
                 end
             end
@@ -1388,7 +1376,6 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
             if found_part then
                 -- 只在起始格繪製介面圖
                 if c == found_part.col then
-                    print("DEBUG mission: Drawing UI for " .. found_part.id)
                     self:drawPartUI(found_part.id, cx, cy, ui_cell_size)
                 end
                 -- 零件佔用的其他格子保持空白（不繪製任何東西）
@@ -1403,7 +1390,6 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
     
     -- 繪製選中零件的粗外框（根據零件的 row 顯示在對應的控制介面排）
     if selected_part_id_for_highlight then
-        print("DEBUG: Drawing frame for selected part: " .. selected_part_id_for_highlight)
         for _, item in ipairs(eq) do
             if item.id == selected_part_id_for_highlight then
                 local slot_w = item.w or 1
@@ -1412,8 +1398,6 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                 local fy = ui_start_y + (ui_grid_rows - item.row) * ui_cell_size
                 local fw = slot_w * ui_cell_size
                 local fh = ui_cell_size
-                
-                print("DEBUG: Frame position - x=" .. fx .. " y=" .. fy .. " w=" .. fw .. " h=" .. fh)
                 
                 -- 繪製白色外框（確保在任何背景上都可見）
                 gfx.setColor(gfx.kColorWhite)
@@ -1428,8 +1412,6 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                 break
             end
         end
-    else
-        print("DEBUG: No selected part for highlight")
     end
     
     -- 顯示激活零件資訊

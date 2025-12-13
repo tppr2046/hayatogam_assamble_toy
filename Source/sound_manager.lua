@@ -18,7 +18,7 @@ function SoundManager.init()
     -- 創建游標移動音效（高頻短促）
     SoundManager.synth_cursor = playdate.sound.synth.new(playdate.sound.kWaveSquare)
     if SoundManager.synth_cursor then
-        SoundManager.synth_cursor:setADSR(0.01, 0.05, 0.5, 0.1)
+        SoundManager.synth_cursor:setADSR(0.01, 0.1, 0.5, 0.05)
         SoundManager.synth_cursor:setVolume(0.5)
         print("SOUND: synth_cursor created successfully")
     else
@@ -28,7 +28,7 @@ function SoundManager.init()
     -- 創建選擇音效（中頻較長）
     SoundManager.synth_select = playdate.sound.synth.new(playdate.sound.kWaveSawtooth)
     if SoundManager.synth_select then
-        SoundManager.synth_select:setADSR(0.05, 0.1, 0.6, 0.2)
+        SoundManager.synth_select:setADSR(0.02, 0.2, 0.6, 0.2)
         SoundManager.synth_select:setVolume(0.5)
         print("SOUND: synth_select created successfully")
     else
@@ -49,7 +49,7 @@ function SoundManager.init()
 end
 
 -- ==========================================
--- 播放游標移動音效（0.3秒）
+-- 播放游標移動音效（0.2秒）
 -- ==========================================
 function SoundManager.playCursorMove()
     -- 延遲初始化：如果 synth 還沒創建，先初始化
@@ -69,7 +69,7 @@ function SoundManager.playCursorMove()
     end
     
     print("========== SOUND: Playing Cursor Move ==========")
-    SoundManager.synth_cursor:playNote("C6", 0.3)
+    SoundManager.synth_cursor:playNote("C4", 0.1)
 end
 
 -- ==========================================
@@ -82,8 +82,8 @@ function SoundManager.playSelect()
         SoundManager.synth_select = playdate.sound.synth.new(playdate.sound.kWaveSawtooth)
         if SoundManager.synth_select then
             -- 設定柔和但會停止的包絡線
-            SoundManager.synth_select:setADSR(0.05, 0.1, 0.0, 0.15)  -- Sustain = 0 確保會停止
-            SoundManager.synth_select:setVolume(0.5)
+            SoundManager.synth_select:setADSR(0.03, 0.07, 0.0, 0.12)  -- Sustain = 0 確保會停止
+            SoundManager.synth_select:setVolume(0.6)
             print("SOUND: synth_select created successfully (lazy)")
         else
             print("SOUND ERROR: Failed to create synth_select (lazy)")
@@ -115,7 +115,7 @@ function SoundManager.playHit()
     end
     
     print("========== SOUND: Playing Hit ==========")
-    SoundManager.synth_hit:playNote("C2", 0.5)
+    SoundManager.synth_hit:playNote("C1", 0.5)
 end
 
 -- ==========================================

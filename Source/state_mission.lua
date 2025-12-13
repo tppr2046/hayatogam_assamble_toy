@@ -175,31 +175,16 @@ function StateMission.setup()
     -- 使用全域的 MissionData
     local MissionDataToUse = _G.MissionData
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or nil
-    print("DEBUG: mission_id from GameState = " .. tostring(mission_id))
-    print("DEBUG: Using global MissionData? " .. tostring(_G.MissionData ~= nil))
-    print("DEBUG: Local MissionData? " .. tostring(MissionData ~= nil))
-    print("DEBUG: MissionDataToUse exists? " .. tostring(MissionDataToUse ~= nil))
-    if MissionDataToUse then
-        local keys = {}
-        for k, v in pairs(MissionDataToUse) do
-            table.insert(keys, tostring(k))
-            print("DEBUG: Found mission key:", k, "scene exists?", v.scene ~= nil)
-        end
-        print("DEBUG: MissionDataToUse keys = " .. table.concat(keys, ", "))
-    end
+    
     if not mission_id and MissionDataToUse then
         for k, v in pairs(MissionDataToUse) do
             mission_id = k
-            print("DEBUG: Using fallback mission_id = " .. tostring(mission_id))
             break
         end
     end
-    print("DEBUG: Final mission_id = " .. tostring(mission_id))
+    
     if mission_id and MissionDataToUse and MissionDataToUse[mission_id] and MissionDataToUse[mission_id].scene then
         current_scene = MissionDataToUse[mission_id].scene
-        print("DEBUG: Scene loaded: width=" .. tostring(current_scene.width) .. ", ground_y=" .. tostring(current_scene.ground_y))
-    else
-        print("DEBUG: WARNING - No scene loaded!")
     end
 
     -- Initialize entity controller for the current scene (so ground/obstacles/enemies draw)
@@ -391,8 +376,9 @@ function StateMission.update()
         local damage = entity_controller:updateAll(dt, mech_x, mech_y, body_w, body_h, (_G.GameState and _G.GameState.mech_stats) or {})
         if damage and damage > 0 then
             current_hp = current_hp - damage
-            -- 觸發玩家受擊震動效果
+            -- 觸發玩家受擊震動效果和音效
             mech_controller:onHit()
+            SoundManager.playHit()
         end
         
         -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）

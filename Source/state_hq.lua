@@ -323,12 +323,10 @@ function StateHQ.setup()
             end
             -- 載入 CLAW 的額外圖片
             if pid == "CLAW" then
-                print("DEBUG: Loading CLAW extra images")
                 if pdata.arm_image then
                     local arm_img = gfx.image.new(pdata.arm_image)
                     if arm_img then
                         pdata._arm_img = arm_img
-                        print("DEBUG: Loaded arm_image:", pdata.arm_image)
                     else
                         print("ERROR: Failed to load arm_image:", pdata.arm_image)
                     end
@@ -337,7 +335,6 @@ function StateHQ.setup()
                     local upper_img = gfx.image.new(pdata.upper_image)
                     if upper_img then
                         pdata._upper_img = upper_img
-                        print("DEBUG: Loaded upper_image:", pdata.upper_image)
                     else
                         print("ERROR: Failed to load upper_image:", pdata.upper_image)
                     end
@@ -346,7 +343,6 @@ function StateHQ.setup()
                     local lower_img = gfx.image.new(pdata.lower_image)
                     if lower_img then
                         pdata._lower_img = lower_img
-                        print("DEBUG: Loaded lower_image:", pdata.lower_image)
                     else
                         print("ERROR: Failed to load lower_image:", pdata.lower_image)
                     end
@@ -618,9 +614,7 @@ function StateHQ.update()
             end
         elseif cursor_on_back then
             -- 游標在 BACK 上
-            print("DEBUG: cursor_on_back is true")
             if playdate.buttonJustPressed(playdate.kButtonUp) then
-                print("DEBUG: BACK - Up pressed")
                 cursor_on_back = false
                 cursor_on_ready = true
                 -- 播放游標移動音效
@@ -629,8 +623,6 @@ function StateHQ.update()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 返回任務選擇畫面
-                print("DEBUG: BACK - A pressed, returning to mission select")
-                print("DEBUG: _G.StateMissionSelect = " .. tostring(_G.StateMissionSelect))
                 -- 播放選擇音效
                 if _G.SoundManager and _G.SoundManager.playSelect then
                     _G.SoundManager.playSelect()
@@ -688,10 +680,8 @@ function StateHQ.update()
                     end
                 elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                     -- 從 READY 移動到 BACK
-                    print("DEBUG: Moving from READY to BACK")
                     cursor_on_ready = false
                     cursor_on_back = true
-                    print("DEBUG: cursor_on_back set to true")
                     -- 播放游標移動音效
                     if _G.SoundManager and _G.SoundManager.playCursorMove then
                         _G.SoundManager.playCursorMove()
@@ -1280,11 +1270,11 @@ function StateHQ.draw()
                             pcall(function() pdata._img:draw(draw_x, draw_y) end)
                             -- CLAW 特殊處理：繪製額外部件
                             if pid == "CLAW" then
-                                print("DEBUG: Drawing CLAW extras at", draw_x, draw_y)
-                                print("DEBUG: _arm_img=", pdata._arm_img, "_upper_img=", pdata._upper_img, "_lower_img=", pdata._lower_img)
-                                if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
-                                if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
-                                if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
+                                if pdata._arm_img and pdata._upper_img and pdata._lower_img then
+                                    pdata._arm_img:draw(draw_x, draw_y)
+                                    pdata._upper_img:draw(draw_x, draw_y)
+                                    pdata._lower_img:draw(draw_x, draw_y)
+                                end
                             end
                         else
                             -- no image: draw text label at the origin cell
