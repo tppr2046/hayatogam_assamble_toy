@@ -42,6 +42,9 @@ local GRID_MAP = {}
 local cursor_col = 1      
 local cursor_row = 1      
 local cursor_on_ready = false  -- 游標是否在 READY 選項上local cursor_on_back = false   -- 遊標是否在 BACK 選項上
+local is_unequip_mode = false  -- 是否在解除裝備模式
+local unequip_selected_col = 1  -- 解除模式選中的格子列
+local unequip_selected_row = 1  -- 解除模式選中的格子排
 local selected_category = nil   -- nil = 選擇分類, "TOP" or "BOTTOM" = 已選分類
 local selected_part_index = 1   
 local hq_mode = "EQUIP"         -- EQUIP (組裝模式), UNEQUIP (拆卸模式), READY_MENU (READY選單)
@@ -380,6 +383,78 @@ end
 
 function StateHQ.update()
     
+    if is_unequip_mode then
+        -- 解除裝備模式
+        local eq = _G.GameState.mech_stats.equipped_parts or {}
+        
+        if playdate.buttonJustPressed(playdate.kButtonLeft) then
+            -- 在最左邊格子按左鍵回到零件清單
+            if unequip_selected_col == 1 then
+                is_unequip_mode = false
+            else
+                unequip_selected_col = math.max(1, unequip_selected_col - 1)
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonRight) then
+            unequip_selected_col = math.min(GRID_COLS, unequip_selected_col + 1)
+        elseif playdate.buttonJustPressed(playdate.kButtonUp) then
+            -- 從下排跳到上排的零件
+            for _, item in ipairs(eq) do
+                if item.row == 2 then
+                    unequip_selected_col = item.col
+                    unequip_selected_row = item.row
+                    break
+                end
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            -- 從上排跳到下排的零件
+            for _, item in ipairs(eq) do
+                if item.row == 1 then
+                    unequip_selected_col = item.col
+                    unequip_selected_row = item.row
+                    break
+                end
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- 解除選中格子上的零件
+            for i = #eq, 1, -1 do
+                local item = eq[i]
+                local slot_w = item.w or 1
+                local slot_h = item.h or 1
+                -- 檢查選中的格子是否在零件範圍內
+                if unequip_selected_col >= item.col and unequip_selected_col < item.col + slot_w and
+                   unequip_selected_row >= item.row and unequip_selected_row < item.row + slot_h then
+                    -- 從 equipped_parts 移除
+                    table.remove(eq, i)
+                    
+                    -- 從 GRID_MAP 清除
+                    for r = item.row, item.row + slot_h - 1 do
+                        for c = item.col, item.col + slot_w - 1 do
+                            GRID_MAP[r][c] = nil
+                        end
+                    end
+                    
+                    -- 扣除 HP 和 Weight
+                    local part_data = _G.PartsData and _G.PartsData[item.id]
+                    if part_data then
+                        if part_data.hp then
+                            _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) - part_data.hp
+                        end
+                        if part_data.weight then
+                            _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) - part_data.weight
+                        end
+                    end
+                    
+                    print("Unequipped part: " .. item.id)
+                    break
+                end
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonB) then
+            -- 按 B 返回零件清單
+            is_unequip_mode = false
+        end
+        return
+    end
+    
     if hq_mode == "EQUIP" then
         if is_placing_part then
             -- 零件放置中：移動網格游標
@@ -619,6 +694,15 @@ function StateHQ.update()
                     cursor_on_ready = true
                     last_part_index = selected_part_index
                 end
+            elseif playdate.buttonJustPressed(playdate.kButtonRight) then
+                -- 按右鍵進入解除裝備模式
+                is_unequip_mode = true
+                -- 初始化選中第一個已安裝的零件
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                if #eq > 0 then
+                    unequip_selected_col = eq[1].col
+                    unequip_selected_row = eq[1].row
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 選中零件，檢查是否已安裝
                 local parts_list = _G.GameState.parts_by_category[selected_category]
@@ -765,22 +849,32 @@ function StateHQ.draw()
         end
     end
 
-    -- 如果在 UNEQUIP 模式，繪製游標框並顯示要移除的零件資訊（若有）
-    if hq_mode == "UNEQUIP" then
-        local cursor_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-        -- convert row (bottom-origin) to top-based y for drawing
-        local cursor_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
-        -- 用黑色框標示選取格
+    -- 如果在解除裝備模式，繪製選中框
+    if is_unequip_mode then
+        local cursor_x = GRID_START_X + (unequip_selected_col - 1) * GRID_CELL_SIZE
+        local cursor_y = GRID_START_Y + (GRID_ROWS - unequip_selected_row) * GRID_CELL_SIZE
+        
+        -- 繪製粗框標示選取的零件
         gfx.setColor(gfx.kColorBlack)
-        gfx.drawRect(cursor_x, cursor_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-
-        local idx, item = findEquippedPartAt(cursor_col, cursor_row)
-        if item then
-            local label = item.id or "PART"
-            gfx.drawText("Remove: " .. label, cursor_x, cursor_y + GRID_CELL_SIZE + 2)
-        else
-            gfx.drawText("No part", cursor_x, cursor_y + GRID_CELL_SIZE + 2)
+        gfx.setLineWidth(3)
+        
+        -- 找出選中格子所屬的零件並繪製完整範圍的框
+        local eq = _G.GameState.mech_stats.equipped_parts or {}
+        for _, item in ipairs(eq) do
+            local slot_w = item.w or 1
+            local slot_h = item.h or 1
+            if unequip_selected_col >= item.col and unequip_selected_col < item.col + slot_w and
+               unequip_selected_row >= item.row and unequip_selected_row < item.row + slot_h then
+                local fx = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
+                local fy = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE - (slot_h - 1) * GRID_CELL_SIZE
+                local fw = slot_w * GRID_CELL_SIZE
+                local fh = slot_h * GRID_CELL_SIZE
+                gfx.drawRect(fx, fy, fw, fh)
+                break
+            end
         end
+        
+        gfx.setLineWidth(1)
     end
     
     -- 繪製閃爍（放置失敗）覆蓋層
