@@ -9,27 +9,13 @@ import "CoreLibs/timer"
 -- ==========================================
 -- 2. 載入遊戲資料與狀態模組
 -- ==========================================
--- 關鍵修正：初始化全域遊戲資料 (確保所有必要的結構存在)
+-- 初始化全域遊戲資料（確保基本結構存在）
 _G.GameState = _G.GameState or {}
-_G.GameState.mech_stats = _G.GameState.mech_stats or {
-    total_hp = 100,
-    total_weight = 0,
-    equipped_parts = {}
-}
--- 初始化玩家資源（steel, copper, rubber）
-_G.GameState.resources = _G.GameState.resources or {
-    steel = 100,   -- 鋼鐵
-    copper = 100,  -- 銅
-    rubber = 100   -- 橡膠
-}
--- 初始化擁有的零件（初始給予基本零件）
-_G.GameState.owned_parts = _G.GameState.owned_parts or {
-    GUN = true,
-    SWORD = true,
-    WHEEL1 = true,
-    CANON = true
-}
--- ❗ 假設 PartsData 存在
+
+-- 載入存檔管理模組
+local sm = import "save_manager"
+_G.SaveManager = sm or {}
+
 -- 讀取零件資料模組（若不存在則回退為空表）
 local pd = import "parts_data"
 _G.PartsData = pd or _G.PartsData or {}
@@ -111,6 +97,12 @@ end
 
 function playdate.setup()
     playdate.display.setRefreshRate(30)
+    
+    -- 初始化存檔系統
+    if _G.SaveManager and _G.SaveManager.init then
+        _G.SaveManager.init()
+        print("LOG: SaveManager initialized.")
+    end
     
     -- 初始化第一個狀態 (Menu)
     if current_state and current_state.setup then

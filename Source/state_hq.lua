@@ -492,6 +492,13 @@ function StateHQ.update()
                         if part_data.weight then
                             _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
                         end
+                        
+                        -- 自動儲存機甲配置
+                        if _G.SaveManager and _G.SaveManager.saveCurrent then
+                            _G.SaveManager.saveCurrent()
+                            print("LOG: Mech configuration auto-saved.")
+                        end
+                        
                         is_placing_part = false
                         
                         -- 檢查該分類（TOP/BOTTOM）是否已滿，如果滿了就返回分類選擇

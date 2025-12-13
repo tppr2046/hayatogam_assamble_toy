@@ -28,10 +28,27 @@ function StateMissionSelect:setup()
     -- 使用全域 MissionData
     local MissionData = _G.MissionData or {}
     
-    -- 建立任務列表（排序）
+    -- 建立任務列表（只包含可用的任務）
     mission_list = {}
-    for id, _ in pairs(MissionData) do
-        table.insert(mission_list, id)
+    for id, mission in pairs(MissionData) do
+        -- 檢查前置任務條件
+        local prerequisite = mission.prerequisite
+        local can_show = false
+        
+        if prerequisite == 0 then
+            -- 初始任務，直接顯示
+            can_show = true
+        elseif prerequisite and type(prerequisite) == "string" then
+            -- 需要前置任務完成
+            local completed = _G.GameState.completed_missions or {}
+            if completed[prerequisite] then
+                can_show = true
+            end
+        end
+        
+        if can_show then
+            table.insert(mission_list, id)
+        end
     end
     table.sort(mission_list)
     
@@ -39,7 +56,7 @@ function StateMissionSelect:setup()
     selected_index = 1
     scroll_offset = 0
     
-    print("StateMissionSelect setup complete. Missions: " .. #mission_list)
+    print("StateMissionSelect setup complete. Available missions: " .. #mission_list)
 end
 
 function StateMissionSelect:update()

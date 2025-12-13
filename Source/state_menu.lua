@@ -41,9 +41,12 @@ function StateMenu.update()
     -- 處理 A 鍵確認
     if playdate.buttonJustPressed(playdate.kButtonA) then
         local selection = menu_options[selected_index]
-        if selection == "NEW GAME" or selection == "CONTINUE" then
-            -- 進入選擇紀錄檔畫面
-            setState(_G.StateSaveSelect)
+        if selection == "NEW GAME" then
+            -- NEW GAME: 進入存檔選擇畫面（模式為創建新遊戲）
+            setState(_G.StateSaveSelect, "new_game")
+        elseif selection == "CONTINUE" then
+            -- CONTINUE: 進入存檔選擇畫面（模式為繼續遊戲）
+            setState(_G.StateSaveSelect, "continue")
         elseif selection == "CREDITS" then
             print("Action: Show Credits (Not implemented)")
         end

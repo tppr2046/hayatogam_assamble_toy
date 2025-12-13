@@ -37,6 +37,17 @@ function StateResult.setup(success, message, mission_id)
             _G.GameState.resources.copper = _G.GameState.resources.copper + reward_copper
             _G.GameState.resources.rubber = _G.GameState.resources.rubber + reward_rubber
             
+            -- 標記任務為已完成
+            _G.GameState.completed_missions = _G.GameState.completed_missions or {}
+            _G.GameState.completed_missions[mission_id] = true
+            
+            -- 自動儲存遊戲進度
+            if _G.SaveManager and _G.SaveManager.saveCurrent then
+                _G.SaveManager.saveCurrent()
+                print("LOG: Game progress auto-saved.")
+            end
+            
+            print("LOG: Mission " .. mission_id .. " completed!")
             print("LOG: Obtained resources - Steel:" .. reward_steel .. " Copper:" .. reward_copper .. " Rubber:" .. reward_rubber)
         end
     end

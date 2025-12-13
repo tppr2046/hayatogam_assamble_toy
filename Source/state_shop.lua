@@ -53,6 +53,13 @@ function StateShop.update()
                         resources.rubber = resources.rubber - cost_rubber
                         -- 添加零件到擁有列表
                         _G.GameState.owned_parts[part_id] = true
+                        
+                        -- 自動儲存遊戲進度
+                        if _G.SaveManager and _G.SaveManager.saveCurrent then
+                            _G.SaveManager.saveCurrent()
+                            print("LOG: Game progress auto-saved after purchase.")
+                        end
+                        
                         print("LOG: Purchased part: " .. part_id)
                     else
                         print("LOG: Not enough resources to buy " .. part_id)
