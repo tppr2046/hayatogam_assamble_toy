@@ -34,7 +34,7 @@ local GRID_START_Y = 100  -- 往下移動，為預覽留出空間
 -- UI 控制介面相關
 local UI_GRID_COLS = 3
 local UI_GRID_ROWS = 2
-local UI_CELL_SIZE = 20
+local UI_CELL_SIZE = 32
 local UI_START_X = 10
 local UI_START_Y = GAME_HEIGHT + 5   
 
@@ -87,6 +87,40 @@ local function checkIfFits(part_data, start_col, start_row)
             -- BOTTOM placement: the part's origin must be on the bottom row (row == 1)
             if start_row ~= 1 then
                 return false, "Must place on BOTTOM row"
+            end
+        end
+    end
+
+    -- 檢查上半部（row=2）和下半部（row=1）是否已有零件
+    local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
+    if eq then
+        -- 檢查這個零件會佔用哪些行
+        local occupies_top = false    -- 是否佔用上半部（row=2）
+        local occupies_bottom = false -- 是否佔用下半部（row=1）
+        
+        for r = start_row, start_row + h - 1 do
+            if r == 2 then occupies_top = true end
+            if r == 1 then occupies_bottom = true end
+        end
+        
+        -- 檢查已裝備的零件
+        for _, item in ipairs(eq) do
+            local item_occupies_top = false
+            local item_occupies_bottom = false
+            
+            for r = item.row, item.row + (item.h or 1) - 1 do
+                if r == 2 then item_occupies_top = true end
+                if r == 1 then item_occupies_bottom = true end
+            end
+            
+            -- 如果要放的零件會佔用上半部，而已有零件也佔用上半部，則不允許
+            if occupies_top and item_occupies_top then
+                return false, "TOP row already has a part"
+            end
+            
+            -- 如果要放的零件會佔用下半部，而已有零件也佔用下半部，則不允許
+            if occupies_bottom and item_occupies_bottom then
+                return false, "BOTTOM row already has a part"
             end
         end
     end
@@ -196,6 +230,13 @@ end
 
 function StateHQ.setup()
     gfx.setFont(font) 
+    
+    -- 初始化 MechController（用於繪製介面圖）
+    if MechController and MechController.init then
+        mech_controller = MechController:init()
+    else
+        print("WARNING: MechController not found in state_hq")
+    end
     
     -- 確保 MissionData 已在 main.lua 中載入
     if not _G.MissionData then
@@ -375,32 +416,30 @@ function StateHQ.update()
                         end
                         is_placing_part = false
                         
-                        -- 安裝完成後，自動選取下一個未裝備的零件
-                        local parts_list = _G.GameState.parts_by_category[selected_category]
-                        local parts_count = parts_list and #parts_list or 0
-                        local found_next = false
+                        -- 檢查該分類（TOP/BOTTOM）是否已滿，如果滿了就返回分類選擇
+                        local eq = _G.GameState.mech_stats.equipped_parts or {}
+                        local has_top_part = false
+                        local has_bottom_part = false
                         
-                        -- 從當前位置的下一個開始尋找未裝備的零件
-                        for i = selected_part_index + 1, parts_count do
-                            local check_part_id = parts_list[i]
-                            local is_equipped = false
-                            local eq = _G.GameState.mech_stats.equipped_parts or {}
-                            for _, item in ipairs(eq) do
-                                if item.id == check_part_id then
-                                    is_equipped = true
-                                    break
-                                end
-                            end
-                            if not is_equipped then
-                                selected_part_index = i
-                                found_next = true
-                                break
+                        for _, item in ipairs(eq) do
+                            for r = item.row, item.row + (item.h or 1) - 1 do
+                                if r == 2 then has_top_part = true end
+                                if r == 1 then has_bottom_part = true end
                             end
                         end
                         
-                        -- 如果後面沒有未裝備的零件，從頭開始找
-                        if not found_next then
-                            for i = 1, selected_part_index - 1 do
+                        -- 如果當前分類是 TOP 且已有上半部零件，或是 BOTTOM 且已有下半部零件，則返回分類選擇
+                        if (selected_category == "TOP" and has_top_part) or (selected_category == "BOTTOM" and has_bottom_part) then
+                            selected_category = nil
+                            selected_part_index = 1
+                        else
+                            -- 否則，自動選取下一個未裝備的零件
+                            local parts_list = _G.GameState.parts_by_category[selected_category]
+                            local parts_count = parts_list and #parts_list or 0
+                            local found_next = false
+                            
+                            -- 從當前位置的下一個開始尋找未裝備的零件
+                            for i = selected_part_index + 1, parts_count do
                                 local check_part_id = parts_list[i]
                                 local is_equipped = false
                                 local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -416,12 +455,32 @@ function StateHQ.update()
                                     break
                                 end
                             end
-                        end
-                        
-                        -- 如果所有零件都已裝備，則移動到 READY
-                        if not found_next then
-                            cursor_on_ready = true
-                            last_part_index = selected_part_index
+                            
+                            -- 如果後面沒有未裝備的零件，從頭開始找
+                            if not found_next then
+                                for i = 1, selected_part_index - 1 do
+                                    local check_part_id = parts_list[i]
+                                    local is_equipped = false
+                                    local eq = _G.GameState.mech_stats.equipped_parts or {}
+                                    for _, item in ipairs(eq) do
+                                        if item.id == check_part_id then
+                                            is_equipped = true
+                                            break
+                                        end
+                                    end
+                                    if not is_equipped then
+                                        selected_part_index = i
+                                        found_next = true
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            -- 如果所有零件都已裝備，則移動到 READY
+                            if not found_next then
+                                cursor_on_ready = true
+                                last_part_index = selected_part_index
+                            end
                         end
                     else
                         flash_timer = FLASH_DURATION
@@ -682,8 +741,6 @@ function StateHQ.draw()
                     if pdata._lower_img then pcall(function() pdata._lower_img:draw(preview_x, draw_y) end) end
                 end
                 gfx.setColor(gfx.kColorBlack)
-                drawDither(preview_x + 2, draw_y + 2, sw - 4, sh - 4)
-                gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(preview_x, draw_y, sw, sh)
             elseif pdata._img then
                 local iw, ih
@@ -702,8 +759,6 @@ function StateHQ.draw()
                     if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
                     if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
                 end
-                gfx.setColor(gfx.kColorBlack)
-                drawDither(preview_x + 2, preview_y + 2, GRID_CELL_SIZE - 4, GRID_CELL_SIZE - 4)
                 gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(preview_x, preview_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
             end
@@ -807,11 +862,46 @@ function StateHQ.draw()
         end
     end
     
+    -- 預覽模式：在組裝格子上顯示 dither.png
+    if selected_category and selected_part_index and not cursor_on_ready and not is_placing_part then
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        local part_id = parts_list and parts_list[selected_part_index]
+        local pdata = _G.PartsData and _G.PartsData[part_id]
+        
+        if pdata and mech_controller and mech_controller.ui_images and mech_controller.ui_images.dither then
+            local placement_row = pdata.placement_row
+            
+            -- 找出第一個空格子（預覽位置）
+            local check_col, check_row = findFirstEmptyCell(pdata)
+            
+            if check_col and check_row then
+                -- 根據 placement_row 決定 dither 顯示在哪一排
+                local dither_row = nil
+                if placement_row == "TOP" or (check_row == 2) then
+                    -- TOP 零件安裝在上排，在下排（row=1）顯示 dither
+                    dither_row = 1
+                elseif placement_row == "BOTTOM" or (check_row == 1) then
+                    -- BOTTOM 零件安裝在下排，在上排（row=2）顯示 dither
+                    dither_row = 2
+                end
+                
+                -- 繪製 dither.png 在對應的排上（整排 3 格）
+                if dither_row then
+                    for c = 1, GRID_COLS do
+                        local dither_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
+                        local dither_y = GRID_START_Y + (GRID_ROWS - dither_row) * GRID_CELL_SIZE
+                        pcall(function() mech_controller.ui_images.dither:draw(dither_x, dither_y) end)
+                    end
+                end
+            end
+        end
+    end
+    
     -- 繪製已放置的零件，每個零件只繪製一次，佔據 w x h 格
     -- 分兩階段繪製：先下排(row=1)再上排(row=2)
                 local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
                 
-                -- 第一階段：繪製下排零件（row=1，無格線和 Dither）
+                -- 第一階段：繪製下排零件（row=1）和對應的上排格子 dither
                 for _, item in ipairs(eq) do
                     if item.row == 1 then
                         local pid = item.id
@@ -821,6 +911,8 @@ function StateHQ.draw()
                         local py_top = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
                         local pw = (item.w or 1) * GRID_CELL_SIZE
                         local ph = (item.h or 1) * GRID_CELL_SIZE
+                        
+                        -- 繪製零件圖片
                         if pdata and pdata._img_scaled then
                             -- draw pre-rendered image; anchor bottom-left so full image visible
                             local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
@@ -887,7 +979,7 @@ function StateHQ.draw()
                     end
                 end
                 
-                -- 第二階段：繪製上排零件（row=2，有格線和 Dither）
+                -- 第二階段：繪製上排零件（row=2）和對應的下排格子 dither
                 for _, item in ipairs(eq) do
                     if item.row == 2 then
                         local pid = item.id
@@ -897,6 +989,8 @@ function StateHQ.draw()
                         local py_top = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
                         local pw = (item.w or 1) * GRID_CELL_SIZE
                         local ph = (item.h or 1) * GRID_CELL_SIZE
+                        
+                        -- 繪製零件圖片
                         if pdata and pdata._img_scaled then
                             -- draw pre-rendered image; anchor bottom-left so full image visible
                             local ok, iw, ih = pcall(function() return pdata._img_scaled:getSize() end)
@@ -928,8 +1022,7 @@ function StateHQ.draw()
                                 end
                             end
                             
-                            gfx.setColor(gfx.kColorBlack)
-                            drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
+                            -- 繪製格線
                             gfx.setColor(gfx.kColorBlack)
                             gfx.drawRect(px, py_top, pw, ph)
                         elseif pdata and pdata._img then
@@ -955,8 +1048,6 @@ function StateHQ.draw()
                                 if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
                                 if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
                             end
-                            gfx.setColor(gfx.kColorBlack)
-                            drawDither(px + 2, py_top + 2, pw - 4, ph - 4)
                         else
                             -- no image: draw text label at the origin cell
                             gfx.setColor(gfx.kColorBlack)
@@ -1014,60 +1105,73 @@ function StateHQ.draw()
     
     -- 找出選中格子對應的零件ID（用於高亮所有佔用格子）
     local selected_part_id_for_highlight = nil
+    local preview_part_data = nil
     if selected_category and selected_part_index and not cursor_on_ready then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         selected_part_id_for_highlight = part_id
+        preview_part_data = _G.PartsData and _G.PartsData[part_id]
     end
     
     for r = 1, UI_GRID_ROWS do
         for c = 1, UI_GRID_COLS do
-            local cx = UI_START_X + (c - 1) * (UI_CELL_SIZE + 5)
-            local cy = UI_START_Y + (UI_GRID_ROWS - r) * (UI_CELL_SIZE + 5)
+            local cx = UI_START_X + (c - 1) * UI_CELL_SIZE
+            local cy = UI_START_Y + (UI_GRID_ROWS - r) * UI_CELL_SIZE
             
-            -- 檢查此格是否有零件以及屬於哪個零件
-            local part_id = nil
-            local is_in_selected_part = false
+            -- 查找是否有零件在這個列和對應的排
+            -- r=2 對應組裝格 row=2（上排），r=1 對應組裝格 row=1（下排）
+            local found_part = nil
             for _, item in ipairs(eq) do
                 local slot_w = item.w or 1
-                local slot_h = item.h or 1
-                if c >= item.col and c < item.col + slot_w and
-                   r >= item.row and r < item.row + slot_h then
-                    part_id = item.id
-                    -- 檢查是否屬於選中的零件
-                    if selected_part_id_for_highlight and item.id == selected_part_id_for_highlight then
-                        is_in_selected_part = true
-                    end
+                -- 檢查此列是否在零件範圍內，且零件的 row 與控制介面的 r 對應
+                if item.row == r and c >= item.col and c < item.col + slot_w then
+                    found_part = item
                     break
                 end
             end
             
-            -- 繪製格子（高亮選中零件的所有格子）
-            if is_in_selected_part then
-                gfx.setColor(gfx.kColorBlack)
-                gfx.fillRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
-                gfx.setColor(gfx.kColorWhite)
-            else
-                gfx.setColor(gfx.kColorBlack)
-            end
-            gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
-            
-            -- 顯示零件名稱縮寫（只在零件的起始格顯示）
-            if part_id then
-                for _, item in ipairs(eq) do
-                    if item.id == part_id and item.col == c and item.row == r then
-                        local label = string.sub(part_id, 1, 1)
-                        gfx.setColor(gfx.kColorBlack)
-                        gfx.drawText(label, cx + 6, cy + 6)
-                        break
+            if found_part then
+                -- 只在起始格繪製介面圖
+                if c == found_part.col then
+                    if mech_controller then
+                        mech_controller:drawPartUI(found_part.id, cx, cy, UI_CELL_SIZE)
                     end
+                end
+            else
+                -- 沒有零件，顯示空格
+                if mech_controller and mech_controller.ui_images and mech_controller.ui_images.empty then
+                    pcall(function() mech_controller.ui_images.empty:draw(cx, cy) end)
+                else
+                    gfx.setColor(gfx.kColorBlack)
+                    gfx.setLineWidth(1)
+                    gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
                 end
             end
         end
     end
     
+    -- 繪製選中零件的粗外框（根據零件的 row 顯示在對應的控制介面排）
+    if selected_part_id_for_highlight then
+        for _, item in ipairs(eq) do
+            if item.id == selected_part_id_for_highlight then
+                local slot_w = item.w or 1
+                local fx = UI_START_X + (item.col - 1) * UI_CELL_SIZE
+                -- 根據零件的 row 決定 y 座標：row=2 在上方，row=1 在下方
+                local fy = UI_START_Y + (UI_GRID_ROWS - item.row) * UI_CELL_SIZE
+                local fw = slot_w * UI_CELL_SIZE
+                local fh = UI_CELL_SIZE
+                
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(3)
+                gfx.drawRect(fx, fy, fw, fh)
+                gfx.setLineWidth(1)
+                break
+            end
+        end
+    end
+    
     -- 顯示當前選中的零件資訊
-    local info_x = UI_START_X + UI_GRID_COLS * (UI_CELL_SIZE + 5) + 10
+    local info_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
     if selected_category and selected_part_index and not cursor_on_ready then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]

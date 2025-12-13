@@ -15,11 +15,13 @@ local parts_data = {
         -- placement_row: "TOP", "BOTTOM", or "BOTH"
         placement_row = "TOP",
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        -- UI 操作介面圖片
+        ui_panel = "images/gun_panel.png",
         -- GUN 特有屬性：砲彈發射
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
         projectile_damage = 5,  -- 砲彈傷害
-        projectile_speed_mult = 25,  -- 速度倍率（相對於基準速度）
-        projectile_grav_mult = 1.0  -- 重力倍率（相對於世界重力 0.5）
+        projectile_speed_mult = 40,  -- 速度倍率（相對於基準速度）
+        projectile_grav_mult = 0.2  -- 重力倍率（相對於世界重力 0.5）
     },
     ["WHEEL"] = {
         name = "WHEEL",
@@ -31,6 +33,9 @@ local parts_data = {
             image = "images/wheel.png",
             placement_row = "BOTTOM",
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        -- UI 操作介面圖片
+        ui_panel = "images/wheel_panel.png",
+        ui_stick = "images/wheel_stick.png",
         move_speed = 2.0  -- 左右移動速度
     },
     ["CANON"] = {
@@ -43,6 +48,8 @@ local parts_data = {
             image = "images/canon.png",
             placement_row = "TOP",
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        -- UI 操作介面圖片
+        ui_panel = "images/canon_panel.png",
         -- CANON 特有屬性：砲彈發射
         fire_cooldown = 0.5,  -- 每 0.5 秒可以發射一次
         projectile_damage = 10,  -- 砲彈傷害
@@ -63,7 +70,10 @@ local parts_data = {
             color = gfx.kColorBlack,
             image = "images/sword.png",
             placement_row = "TOP",
-        align_image_top = false  -- 圖片底部對齊格子底部（預設行為）
+        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+        -- UI 操作介面圖片
+        ui_panel = "images/sword_panel.png",
+        ui_stick = "images/sword_stick.png"
     },
     ["FEET"] = {
         name = "FEET",
@@ -76,6 +86,9 @@ local parts_data = {
             placement_row = "BOTTOM",
         -- FEET 特有屬性
         align_image_top = true,  -- 圖片上緣對齊格子上緣（圖片下半部會超出格子）
+        -- UI 操作介面圖片（先用與 WHEEL 相同的圖）
+        ui_panel = "images/wheel_panel.png",
+        ui_stick = "images/wheel_stick.png",
         move_speed = 3.0,  -- 左右移動速度
         jump_velocity = -8.0,  -- 跳躍初速度（負值=向上）
         animation_walk = "images/feet_walk"  -- 行走動畫 imagetable 路徑
@@ -90,6 +103,8 @@ local parts_data = {
         image = "images/claw_base.png",  -- 主圖片為底座
         placement_row = "TOP",
         align_image_top = false,  -- 圖片底部對齊格子底部
+        -- UI 操作介面圖片（先用與 CANON 相同的圖）
+        ui_panel = "images/claw_control",
         -- CLAW 特有屬性
         arm_image = "images/claw_arm.png",  -- 臂的圖片
         upper_image = "images/claw_upper.png",  -- 上爪圖片

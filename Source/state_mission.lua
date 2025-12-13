@@ -31,7 +31,7 @@ local MECH_HEIGHT = 32
 -- 操作介面相關
 local UI_GRID_COLS = 3
 local UI_GRID_ROWS = 2
-local UI_CELL_SIZE = 20
+local UI_CELL_SIZE = 32
 local UI_START_X = 10
 local UI_START_Y = GAME_HEIGHT + 5
 

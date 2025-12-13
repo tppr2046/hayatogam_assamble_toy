@@ -18,8 +18,8 @@ _G.GameState.mech_stats = _G.GameState.mech_stats or {
 }
 -- 初始化擁有的零件（初始給予基本零件）
 _G.GameState.owned_parts = _G.GameState.owned_parts or {
-    FEET = true,
     GUN = true,
+    CLAW = true,
     SWORD = true,
     WHEEL = true,
     CANON = true

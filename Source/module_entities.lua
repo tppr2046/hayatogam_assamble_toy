@@ -37,6 +37,9 @@ function MechController:init()
         feet_move_direction = 0,  -- 移動方向：1=向右, -1=向左, 0=靜止
         feet_animation = nil,  -- 動畫循環物件
         
+        -- WHEEL 相關
+        wheel_stick_offset = 0,  -- wheel_stick 的左右位移
+        
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
         claw_arm_angle_prev = 0,  -- 上一幀的臂角度（用於計算旋轉速度）
@@ -46,9 +49,61 @@ function MechController:init()
         
         -- 玩家受擊效果
         hit_shake_timer = 0,
-        hit_shake_offset = 0
+        hit_shake_offset = 0,
+        
+        -- 介面圖片
+        ui_images = {}
     }
     setmetatable(mc, { __index = MechController })
+    
+    -- 載入通用 UI 圖片（如空格圖、dither 圖）
+    local ok, empty_img = pcall(function()
+        return playdate.graphics.image.new("images/empty")
+    end)
+    if ok and empty_img then
+        mc.ui_images.empty = empty_img
+    else
+        print("WARNING: Failed to load empty.png")
+    end
+    
+    local ok_dither, dither_img = pcall(function()
+        return playdate.graphics.image.new("images/dither")
+    end)
+    if ok_dither and dither_img then
+        mc.ui_images.dither = dither_img
+    else
+        print("WARNING: Failed to load dither.png")
+    end
+    
+    -- 從 PartsData 載入每個零件的 UI 圖片
+    if _G.PartsData then
+        for part_id, part_data in pairs(_G.PartsData) do
+            -- 載入 ui_panel
+            if part_data.ui_panel then
+                local ok_panel, panel_img = pcall(function()
+                    return playdate.graphics.image.new(part_data.ui_panel)
+                end)
+                if ok_panel and panel_img then
+                    mc.ui_images[part_id .. "_panel"] = panel_img
+                else
+                    print("WARNING: Failed to load UI panel for " .. part_id .. ": " .. part_data.ui_panel)
+                end
+            end
+            
+            -- 載入 ui_stick（如果有）
+            if part_data.ui_stick then
+                local ok_stick, stick_img = pcall(function()
+                    return playdate.graphics.image.new(part_data.ui_stick)
+                end)
+                if ok_stick and stick_img then
+                    mc.ui_images[part_id .. "_stick"] = stick_img
+                else
+                    print("WARNING: Failed to load UI stick for " .. part_id .. ": " .. part_data.ui_stick)
+                end
+            end
+        end
+    end
+    
     return mc
 end
 
@@ -113,11 +168,24 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     
     if self.active_part_id == "WHEEL" then
         -- WHEEL：左右移動
+        -- WHEEL 是 3x1 格，寬度 = 3*32 + 2*5 = 106 像素
+        -- wheel_stick 可以從最左移動到最右，範圍大約是 panel 寬度的一半，減去 stick 寬度的一半
+        -- 假設 panel 總寬 106，stick 寬 10，則最大偏移 = (106/2) - (10/2) = 48
+        local max_stick_offset = 40
+        
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
             dx = dx - MOVE_SPEED
-        end
-        if playdate.buttonIsPressed(playdate.kButtonRight) then
+            self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 2)
+        elseif playdate.buttonIsPressed(playdate.kButtonRight) then
             dx = dx + MOVE_SPEED
+            self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 2)
+        else
+            -- 放開後回到預設位置
+            if self.wheel_stick_offset > 0 then
+                self.wheel_stick_offset = math.max(0, self.wheel_stick_offset - 2)
+            elseif self.wheel_stick_offset < 0 then
+                self.wheel_stick_offset = math.min(0, self.wheel_stick_offset + 2)
+            end
         end
         
     elseif self.active_part_id == "SWORD" then
@@ -447,26 +515,49 @@ Enemy = {}
 
 function Enemy:init(x, y, type_id, ground_y)
     local data = EnemyData[type_id]
+    
+    -- 載入敵人圖片
+    local enemy_img = nil
+    local img_width = 24
+    local img_height = 32
+    if data.image then
+        local ok, img = pcall(function()
+            return playdate.graphics.image.new(data.image)
+        end)
+        if ok and img then
+            enemy_img = img
+            local ok_size, w, h = pcall(function() return img:getSize() end)
+            if ok_size and w and h then
+                img_width = w
+                img_height = h
+            end
+        end
+    end
+    
     local e = {
         x = x,
         y = y,
         type_id = type_id,
         hp = data.hp,
         attack = data.attack,
-        width = 24,  -- 敵人模型寬度
-        height = 32, -- 敵人模型高度
+        width = img_width,
+        height = img_height,
+        image = enemy_img,  -- 儲存圖片
         ground_y = ground_y,
         vx = 1.0, -- 基礎水平速度
         move_dir = 1, -- 1 for right, -1 for left
         is_alive = true,
         move_timer = 0,
         fire_timer = 0,
-        fire_cooldown = 2.0 -- 每 2 秒發射一次
+        fire_cooldown = 2.0, -- 每 2 秒發射一次
+        -- 子彈發射位置偏移
+        bullet_offset_x = data.bullet_offset_x or (img_width / 2),
+        bullet_offset_y = data.bullet_offset_y or (img_height / 2)
     }
     -- 確保敵人站在地面上
     e.y = ground_y - e.height 
     setmetatable(e, { __index = Enemy })
-    print("LOG: Created Enemy " .. type_id .. " at " .. x)
+    print("LOG: Created Enemy " .. type_id .. " at " .. x .. " (" .. img_width .. "x" .. img_height .. ")")
     -- 從敵人資料讀取砲彈 multiplier（可在 enemy_data.lua 調整）
     e.projectile_speed_mult = (data and data.projectile_speed_mult) or 1.0
     e.projectile_grav_mult = (data and data.projectile_grav_mult) or 1.0
@@ -506,8 +597,9 @@ end
 
 -- 發射拋物線砲彈 (擊向機甲)
 function Enemy:fire(target_x, controller)
-    local start_x = self.x + self.width / 2
-    local start_y = self.y + self.height / 2
+    -- 使用敵人資料中定義的子彈發射位置
+    local start_x = self.x + self.bullet_offset_x
+    local start_y = self.y + self.bullet_offset_y
     local target_dist = target_x - start_x
     -- 使砲彈水平方向速度接近玩家的移動速度（尊重敵人定義的 multiplier）
     local base_vx = (controller and controller.player_move_speed) or 2.0
@@ -538,12 +630,19 @@ end
 function Enemy:draw(camera_x)
     if not self.is_alive then return end
     local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)  -- 應用震動偏移
-    gfx.setColor(gfx.kColorBlack)
-    -- 繪製敵人模型
-    gfx.fillRect(screen_x, self.y, self.width, self.height) 
+    
+    -- 繪製敵人圖片或方塊
+    if self.image then
+        pcall(function() self.image:draw(screen_x, self.y) end)
+    else
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(screen_x, self.y, self.width, self.height)
+    end
+    
     -- 繪製 HP 條
     local hp_max = EnemyData[self.type_id].hp
     local hp_percent = self.hp / hp_max
+    gfx.setColor(gfx.kColorBlack)
     gfx.fillRect(screen_x, self.y - 5, self.width * hp_percent, 3) 
 end
 
@@ -1175,67 +1274,143 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         end
     end
     
-    -- 繪製控制格子
+    -- 繪製控制格子和介面圖
+    print("DEBUG mission: Drawing UI grid, eq has " .. #eq .. " parts")
+    for _, item in ipairs(eq) do
+        print("  Part: " .. item.id .. " at col=" .. item.col .. " row=" .. item.row .. " w=" .. (item.w or 1))
+    end
+    
     for r = 1, ui_grid_rows do
         for c = 1, ui_grid_cols do
-            local cx = ui_start_x + (c - 1) * (ui_cell_size + 5)
-            local cy = ui_start_y + (ui_grid_rows - r) * (ui_cell_size + 5)
+            local cx = ui_start_x + (c - 1) * ui_cell_size
+            local cy = ui_start_y + (ui_grid_rows - r) * ui_cell_size
             
-            -- 檢查此格是否有零件
-            local part_id = nil
-            local is_in_selected_part = false
+            print("DEBUG mission: Drawing UI cell r=" .. r .. " c=" .. c .. " at x=" .. cx .. " y=" .. cy)
+            
+            -- 查找是否有零件在這個列和對應的排
+            -- r=2 對應組裝格 row=2（上排），r=1 對應組裝格 row=1（下排）
+            local found_part = nil
             for _, item in ipairs(eq) do
                 local slot_w = item.w or 1
-                local slot_h = item.h or 1
-                if c >= item.col and c < item.col + slot_w and
-                   r >= item.row and r < item.row + slot_h then
-                    part_id = item.id
-                    if selected_part_id_for_highlight and item.id == selected_part_id_for_highlight then
-                        is_in_selected_part = true
-                    end
+                -- 檢查此列是否在零件範圍內，且零件的 row 與控制介面的 r 對應
+                if item.row == r and c >= item.col and c < item.col + slot_w then
+                    found_part = item
+                    print("DEBUG mission UI: Found " .. item.id .. " (row=" .. item.row .. ") at UI r=" .. r .. " c=" .. c)
                     break
                 end
             end
             
-            -- 繪製格子
-            if is_in_selected_part then
-                gfx.setColor(gfx.kColorBlack)
-                gfx.fillRect(cx, cy, ui_cell_size, ui_cell_size)
-                gfx.setColor(gfx.kColorWhite)
+            if found_part then
+                -- 只在起始格繪製介面圖
+                if c == found_part.col then
+                    print("DEBUG mission: Drawing UI for " .. found_part.id)
+                    self:drawPartUI(found_part.id, cx, cy, ui_cell_size)
+                end
             else
-                gfx.setColor(gfx.kColorBlack)
-            end
-            gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
-            
-            -- 選中格子繪製粗外框
-            if self.selected_part_slot and self.selected_part_slot.col == c and self.selected_part_slot.row == r then
-                gfx.setLineWidth(3)
-                gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
-                gfx.setLineWidth(1)
-            end
-            
-            -- 顯示零件名稱縮寫
-            if part_id then
-                for _, item in ipairs(eq) do
-                    if item.id == part_id and item.col == c and item.row == r then
-                        local label = string.sub(part_id, 1, 1)
-                        gfx.drawText(label, cx + 6, cy + 6)
-                        break
-                    end
+                -- 沒有零件，顯示空格
+                if self.ui_images and self.ui_images.empty then
+                    pcall(function() self.ui_images.empty:draw(cx, cy) end)
+                else
+                    gfx.setColor(gfx.kColorBlack)
+                    gfx.setLineWidth(1)
+                    gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
                 end
             end
         end
     end
     
+    -- 繪製選中零件的粗外框（根據零件的 row 顯示在對應的控制介面排）
+    if selected_part_id_for_highlight then
+        for _, item in ipairs(eq) do
+            if item.id == selected_part_id_for_highlight then
+                local slot_w = item.w or 1
+                local fx = ui_start_x + (item.col - 1) * ui_cell_size
+                -- 根據零件的 row 決定 y 座標：row=2 在上方，row=1 在下方
+                local fy = ui_start_y + (ui_grid_rows - item.row) * ui_cell_size
+                local fw = slot_w * ui_cell_size
+                local fh = ui_cell_size
+                
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(3)
+                gfx.drawRect(fx, fy, fw, fh)
+                gfx.setLineWidth(1)
+                break
+            end
+        end
+    end
+    
     -- 顯示激活零件資訊
-    local info_x = ui_start_x + ui_grid_cols * (ui_cell_size + 5) + 10
+    local info_x = ui_start_x + ui_grid_cols * ui_cell_size + 10
     if self.active_part_id then
         gfx.drawText("Active: " .. self.active_part_id, info_x, ui_start_y)
         if self.active_part_id == "SWORD" then
             gfx.drawText("Angle: " .. math.floor(self.sword_angle), info_x, ui_start_y + 15)
+        elseif self.active_part_id == "CANON" then
+            gfx.drawText("Angle: " .. math.floor(self.canon_angle), info_x, ui_start_y + 15)
         end
     else
         gfx.drawText("Select part (A)", info_x, ui_start_y)
+    end
+end
+
+-- 繪製零件介面圖（根據零件類型）
+function MechController:drawPartUI(part_id, x, y, size)
+    local gfx = playdate.graphics
+    local ui = self.ui_images or {}
+    local pdata = _G.PartsData and _G.PartsData[part_id]
+    
+    if not pdata then
+        print("WARNING: No parts data for " .. part_id)
+        return
+    end
+    
+    -- 繪製 ui_panel（底圖）
+    local panel_key = part_id .. "_panel"
+    local panel_img = ui[panel_key]
+    print("DEBUG drawPartUI: part_id=" .. part_id .. ", panel_key=" .. panel_key .. ", panel_img=" .. tostring(panel_img))
+    if panel_img then
+        -- 根據零件類型決定是否旋轉
+        if part_id == "CANON" then
+            -- CANON 的 panel 需要旋轉，左對齊
+            local rotated_img = panel_img:rotatedImage(self.canon_angle)
+            if rotated_img then
+                local rw, rh = rotated_img:getSize()
+                pcall(function() rotated_img:draw(x, y + (size - rh)/2) end)
+            end
+        elseif part_id == "CLAW" then
+            -- CLAW 的 panel 需要旋轉（使用臂角度），左對齊
+            local rotated_img = panel_img:rotatedImage(self.claw_arm_angle)
+            if rotated_img then
+                local rw, rh = rotated_img:getSize()
+                pcall(function() rotated_img:draw(x, y + (size - rh)/2) end)
+            end
+        else
+            -- 其他零件直接繪製
+            pcall(function() panel_img:draw(x, y) end)
+        end
+    end
+    
+    -- 繪製 ui_stick（如果有）
+    local stick_img = ui[part_id .. "_stick"]
+    if stick_img then
+        if part_id == "SWORD" then
+            -- SWORD 的 stick 需要旋轉，以最左緣為轉軸
+            local center_x = x + size / 2
+            local center_y = y + size / 2
+            local rotated_img = stick_img:rotatedImage(self.sword_angle)
+            if rotated_img then
+                local rw, rh = rotated_img:getSize()
+                pcall(function() rotated_img:draw(center_x, center_y - rh/2) end)
+            end
+        elseif part_id == "WHEEL" or part_id == "FEET" then
+            -- WHEEL/FEET 的 stick 左右移動
+            -- 假設 panel 是 96 像素寬（3 格）
+            local panel_img_width = 96
+            local center_x = x + panel_img_width / 2 + self.wheel_stick_offset
+            local center_y = y + size / 2
+            local sw, sh = stick_img:getSize()
+            pcall(function() stick_img:draw(center_x - sw/2, center_y - sh/2) end)
+        end
     end
 end
 
