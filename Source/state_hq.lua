@@ -29,7 +29,7 @@ local GRID_ROWS = 2
 local GRID_CELL_SIZE = 16 
 local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
 local GRID_START_X = (SCREEN_WIDTH - GRID_WIDTH) / 2  -- 置中
-local GRID_START_Y = 100  -- 往下移動，為預覽留出空間
+local GRID_START_Y = 60  -- 往下移動，為預覽留出空間
 
 -- UI 控制介面相關
 local UI_GRID_COLS = 3
@@ -725,7 +725,7 @@ function StateHQ.draw()
                 local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
                 local grid_width = GRID_COLS * GRID_CELL_SIZE
                 preview_x = GRID_START_X + (grid_width - sw) / 2
-                preview_y = GRID_START_Y - sh - 40  -- 組裝格上方，留40像素間距
+                preview_y = GRID_START_Y - sh - 10  -- 組裝格上方，留40像素間距
             end
             
             -- 繪製預覽圖片
@@ -1137,15 +1137,12 @@ function StateHQ.draw()
                         mech_controller:drawPartUI(found_part.id, cx, cy, UI_CELL_SIZE)
                     end
                 end
+                -- 零件佔用的其他格子保持空白（不繪製任何東西）
             else
-                -- 沒有零件，顯示空格
-                if mech_controller and mech_controller.ui_images and mech_controller.ui_images.empty then
-                    pcall(function() mech_controller.ui_images.empty:draw(cx, cy) end)
-                else
-                    gfx.setColor(gfx.kColorBlack)
-                    gfx.setLineWidth(1)
-                    gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
-                end
+                -- 沒有零件，繪製空格邊框（不使用 empty.png）
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(1)
+                gfx.drawRect(cx, cy, UI_CELL_SIZE, UI_CELL_SIZE)
             end
         end
     end
@@ -1161,6 +1158,12 @@ function StateHQ.draw()
                 local fw = slot_w * UI_CELL_SIZE
                 local fh = UI_CELL_SIZE
                 
+                -- 繪製白色外框（確保在任何背景上都可見）
+                gfx.setColor(gfx.kColorWhite)
+                gfx.setLineWidth(5)
+                gfx.drawRect(fx, fy, fw, fh)
+                
+                -- 繪製黑色內框
                 gfx.setColor(gfx.kColorBlack)
                 gfx.setLineWidth(3)
                 gfx.drawRect(fx, fy, fw, fh)

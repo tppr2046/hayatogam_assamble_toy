@@ -136,24 +136,40 @@ function MechController:handleSelection(mech_stats)
     if not self.active_part_id then
         -- 未激活：方向鍵選擇
         if playdate.buttonJustPressed(playdate.kButtonUp) then
-            if not self.selected_part_slot then
-                self.selected_part_slot = {col = 1, row = 1}
-            else
-                self.selected_part_slot.row = math.min(UI_GRID_ROWS, self.selected_part_slot.row + 1)
+            -- 按上：從下排跳到上排的零件
+            local eq = mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.row == 2 then  -- 找到上排的零件
+                    self.selected_part_slot = {col = item.col, row = item.row}
+                    break
+                end
             end
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            if self.selected_part_slot then
-                self.selected_part_slot.row = math.max(1, self.selected_part_slot.row - 1)
+            -- 按下：從上排跳到下排的零件
+            local eq = mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq) do
+                if item.row == 1 then  -- 找到下排的零件
+                    self.selected_part_slot = {col = item.col, row = item.row}
+                    break
+                end
             end
         elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
             if not self.selected_part_slot then
-                self.selected_part_slot = {col = 1, row = 1}
+                -- 初始化：選中第一個零件
+                local eq = mech_stats.equipped_parts or {}
+                if #eq > 0 then
+                    self.selected_part_slot = {col = eq[1].col, row = eq[1].row}
+                end
             else
                 self.selected_part_slot.col = math.max(1, self.selected_part_slot.col - 1)
             end
         elseif playdate.buttonJustPressed(playdate.kButtonRight) then
             if not self.selected_part_slot then
-                self.selected_part_slot = {col = 1, row = 1}
+                -- 初始化：選中第一個零件
+                local eq = mech_stats.equipped_parts or {}
+                if #eq > 0 then
+                    self.selected_part_slot = {col = eq[1].col, row = eq[1].row}
+                end
             else
                 self.selected_part_slot.col = math.min(UI_GRID_COLS, self.selected_part_slot.col + 1)
             end
@@ -196,16 +212,16 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
             dx = dx - MOVE_SPEED
-            self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 2)
+            self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 5)
         elseif playdate.buttonIsPressed(playdate.kButtonRight) then
             dx = dx + MOVE_SPEED
-            self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 2)
+            self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 5)
         else
-            -- 放開後回到預設位置
+            -- 放開後回到預設位置（加快回復速度）
             if self.wheel_stick_offset > 0 then
-                self.wheel_stick_offset = math.max(0, self.wheel_stick_offset - 2)
+                self.wheel_stick_offset = math.max(0, self.wheel_stick_offset - 5)
             elseif self.wheel_stick_offset < 0 then
-                self.wheel_stick_offset = math.min(0, self.wheel_stick_offset + 2)
+                self.wheel_stick_offset = math.min(0, self.wheel_stick_offset + 5)
             end
         end
         
@@ -1285,9 +1301,14 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
     local gfx = playdate.graphics
     local eq = mech_stats.equipped_parts or {}
     
-    -- 找出選中格子對應的零件ID
-    local selected_part_id_for_highlight = nil
+    print("DEBUG: selected_part_slot = " .. tostring(self.selected_part_slot))
     if self.selected_part_slot then
+        print("DEBUG: selected_part_slot.col = " .. self.selected_part_slot.col .. ", row = " .. self.selected_part_slot.row)
+    end
+    
+    -- 找出選中格子對應的零件ID（優先使用激活的零件，其次使用選中的零件）
+    local selected_part_id_for_highlight = self.active_part_id
+    if not selected_part_id_for_highlight and self.selected_part_slot then
         for _, item in ipairs(eq) do
             local slot_w = item.w or 1
             local slot_h = item.h or 1
@@ -1298,6 +1319,9 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
             end
         end
     end
+    
+    print("DEBUG: active_part_id = " .. tostring(self.active_part_id))
+    print("DEBUG: selected_part_id_for_highlight = " .. tostring(selected_part_id_for_highlight))
     
     -- 繪製控制格子和介面圖
     print("DEBUG mission: Drawing UI grid, eq has " .. #eq .. " parts")
@@ -1331,21 +1355,19 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                     print("DEBUG mission: Drawing UI for " .. found_part.id)
                     self:drawPartUI(found_part.id, cx, cy, ui_cell_size)
                 end
+                -- 零件佔用的其他格子保持空白（不繪製任何東西）
             else
-                -- 沒有零件，顯示空格
-                if self.ui_images and self.ui_images.empty then
-                    pcall(function() self.ui_images.empty:draw(cx, cy) end)
-                else
-                    gfx.setColor(gfx.kColorBlack)
-                    gfx.setLineWidth(1)
-                    gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
-                end
+                -- 沒有零件，繪製空格邊框（不使用 empty.png）
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(1)
+                gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
             end
         end
     end
     
     -- 繪製選中零件的粗外框（根據零件的 row 顯示在對應的控制介面排）
     if selected_part_id_for_highlight then
+        print("DEBUG: Drawing frame for selected part: " .. selected_part_id_for_highlight)
         for _, item in ipairs(eq) do
             if item.id == selected_part_id_for_highlight then
                 local slot_w = item.w or 1
@@ -1355,6 +1377,14 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                 local fw = slot_w * ui_cell_size
                 local fh = ui_cell_size
                 
+                print("DEBUG: Frame position - x=" .. fx .. " y=" .. fy .. " w=" .. fw .. " h=" .. fh)
+                
+                -- 繪製白色外框（確保在任何背景上都可見）
+                gfx.setColor(gfx.kColorWhite)
+                gfx.setLineWidth(5)
+                gfx.drawRect(fx, fy, fw, fh)
+                
+                -- 繪製黑色內框
                 gfx.setColor(gfx.kColorBlack)
                 gfx.setLineWidth(3)
                 gfx.drawRect(fx, fy, fw, fh)
@@ -1362,6 +1392,8 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                 break
             end
         end
+    else
+        print("DEBUG: No selected part for highlight")
     end
     
     -- 顯示激活零件資訊
@@ -1442,13 +1474,16 @@ function MechController:drawPartUI(part_id, x, y, size)
     local stick_img = ui[part_id .. "_stick"]
     if stick_img then
         if part_id == "SWORD" then
-            -- SWORD 的 stick 需要旋轉，以最左緣為轉軸
+            -- SWORD 的 stick 需要旋轉，以格子中心為軸心，角度鏡射
             local center_x = x + size / 2
             local center_y = y + size / 2
-            local rotated_img = stick_img:rotatedImage(self.sword_angle)
+            -- 鏡射角度以同步機甲上的 sword 旋轉
+            local mirrored_angle = -self.sword_angle
+            local rotated_img = stick_img:rotatedImage(mirrored_angle)
             if rotated_img then
                 local rw, rh = rotated_img:getSize()
-                pcall(function() rotated_img:draw(center_x, center_y - rh/2) end)
+                -- 以格子中心點為旋轉中心繪製
+                pcall(function() rotated_img:draw(center_x - rw/2, center_y - rh/2) end)
             end
         elseif part_id == "WHEEL" or part_id == "FEET" then
             -- WHEEL/FEET 的 stick 左右移動
