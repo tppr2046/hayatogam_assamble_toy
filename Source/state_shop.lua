@@ -11,6 +11,8 @@ local shop_selected_part_index = 1
 local cursor_on_back = false
 local shop_confirm_mode = false
 local shop_confirm_option = 1  -- 1=BUY, 2=CANCEL
+local scroll_offset = 0  -- 捲動偏移量
+local VISIBLE_ITEMS = 7  -- 畫面可顯示的零件數量
 
 function StateShop.setup()
     gfx.setFont(font)
@@ -18,6 +20,7 @@ function StateShop.setup()
     cursor_on_back = false
     shop_confirm_mode = false
     shop_confirm_option = 1
+    scroll_offset = 0
 end
 
 function StateShop.update()
@@ -74,15 +77,9 @@ function StateShop.update()
         end
     elseif cursor_on_back then
         -- 在 BACK 選項上
-        if playdate.buttonJustPressed(playdate.kButtonUp) then
+        if playdate.buttonJustPressed(playdate.kButtonLeft) then
+            -- 返回零件列表
             cursor_on_back = false
-            -- 回到零件列表最後一項
-            local all_parts = {}
-            for pid, _ in pairs(_G.PartsData or {}) do
-                table.insert(all_parts, pid)
-            end
-            table.sort(all_parts)
-            shop_selected_part_index = #all_parts
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
             -- 返回 HQ 界面
             setState(_G.StateHQ)
@@ -97,12 +94,21 @@ function StateShop.update()
         
         if playdate.buttonJustPressed(playdate.kButtonUp) then
             shop_selected_part_index = math.max(1, shop_selected_part_index - 1)
-        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            if shop_selected_part_index < #all_parts then
-                shop_selected_part_index = shop_selected_part_index + 1
-            else
-                cursor_on_back = true
+            
+            -- 向上捲動：當選擇項目小於捲動偏移時
+            if shop_selected_part_index <= scroll_offset then
+                scroll_offset = math.max(0, shop_selected_part_index - 1)
             end
+        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+            shop_selected_part_index = math.min(#all_parts, shop_selected_part_index + 1)
+            
+            -- 向下捲動：當選擇項目超出可視範圍時
+            if shop_selected_part_index > scroll_offset + VISIBLE_ITEMS then
+                scroll_offset = shop_selected_part_index - VISIBLE_ITEMS
+            end
+        elseif playdate.buttonJustPressed(playdate.kButtonRight) then
+            -- 按右鍵移到 BACK
+            cursor_on_back = true
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
             -- 進入確認購買模式（只有未擁有的零件才能購買）
             local part_id = all_parts[shop_selected_part_index]
@@ -122,14 +128,18 @@ function StateShop.draw()
     -- 繪製標題
     gfx.drawText("SHOP", 10, 10)
     
+    -- 繪製 BACK 按鈕（右上角固定）
+    local back_text = cursor_on_back and "> BACK <" or "BACK"
+    gfx.drawText(back_text, 320, 10)
+    
     -- 繪製資源顯示
     local res = _G.GameState.resources
     gfx.drawText("Steel: " .. res.steel, 10, 30)
-    gfx.drawText("Copper: " .. res.copper, 10, 45)
-    gfx.drawText("Rubber: " .. res.rubber, 10, 60)
+    gfx.drawText("Copper: " .. res.copper, 130, 30)
+    gfx.drawText("Rubber: " .. res.rubber, 260, 30)
     
-    -- 繪製零件列表
-    local shop_list_y = 85
+    -- 繪製零件列表（帶捲動）
+    local shop_list_y = 60
     local shop_line_height = 20
     local all_parts = {}
     for pid, _ in pairs(_G.PartsData or {}) do
@@ -137,7 +147,12 @@ function StateShop.draw()
     end
     table.sort(all_parts)
     
-    for i, part_id in ipairs(all_parts) do
+    -- 只繪製可視範圍內的零件
+    local start_index = scroll_offset + 1
+    local end_index = math.min(#all_parts, scroll_offset + VISIBLE_ITEMS)
+    
+    for i = start_index, end_index do
+        local part_id = all_parts[i]
         local part_data = _G.PartsData[part_id]
         local text = part_id
         local cost_text = string.format("S:%d C:%d R:%d", 
@@ -152,20 +167,26 @@ function StateShop.draw()
             cost_text = "OWNED"  -- 已擁有不能購買
         end
         
+        -- 顯示選擇標記（只在焦點不在 BACK 時）
         if i == shop_selected_part_index and not cursor_on_back then
             text = "> " .. text
         else
             text = "  " .. text
         end
         
-        gfx.drawText(text, 10, shop_list_y + (i - 1) * shop_line_height)
-        gfx.drawText(cost_text, 150, shop_list_y + (i - 1) * shop_line_height)
+        -- 計算繪製位置（相對於捲動偏移）
+        local display_index = i - scroll_offset
+        gfx.drawText(text, 10, shop_list_y + (display_index - 1) * shop_line_height)
+        gfx.drawText(cost_text, 150, shop_list_y + (display_index - 1) * shop_line_height)
     end
     
-    -- 繪製 BACK 選項
-    local back_y = shop_list_y + #all_parts * shop_line_height + 10
-    local back_text = cursor_on_back and "> BACK <" or "  BACK"
-    gfx.drawText(back_text, 10, back_y)
+    -- 繪製捲動提示（如果清單超出畫面）
+    if scroll_offset > 0 then
+        gfx.drawText("^ More above", 10, shop_list_y - 15)
+    end
+    if end_index < #all_parts then
+        gfx.drawText("v More below", 10, shop_list_y + VISIBLE_ITEMS * shop_line_height + 5)
+    end
     
     -- 繪製確認購買對話框
     if shop_confirm_mode then
@@ -180,6 +201,11 @@ function StateShop.draw()
         gfx.setColor(gfx.kColorBlack)
         gfx.drawRect(dialog_x, dialog_y, dialog_w, dialog_h)
         
+        local all_parts = {}
+        for pid, _ in pairs(_G.PartsData or {}) do
+            table.insert(all_parts, pid)
+        end
+        table.sort(all_parts)
         local part_id = all_parts[shop_selected_part_index]
         gfx.drawText("Buy " .. part_id .. "?", dialog_x + 10, dialog_y + 10)
         
@@ -190,7 +216,7 @@ function StateShop.draw()
     end
     
     -- 提示文字
-    gfx.drawText("A: Select  B: Cancel", 10, 220)
+    gfx.drawText("Up/Down: Move  Right: BACK  A: Select", 10, 220)
 end
 
 return StateShop
