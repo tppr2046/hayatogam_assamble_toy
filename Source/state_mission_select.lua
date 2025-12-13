@@ -62,6 +62,11 @@ end
 function StateMissionSelect:update()
     -- A 鍵：選擇任務，進入 HQ
     if playdate.buttonJustPressed(playdate.kButtonA) then
+        -- 播放選擇音效
+        if _G.SoundManager and _G.SoundManager.playSelect then
+            _G.SoundManager.playSelect()
+        end
+        
         if #mission_list > 0 then
             local selected_mission_id = mission_list[selected_index]
             print("Selected mission: " .. selected_mission_id)
@@ -82,6 +87,11 @@ function StateMissionSelect:update()
             selected_index = #mission_list
         end
         scroll_offset = math.max(0, selected_index - 3)
+        
+        -- 播放游標移動音效
+        if _G.SoundManager and _G.SoundManager.playCursorMove then
+            _G.SoundManager.playCursorMove()
+        end
     end
     
     if playdate.buttonJustPressed(playdate.kButtonDown) then
@@ -90,6 +100,11 @@ function StateMissionSelect:update()
             selected_index = 1
         end
         scroll_offset = math.max(0, selected_index - 3)
+        
+        -- 播放游標移動音效
+        if _G.SoundManager and _G.SoundManager.playCursorMove then
+            _G.SoundManager.playCursorMove()
+        end
     end
 end
 

@@ -1461,7 +1461,6 @@ function MechController:drawPartUI(part_id, x, y, size)
     -- 繪製 ui_panel（底圖）
     local panel_key = part_id .. "_panel"
     local panel_img = ui[panel_key]
-    print("DEBUG drawPartUI: part_id=" .. part_id .. ", panel_key=" .. panel_key .. ", panel_img=" .. tostring(panel_img))
     if panel_img then
         -- 根據零件類型決定是否旋轉
         if part_id == "CANON" then

@@ -397,8 +397,16 @@ function StateHQ.update()
             else
                 unequip_selected_col = math.max(1, unequip_selected_col - 1)
             end
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonRight) then
             unequip_selected_col = math.min(GRID_COLS, unequip_selected_col + 1)
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonUp) then
             -- 從下排跳到上排的零件
             for _, item in ipairs(eq) do
@@ -408,6 +416,10 @@ function StateHQ.update()
                     break
                 end
             end
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
             -- 從上排跳到下排的零件
             for _, item in ipairs(eq) do
@@ -416,6 +428,10 @@ function StateHQ.update()
                     unequip_selected_row = item.row
                     break
                 end
+            end
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
             end
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
             -- 解除選中格子上的零件
@@ -448,6 +464,10 @@ function StateHQ.update()
                     end
                     
                     print("Unequipped part: " .. item.id)
+                    -- 播放選擇音效
+                    if _G.SoundManager and _G.SoundManager.playSelect then
+                        _G.SoundManager.playSelect()
+                    end
                     break
                 end
             end
@@ -463,12 +483,28 @@ function StateHQ.update()
             -- 零件放置中：移動網格游標
             if playdate.buttonJustPressed(playdate.kButtonLeft) then
                 cursor_col = math.max(1, cursor_col - 1)
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
                 cursor_col = math.min(GRID_COLS, cursor_col + 1)
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonUp) then
                 cursor_row = math.min(GRID_ROWS, cursor_row + 1)
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                 cursor_row = math.max(1, cursor_row - 1)
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 嘗試放置
                 if selected_category then
@@ -497,6 +533,10 @@ function StateHQ.update()
                         if _G.SaveManager and _G.SaveManager.saveCurrent then
                             _G.SaveManager.saveCurrent()
                             print("LOG: Mech configuration auto-saved.")
+                        end
+                        -- 播放選擇音效
+                        if _G.SoundManager and _G.SoundManager.playSelect then
+                            _G.SoundManager.playSelect()
                         end
                         
                         is_placing_part = false
@@ -583,10 +623,18 @@ function StateHQ.update()
                 print("DEBUG: BACK - Up pressed")
                 cursor_on_back = false
                 cursor_on_ready = true
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 返回任務選擇畫面
                 print("DEBUG: BACK - A pressed, returning to mission select")
                 print("DEBUG: _G.StateMissionSelect = " .. tostring(_G.StateMissionSelect))
+                -- 播放選擇音效
+                if _G.SoundManager and _G.SoundManager.playSelect then
+                    _G.SoundManager.playSelect()
+                end
                 setState(_G.StateMissionSelect)
             end
         elseif cursor_on_ready then
@@ -595,9 +643,21 @@ function StateHQ.update()
                 -- READY 選單打開
                 if playdate.buttonJustPressed(playdate.kButtonDown) then
                     menu_option_index = math.min(2, menu_option_index + 1)
+                    -- 播放游標移動音效
+                    if _G.SoundManager and _G.SoundManager.playCursorMove then
+                        _G.SoundManager.playCursorMove()
+                    end
                 elseif playdate.buttonJustPressed(playdate.kButtonUp) then
                     menu_option_index = math.max(1, menu_option_index - 1)
+                    -- 播放游標移動音效
+                    if _G.SoundManager and _G.SoundManager.playCursorMove then
+                        _G.SoundManager.playCursorMove()
+                    end
                 elseif playdate.buttonJustPressed(playdate.kButtonA) then
+                    -- 播放選擇音效
+                    if _G.SoundManager and _G.SoundManager.playSelect then
+                        _G.SoundManager.playSelect()
+                    end
                     if menu_option_index == 1 then
                         -- Start Mission
                         -- 使用從任務選擇畫面設置的任務 ID
@@ -622,15 +682,27 @@ function StateHQ.update()
                 if playdate.buttonJustPressed(playdate.kButtonUp) then
                     cursor_on_ready = false
                     cursor_on_shop = true  -- 回到 SHOP
+                    -- 播放游標移動音效
+                    if _G.SoundManager and _G.SoundManager.playCursorMove then
+                        _G.SoundManager.playCursorMove()
+                    end
                 elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                     -- 從 READY 移動到 BACK
                     print("DEBUG: Moving from READY to BACK")
                     cursor_on_ready = false
                     cursor_on_back = true
                     print("DEBUG: cursor_on_back set to true")
+                    -- 播放游標移動音效
+                    if _G.SoundManager and _G.SoundManager.playCursorMove then
+                        _G.SoundManager.playCursorMove()
+                    end
                 elseif playdate.buttonJustPressed(playdate.kButtonA) then
                     show_ready_menu = true
                     menu_option_index = 1
+                    -- 播放選擇音效
+                    if _G.SoundManager and _G.SoundManager.playSelect then
+                        _G.SoundManager.playSelect()
+                    end
                 end
             end
         elseif not selected_category then
@@ -645,6 +717,10 @@ function StateHQ.update()
                 else
                     selected_part_index = (selected_part_index == 1) and 2 or 1
                 end
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                 if selected_part_index == 2 then
                     cursor_on_shop = true
@@ -656,13 +732,25 @@ function StateHQ.update()
                 else
                     selected_part_index = 2
                 end
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 if cursor_on_shop then
                     -- 進入商店狀態
+                    -- 播放選擇音效
+                    if _G.SoundManager and _G.SoundManager.playSelect then
+                        _G.SoundManager.playSelect()
+                    end
                     setState(_G.StateShop)
                 elseif not cursor_on_ready then
                     selected_category = (selected_part_index == 1) and "TOP" or "BOTTOM"
                     selected_part_index = 1
+                    -- 播放選擇音效
+                    if _G.SoundManager and _G.SoundManager.playSelect then
+                        _G.SoundManager.playSelect()
+                    end
                 end
             end
         else
@@ -689,6 +777,10 @@ function StateHQ.update()
                     end
                     new_index = new_index - 1
                 end
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                 -- 向下移動，跳過已安裝的零件
                 local new_index = selected_part_index + 1
@@ -712,6 +804,10 @@ function StateHQ.update()
                 if new_index > parts_count then
                     cursor_on_ready = true
                     last_part_index = selected_part_index
+                end
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
                 -- 按右鍵進入解除裝備模式
@@ -751,6 +847,10 @@ function StateHQ.update()
                     cursor_col = empty_col
                     cursor_row = empty_row
                     is_placing_part = true
+                    -- 播放選擇音效
+                    if _G.SoundManager and _G.SoundManager.playSelect then
+                        _G.SoundManager.playSelect()
+                    end
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
                 selected_category = nil
@@ -762,16 +862,36 @@ function StateHQ.update()
         -- 拆卸模式
         if playdate.buttonJustPressed(playdate.kButtonLeft) then
             cursor_col = math.max(1, cursor_col - 1)
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonRight) then
             cursor_col = math.min(GRID_COLS, cursor_col + 1)
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonUp) then
             cursor_row = math.min(GRID_ROWS, cursor_row + 1)
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
             cursor_row = math.max(1, cursor_row - 1)
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
             local idx, item = findEquippedPartAt(cursor_col, cursor_row)
             if idx and item then
                 removeEquippedPart(idx)
+                -- 播放選擇音效
+                if _G.SoundManager and _G.SoundManager.playSelect then
+                    _G.SoundManager.playSelect()
+                end
             end
         elseif playdate.buttonJustPressed(playdate.kButtonB) then
             hq_mode = "EQUIP"

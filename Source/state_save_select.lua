@@ -58,7 +58,15 @@ function StateSaveSelect.update()
         if playdate.buttonJustPressed(playdate.kButtonLeft) or playdate.buttonJustPressed(playdate.kButtonRight) then
             -- 切換選項（OVERWRITE / CANCEL）
             confirm_choice = (confirm_choice == 1) and 2 or 1
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- 播放選擇音效
+            if _G.SoundManager and _G.SoundManager.playSelect then
+                _G.SoundManager.playSelect()
+            end
             if confirm_choice == 1 then
                 -- OVERWRITE：刪除舊存檔，創建新存檔並開始遊戲
                 local SaveManager = _G.SaveManager
@@ -84,12 +92,24 @@ function StateSaveSelect.update()
             if selected_slot < 1 then
                 selected_slot = SAVE_SLOTS
             end
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
             selected_slot = selected_slot + 1
             if selected_slot > SAVE_SLOTS then
                 selected_slot = 1
             end
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- 播放選擇音效
+            if _G.SoundManager and _G.SoundManager.playSelect then
+                _G.SoundManager.playSelect()
+            end
             -- 按 A 確認選擇
             local SaveManager = _G.SaveManager
             local slot_exists = save_info[selected_slot].exists
