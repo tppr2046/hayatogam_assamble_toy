@@ -26,6 +26,7 @@ function MechController:init()
         -- CANON 相關
         canon_angle = 0,
         canon_fire_timer = 0,
+        canon_button_pressed = false,  -- 按鈕是否按下
         
         -- GUN 相關
         gun_fire_timer = 0,
@@ -102,6 +103,26 @@ function MechController:init()
                 end
             end
         end
+    end
+    
+    -- 載入 CANON 專用的 control 圖片
+    local ok_control, control_img = pcall(function()
+        return playdate.graphics.image.new("images/canon_control")
+    end)
+    if ok_control and control_img then
+        mc.ui_images.canon_control = control_img
+    else
+        print("WARNING: Failed to load canon_control.png")
+    end
+    
+    -- 載入 CANON 專用的 button 圖片表
+    local ok_button, button_table = pcall(function()
+        return playdate.graphics.imagetable.new("images/canon_button")
+    end)
+    if ok_button and button_table then
+        mc.ui_images.canon_button = button_table
+    else
+        print("WARNING: Failed to load canon_button.pdt")
     end
     
     return mc
@@ -227,7 +248,9 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             end
         end
         
+        -- 追蹤 A 按鈕狀態（用於顯示按鈕 UI）
         if playdate.buttonJustPressed(playdate.kButtonA) then
+            self.canon_button_pressed = true
             if pdata and self.canon_fire_timer >= (pdata.fire_cooldown or 0.5) then
                 local eq = _G.GameState.mech_stats.equipped_parts or {}
                 for _, item in ipairs(eq) do
@@ -253,6 +276,8 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                     end
                 end
             end
+        elseif playdate.buttonJustReleased(playdate.kButtonA) then
+            self.canon_button_pressed = false
         end
     elseif self.active_part_id == "FEET" then
         -- FEET：左右移動 + 跳躍
@@ -1371,11 +1396,34 @@ function MechController:drawPartUI(part_id, x, y, size)
     if panel_img then
         -- 根據零件類型決定是否旋轉
         if part_id == "CANON" then
-            -- CANON 的 panel 需要旋轉，左對齊
-            local rotated_img = panel_img:rotatedImage(self.canon_angle)
-            if rotated_img then
-                local rw, rh = rotated_img:getSize()
-                pcall(function() rotated_img:draw(x, y + (size - rh)/2) end)
+            -- CANON 的 panel 不旋轉，直接繪製
+            pcall(function() panel_img:draw(x, y) end)
+            
+            -- 繪製 canon_control（隨 crank 角度旋轉）
+            local control_img = ui.canon_control
+            if control_img then
+                local crank_angle = playdate.getCrankPosition()
+                local rotated_control = control_img:rotatedImage(crank_angle)
+                if rotated_control then
+                    local rw, rh = rotated_control:getSize()
+                    -- 左對齊，垂直居中
+                    pcall(function() rotated_control:draw(x, y + (size - rh)/2) end)
+                end
+            end
+            
+            -- 繪製 canon_button（根據按鈕狀態顯示不同 sprite）
+            local button_table = ui.canon_button
+            if button_table then
+                -- sprite 1（左邊）= 未按下，sprite 2（右邊）= 按下
+                local sprite_index = self.canon_button_pressed and 2 or 1
+                local button_img = button_table:getImage(sprite_index)
+                if button_img then
+                    -- 獲取 panel 和 button 的寬度，將 button 對齊 panel 右邊
+                    local panel_w, panel_h = panel_img:getSize()
+                    local button_w, button_h = button_img:getSize()
+                    local button_x = x + panel_w - button_w
+                    pcall(function() button_img:draw(button_x, y) end)
+                end
             end
         elseif part_id == "CLAW" then
             -- CLAW 的 panel 需要旋轉（使用臂角度），左對齊
