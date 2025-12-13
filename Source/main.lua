@@ -16,13 +16,17 @@ _G.GameState.mech_stats = _G.GameState.mech_stats or {
     total_weight = 0,
     equipped_parts = {}
 }
+-- 初始化玩家資源（steel, copper, rubber）
+_G.GameState.resources = _G.GameState.resources or {
+    steel = 100,   -- 鋼鐵
+    copper = 100,  -- 銅
+    rubber = 100   -- 橡膠
+}
 -- 初始化擁有的零件（初始給予基本零件）
 _G.GameState.owned_parts = _G.GameState.owned_parts or {
     GUN = true,
-    CLAW = true,
     SWORD = true,
     WHEEL1 = true,
-    WHEEL2 = true,
     CANON = true
 }
 -- ❗ 假設 PartsData 存在
@@ -50,6 +54,7 @@ _G.StateSaveSelect = import "state_save_select"
 _G.StateMissionSelect = import "state_mission_select"
 print("DEBUG main.lua: StateMissionSelect loaded = " .. tostring(_G.StateMissionSelect ~= nil))
 _G.StateHQ = import "state_hq"
+_G.StateShop = import "state_shop"
 _G.StateMission = import "state_mission"
 _G.StateResult = import "state_result"
 

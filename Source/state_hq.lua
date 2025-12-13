@@ -41,7 +41,9 @@ local UI_START_Y = GAME_HEIGHT + 5
 local GRID_MAP = {}       
 local cursor_col = 1      
 local cursor_row = 1      
-local cursor_on_ready = false  -- 游標是否在 READY 選項上local cursor_on_back = false   -- 遊標是否在 BACK 選項上
+local cursor_on_ready = false  -- 游標是否在 READY 選項上
+local cursor_on_shop = false   -- 游標是否在 SHOP 選項上
+local cursor_on_back = false   -- 遊標是否在 BACK 選項上
 local is_unequip_mode = false  -- 是否在解除裝備模式
 local unequip_selected_col = 1  -- 解除模式選中的格子列
 local unequip_selected_row = 1  -- 解除模式選中的格子排
@@ -292,6 +294,7 @@ function StateHQ.setup()
     hq_mode = "EQUIP" -- 確保從組裝模式開始
     selected_category = nil  -- 重置分類選擇
     cursor_on_ready = false
+    cursor_on_shop = false
     cursor_on_back = false
     show_ready_menu = false
 
@@ -611,10 +614,7 @@ function StateHQ.update()
                 -- 選單未打開
                 if playdate.buttonJustPressed(playdate.kButtonUp) then
                     cursor_on_ready = false
-                    -- 回到最後選中的零件（使用儲存的 last_part_index）
-                    if last_part_index then
-                        selected_part_index = last_part_index
-                    end
+                    cursor_on_shop = true  -- 回到 SHOP
                 elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                     -- 從 READY 移動到 BACK
                     print("DEBUG: Moving from READY to BACK")
@@ -627,24 +627,36 @@ function StateHQ.update()
                 end
             end
         elseif not selected_category then
-            -- 選擇分類
+            -- 選擇分類或導航到 SHOP/READY
             if playdate.buttonJustPressed(playdate.kButtonUp) then
-                if cursor_on_ready then
+                if cursor_on_shop then
+                    cursor_on_shop = false
+                    selected_part_index = last_part_index or 2  -- 回到 BOTTOM PARTS
+                elseif cursor_on_ready then
                     cursor_on_ready = false
-                    selected_part_index = 2  -- 回到最後一個分類
+                    cursor_on_shop = true  -- 從 READY 向上到 SHOP
                 else
                     selected_part_index = (selected_part_index == 1) and 2 or 1
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
                 if selected_part_index == 2 then
-                    cursor_on_ready = true
+                    cursor_on_shop = true
+                    selected_part_index = 0  -- 清除零件選取狀態
                     last_part_index = 2  -- 記住最後位置
+                elseif cursor_on_shop then
+                    cursor_on_shop = false
+                    cursor_on_ready = true  -- 從 SHOP 向下到 READY
                 else
                     selected_part_index = 2
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                selected_category = (selected_part_index == 1) and "TOP" or "BOTTOM"
-                selected_part_index = 1
+                if cursor_on_shop then
+                    -- 進入商店狀態
+                    setState(_G.StateShop)
+                elseif not cursor_on_ready then
+                    selected_category = (selected_part_index == 1) and "TOP" or "BOTTOM"
+                    selected_part_index = 1
+                end
             end
         else
             -- 已選分類，選擇零件或移動到 READY
@@ -909,37 +921,42 @@ function StateHQ.draw()
             end
             gfx.drawText(text, 10, list_y + (i - 1) * line_height)
         end
+        
+        -- 繪製 SHOP 選項
+        local shop_y = list_y + 2 * line_height
+        local shop_text = cursor_on_shop and "> SHOP <" or "  SHOP"
+        gfx.drawText(shop_text, 10, shop_y)
     else
         -- 顯示選中分類的零件
-        gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
-        local parts_list = _G.GameState.parts_by_category[selected_category]
-        for i, part_id in ipairs(parts_list) do
-            -- 檢查是否已安裝
-            local is_equipped = false
-            local eq = _G.GameState.mech_stats.equipped_parts or {}
-            for _, item in ipairs(eq) do
-                if item.id == part_id then
-                    is_equipped = true
-                    break
+            gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
+            local parts_list = _G.GameState.parts_by_category[selected_category]
+            for i, part_id in ipairs(parts_list) do
+                -- 檢查是否已安裝
+                local is_equipped = false
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    if item.id == part_id then
+                        is_equipped = true
+                        break
+                    end
+                end
+                
+                local text = part_id
+                if i == selected_part_index and not cursor_on_ready then
+                    text = "> " .. text .. " <"
+                end
+                
+                local text_x = 10
+                local text_y = list_y + (i - 1) * line_height
+                gfx.drawText(text, text_x, text_y)
+                
+                -- 如果已安裝，繪製刪除線
+                if is_equipped then
+                    local text_width = gfx.getTextSize(text)
+                    gfx.setColor(gfx.kColorBlack)
+                    gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
                 end
             end
-            
-            local text = part_id
-            if i == selected_part_index and not cursor_on_ready then
-                text = "> " .. text .. " <"
-            end
-            
-            local text_x = 10
-            local text_y = list_y + (i - 1) * line_height
-            gfx.drawText(text, text_x, text_y)
-            
-            -- 如果已安裝，繪製刪除線
-            if is_equipped then
-                local text_width = gfx.getTextSize(text)
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
-            end
-        end
     end
     
     -- 5. 繪製零件詳細資訊 / 狀態 (右側)
@@ -1157,7 +1174,7 @@ function StateHQ.draw()
     gfx.drawText("Weight: " .. stats.total_weight, detail_x, detail_y + 40)
     
     -- 7. 繪製 READY 選項（置中在組裝格下方）
-    local ready_y = GRID_START_Y + GRID_ROWS * GRID_CELL_SIZE + 10
+    local ready_y = GRID_START_Y + GRID_ROWS * GRID_CELL_SIZE + 30
     local ready_text = "READY"
     if cursor_on_ready then
         ready_text = "> " .. ready_text .. " <"

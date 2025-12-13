@@ -38,8 +38,10 @@ local missions = {
             delivery_zone = nil  -- { x = 600, y = 200, width = 40, height = 40 }
         },
         
-        reward_money = 50,
-        reward_part_id = "CLAW"
+        -- 任務獎勵（資源）
+        reward_steel = 30,
+        reward_copper = 20,
+        reward_rubber = 15
     }
 }
 

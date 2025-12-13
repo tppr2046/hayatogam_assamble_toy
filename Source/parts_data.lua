@@ -11,6 +11,10 @@ local parts_data = {
         attack = 5,  -- 攻擊力
         slot_x = 1,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 30,
+        cost_copper = 10,
+        cost_rubber = 5,
             color = gfx.kColorBlack,
             image = "images/gun.png",
         -- placement_row: "TOP", "BOTTOM", or "BOTH"
@@ -31,6 +35,10 @@ local parts_data = {
         weight = 4,
         slot_x = 3,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 20,
+        cost_copper = 5,
+        cost_rubber = 30,
             color = gfx.kColorBlack,
             image = "images/wheel.png",
             placement_row = "BOTTOM",
@@ -47,6 +55,10 @@ local parts_data = {
         weight = 4,
         slot_x = 3,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 20,
+        cost_copper = 5,
+        cost_rubber = 30,
             color = gfx.kColorBlack,
             image = "images/wheel2.png",
             placement_row = "BOTTOM",
@@ -64,6 +76,10 @@ local parts_data = {
         weight = 10,
         slot_x = 2,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 50,
+        cost_copper = 30,
+        cost_rubber = 10,
             color = gfx.kColorBlack,
             image = "images/canon.png",
             placement_row = "TOP",
@@ -88,6 +104,10 @@ local parts_data = {
         attack = 3,  -- 攻擊力
         slot_x = 1,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 40,
+        cost_copper = 15,
+        cost_rubber = 5,
             color = gfx.kColorBlack,
             image = "images/sword.png",
             placement_row = "TOP",
@@ -103,6 +123,10 @@ local parts_data = {
         weight = 7,
         slot_x = 3,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 25,
+        cost_copper = 10,
+        cost_rubber = 35,
             color = gfx.kColorBlack,
             image = "images/feet.png",
             placement_row = "BOTTOM",
@@ -122,6 +146,10 @@ local parts_data = {
         weight = 8,
         slot_x = 1,
         slot_y = 1,
+        -- 購買成本
+        cost_steel = 35,
+        cost_copper = 25,
+        cost_rubber = 20,
         color = gfx.kColorBlack,
         image = "images/claw_base.png",  -- 主圖片為底座
         placement_row = "TOP",
