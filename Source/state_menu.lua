@@ -31,15 +31,28 @@ function StateMenu.update()
         if selected_index < 1 then
             selected_index = #menu_options
         end
+        -- 播放游標移動音效
+        if _G.SoundManager and _G.SoundManager.playCursorMove then
+            _G.SoundManager.playCursorMove()
+        end
     elseif playdate.buttonJustPressed(playdate.kButtonDown) then
         selected_index = selected_index + 1
         if selected_index > #menu_options then
             selected_index = 1
         end
+        -- 播放游標移動音效
+        if _G.SoundManager and _G.SoundManager.playCursorMove then
+            _G.SoundManager.playCursorMove()
+        end
     end
     
     -- 處理 A 鍵確認
     if playdate.buttonJustPressed(playdate.kButtonA) then
+        -- 播放選擇確認音效
+        if _G.SoundManager and _G.SoundManager.playSelect then
+            _G.SoundManager.playSelect()
+        end
+        
         local selection = menu_options[selected_index]
         if selection == "NEW GAME" then
             -- NEW GAME: 進入存檔選擇畫面（模式為創建新遊戲）

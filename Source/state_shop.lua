@@ -80,7 +80,17 @@ function StateShop.update()
         if playdate.buttonJustPressed(playdate.kButtonLeft) then
             -- 返回零件列表
             cursor_on_back = false
+            
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- 播放選擇音效
+            if _G.SoundManager and _G.SoundManager.playSelect then
+                _G.SoundManager.playSelect()
+            end
+            
             -- 返回 HQ 界面
             setState(_G.StateHQ)
         end
@@ -99,6 +109,11 @@ function StateShop.update()
             if shop_selected_part_index <= scroll_offset then
                 scroll_offset = math.max(0, shop_selected_part_index - 1)
             end
+            
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonDown) then
             shop_selected_part_index = math.min(#all_parts, shop_selected_part_index + 1)
             
@@ -106,10 +121,25 @@ function StateShop.update()
             if shop_selected_part_index > scroll_offset + VISIBLE_ITEMS then
                 scroll_offset = shop_selected_part_index - VISIBLE_ITEMS
             end
+            
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonRight) then
             -- 按右鍵移到 BACK
             cursor_on_back = true
+            
+            -- 播放游標移動音效
+            if _G.SoundManager and _G.SoundManager.playCursorMove then
+                _G.SoundManager.playCursorMove()
+            end
         elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- 播放選擇音效
+            if _G.SoundManager and _G.SoundManager.playSelect then
+                _G.SoundManager.playSelect()
+            end
+            
             -- 進入確認購買模式（只有未擁有的零件才能購買）
             local part_id = all_parts[shop_selected_part_index]
             if not _G.GameState.owned_parts[part_id] then

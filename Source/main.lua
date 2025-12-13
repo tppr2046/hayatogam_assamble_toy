@@ -16,6 +16,10 @@ _G.GameState = _G.GameState or {}
 local sm = import "save_manager"
 _G.SaveManager = sm or {}
 
+-- 載入音效管理模組
+local sound = import "sound_manager"
+_G.SoundManager = sound or {}
+
 -- 讀取零件資料模組（若不存在則回退為空表）
 local pd = import "parts_data"
 _G.PartsData = pd or _G.PartsData or {}
@@ -102,6 +106,12 @@ function playdate.setup()
     if _G.SaveManager and _G.SaveManager.init then
         _G.SaveManager.init()
         print("LOG: SaveManager initialized.")
+    end
+    
+    -- 初始化音效系統
+    if _G.SoundManager and _G.SoundManager.init then
+        _G.SoundManager.init()
+        print("LOG: SoundManager initialized.")
     end
     
     -- 初始化第一個狀態 (Menu)

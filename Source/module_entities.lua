@@ -859,6 +859,11 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         enemy.hp = enemy.hp - p.damage
                         p.active = false -- 砲彈銷毀
                         
+                        -- 播放擊中音效
+                        if _G.SoundManager and _G.SoundManager.playHit then
+                            _G.SoundManager.playHit()
+                        end
+                        
                         -- 敵人受擊震動
                         enemy.hit_shake_timer = 0.3
                         enemy.hit_shake_offset_x = 0
@@ -892,6 +897,11 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     enemy.hp = enemy.hp - stone.damage
                     enemy.hit_shake_timer = 0.3
                     enemy.hit_shake_offset_x = 0
+                    
+                    -- 播放擊中音效
+                    if _G.SoundManager and _G.SoundManager.playHit then
+                        _G.SoundManager.playHit()
+                    end
                     
                     print("LOG: Stone hit enemy! HP=" .. math.floor(enemy.hp))
                     
@@ -944,6 +954,11 @@ function EntityController:checkWeaponCollision(weapon_parts)
                     local attack = weapon.attack or 0
                     enemy.hp = enemy.hp - attack
                     damage_dealt = damage_dealt + attack
+                    
+                    -- 播放擊中音效
+                    if _G.SoundManager and _G.SoundManager.playHit then
+                        _G.SoundManager.playHit()
+                    end
                     
                     -- 調試輸出：顯示被攻擊敵人的 HP
                     print("LOG: Enemy hit! Type=" .. (enemy.type_id or "unknown") .. ", HP=" .. math.floor(enemy.hp) .. "/" .. (EnemyData[enemy.type_id] and EnemyData[enemy.type_id].hp or "?") .. ", Damage=" .. attack)
