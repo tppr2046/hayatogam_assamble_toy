@@ -921,4 +921,322 @@ local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_
 end
 EntityController.checkCollision = checkCollision
 
+-- [[ ========================================== ]]
+-- [[  MechRenderer (機甲繪製) ]]
+-- [[ ========================================== ]]
+
+function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state, feet_imagetable, feet_current_frame)
+    local gfx = playdate.graphics
+    local draw_x = mech_x - camera_x + self.hit_shake_offset
+    
+    -- 獲取已裝備零件列表
+    local eq = game_state.mech_stats.equipped_parts or {}
+    if #eq == 0 then return end
+    
+    -- 計算 FEET 的額外高度
+    local feet_extra_height = 0
+    for _, item in ipairs(eq) do
+        if item.id == "FEET" then
+            local feet_data = _G.PartsData and _G.PartsData["FEET"]
+            if feet_data and feet_data._img then
+                local ok, iw, ih = pcall(function() return feet_data._img:getSize() end)
+                if ok and iw and ih then
+                    local cell_size = mech_grid and mech_grid.cell_size or 16
+                    feet_extra_height = ih - cell_size
+                    if feet_extra_height < 0 then feet_extra_height = 0 end
+                end
+            end
+            break
+        end
+    end
+    
+    local body_draw_y = mech_y
+    
+    -- 第一階段：繪製下排零件（row = 1）
+    for _, item in ipairs(eq) do
+        local has_special_render = (item.id == "SWORD" or item.id == "CANON" or item.id == "FEET" or item.id == "CLAW")
+        local should_skip = has_special_render and (item.id == self.active_part_id)
+        if not should_skip and item.row == 1 then
+            self:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
+        end
+    end
+    
+    -- 第二階段：繪製上排零件（row = 2）
+    for _, item in ipairs(eq) do
+        local has_special_render = (item.id == "SWORD" or item.id == "CANON" or item.id == "FEET" or item.id == "CLAW")
+        local should_skip = has_special_render and (item.id == self.active_part_id)
+        if not should_skip and item.row == 2 then
+            self:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
+        end
+    end
+    
+    -- 繪製激活的零件（覆蓋在上層）
+    if self.active_part_id then
+        for _, item in ipairs(eq) do
+            if item.id == self.active_part_id then
+                self:drawActivePart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
+                break
+            end
+        end
+    end
+end
+
+function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
+    local gfx = playdate.graphics
+    local pdata = _G.PartsData and _G.PartsData[item.id]
+    if not pdata or not pdata._img then return end
+    
+    local cell_size = mech_grid.cell_size
+    local px = draw_x + (item.col - 1) * cell_size
+    local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
+    local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+    if not ok or not iw or not ih then return end
+    
+    local part_y
+    if pdata.align_image_top then
+        part_y = py_top
+    else
+        local offset_y = pdata.image_offset_y or 0
+        part_y = py_top + (cell_size - ih) + offset_y
+    end
+    
+    -- 特殊處理 FEET 動畫
+    if item.id == "FEET" and feet_imagetable and self.feet_is_moving then
+        local frame_image = feet_imagetable:getImage(feet_current_frame)
+        if frame_image then
+            pcall(function() frame_image:draw(px, part_y) end)
+        end
+    -- 特殊處理 CLAW（繪製底座 + 臂 + 爪子）
+    elseif item.id == "CLAW" then
+        self:drawClaw(px, part_y, iw, ih, pdata)
+    else
+        -- 使用靜態圖片
+        pcall(function() pdata._img:draw(px, part_y) end)
+    end
+end
+
+function MechController:drawClaw(px, part_y, iw, ih, pdata)
+    local gfx = playdate.graphics
+    -- 繪製底座
+    pcall(function() pdata._img:draw(px, part_y) end)
+    
+    -- 計算底座中心點
+    local pivot_x = px + iw / 2
+    local pivot_y = part_y + ih / 2
+    
+    -- 繪製臂和爪子
+    if pdata._arm_img then
+        local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+        if arm_ok and arm_w and arm_h then
+            local angle_rad = math.rad(-self.claw_arm_angle)
+            local cos_a = math.cos(angle_rad)
+            local sin_a = math.sin(angle_rad)
+            local arm_center_offset_x = arm_w / 2
+            local rotated_dx = arm_center_offset_x * cos_a
+            local rotated_dy = arm_center_offset_x * sin_a
+            local arm_center_x = pivot_x + rotated_dx
+            local arm_center_y = pivot_y + rotated_dy
+            
+            pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -self.claw_arm_angle) end)
+            
+            -- 計算臂末端位置（爪子軸心）
+            local arm_end_rotated_dx = arm_w * cos_a
+            local arm_end_rotated_dy = arm_w * sin_a
+            local claw_pivot_x = pivot_x + arm_end_rotated_dx
+            local claw_pivot_y = pivot_y + arm_end_rotated_dy
+            
+            -- 繪製上爪
+            if pdata._upper_img then
+                local total_angle = -self.claw_arm_angle - self.claw_grip_angle
+                pcall(function() pdata._upper_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+            end
+            
+            -- 繪製下爪
+            if pdata._lower_img then
+                local total_angle = -self.claw_arm_angle + self.claw_grip_angle
+                pcall(function() pdata._lower_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+            end
+        end
+    end
+end
+
+function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame)
+    local gfx = playdate.graphics
+    local pdata = _G.PartsData and _G.PartsData[item.id]
+    if not pdata or not pdata._img then return end
+    
+    local cell_size = mech_grid.cell_size
+    
+    if item.id == "SWORD" then
+        -- 計算 SWORD 位置
+        local sx = (item.col - 1) * cell_size
+        local sy = (mech_grid.rows - item.row) * cell_size
+        local pivot_x = draw_x + sx + cell_size / 2
+        local pivot_y = body_draw_y + sy + cell_size / 2
+        
+        gfx.pushContext()
+        local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+        if ok and iw and ih then
+            local original_x = draw_x + sx
+            local original_y = body_draw_y + sy + cell_size - ih
+            local img_center_x = original_x + iw / 2
+            local img_center_y = original_y + ih / 2
+            local dx_from_pivot = img_center_x - pivot_x
+            local dy_from_pivot = img_center_y - pivot_y
+            local angle_rad = math.rad(-self.sword_angle)
+            local cos_a = math.cos(angle_rad)
+            local sin_a = math.sin(angle_rad)
+            local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
+            local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
+            local new_center_x = pivot_x + rotated_dx
+            local new_center_y = pivot_y + rotated_dy
+            pdata._img:drawRotated(new_center_x, new_center_y, -self.sword_angle)
+        end
+        gfx.popContext()
+        
+    elseif item.id == "CANON" then
+        -- 計算 CANON 位置
+        local cx = (item.col - 1) * cell_size
+        local cy = (mech_grid.rows - item.row) * cell_size
+        local pivot_x = draw_x + cx + cell_size / 2
+        local pivot_y = body_draw_y + cy + cell_size / 2
+        
+        gfx.pushContext()
+        local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+        if ok and iw and ih then
+            local original_x = draw_x + cx
+            local original_y = body_draw_y + cy + cell_size - ih
+            local img_center_x = original_x + iw / 2
+            local img_center_y = original_y + ih / 2
+            local dx_from_pivot = img_center_x - pivot_x
+            local dy_from_pivot = img_center_y - pivot_y
+            local angle_rad = math.rad(-self.canon_angle)
+            local cos_a = math.cos(angle_rad)
+            local sin_a = math.sin(angle_rad)
+            local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
+            local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
+            local new_center_x = pivot_x + rotated_dx
+            local new_center_y = pivot_y + rotated_dy
+            pdata._img:drawRotated(new_center_x, new_center_y, -self.canon_angle)
+        end
+        gfx.popContext()
+        
+    elseif item.id == "FEET" then
+        -- 繪製 FEET
+        local px = draw_x + (item.col - 1) * cell_size
+        local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
+        local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+        if ok and iw and ih then
+            local part_y
+            if pdata.align_image_top then
+                part_y = py_top
+            else
+                local offset_y = pdata.image_offset_y or 0
+                part_y = py_top + (cell_size - ih) + offset_y
+            end
+            
+            if feet_imagetable and self.feet_is_moving then
+                local frame_image = feet_imagetable:getImage(feet_current_frame)
+                if frame_image then
+                    pcall(function() frame_image:draw(px, part_y) end)
+                end
+            else
+                pcall(function() pdata._img:draw(px, part_y) end)
+            end
+        end
+        
+    elseif item.id == "CLAW" then
+        -- 繪製 CLAW
+        local base_x = draw_x + (item.col - 1) * cell_size
+        local base_y_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
+        local ok, base_w, base_h = pcall(function() return pdata._img:getSize() end)
+        if ok and base_w and base_h then
+            local base_y = base_y_top + (cell_size - base_h)
+            self:drawClaw(base_x, base_y, base_w, base_h, pdata)
+        end
+    end
+end
+
+function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size, ui_grid_cols, ui_grid_rows)
+    local gfx = playdate.graphics
+    local eq = mech_stats.equipped_parts or {}
+    
+    -- 找出選中格子對應的零件ID
+    local selected_part_id_for_highlight = nil
+    if self.selected_part_slot then
+        for _, item in ipairs(eq) do
+            local slot_w = item.w or 1
+            local slot_h = item.h or 1
+            if self.selected_part_slot.col >= item.col and self.selected_part_slot.col < item.col + slot_w and
+               self.selected_part_slot.row >= item.row and self.selected_part_slot.row < item.row + slot_h then
+                selected_part_id_for_highlight = item.id
+                break
+            end
+        end
+    end
+    
+    -- 繪製控制格子
+    for r = 1, ui_grid_rows do
+        for c = 1, ui_grid_cols do
+            local cx = ui_start_x + (c - 1) * (ui_cell_size + 5)
+            local cy = ui_start_y + (ui_grid_rows - r) * (ui_cell_size + 5)
+            
+            -- 檢查此格是否有零件
+            local part_id = nil
+            local is_in_selected_part = false
+            for _, item in ipairs(eq) do
+                local slot_w = item.w or 1
+                local slot_h = item.h or 1
+                if c >= item.col and c < item.col + slot_w and
+                   r >= item.row and r < item.row + slot_h then
+                    part_id = item.id
+                    if selected_part_id_for_highlight and item.id == selected_part_id_for_highlight then
+                        is_in_selected_part = true
+                    end
+                    break
+                end
+            end
+            
+            -- 繪製格子
+            if is_in_selected_part then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillRect(cx, cy, ui_cell_size, ui_cell_size)
+                gfx.setColor(gfx.kColorWhite)
+            else
+                gfx.setColor(gfx.kColorBlack)
+            end
+            gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
+            
+            -- 選中格子繪製粗外框
+            if self.selected_part_slot and self.selected_part_slot.col == c and self.selected_part_slot.row == r then
+                gfx.setLineWidth(3)
+                gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)
+                gfx.setLineWidth(1)
+            end
+            
+            -- 顯示零件名稱縮寫
+            if part_id then
+                for _, item in ipairs(eq) do
+                    if item.id == part_id and item.col == c and item.row == r then
+                        local label = string.sub(part_id, 1, 1)
+                        gfx.drawText(label, cx + 6, cy + 6)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 顯示激活零件資訊
+    local info_x = ui_start_x + ui_grid_cols * (ui_cell_size + 5) + 10
+    if self.active_part_id then
+        gfx.drawText("Active: " .. self.active_part_id, info_x, ui_start_y)
+        if self.active_part_id == "SWORD" then
+            gfx.drawText("Angle: " .. math.floor(self.sword_angle), info_x, ui_start_y + 15)
+        end
+    else
+        gfx.drawText("Select part (A)", info_x, ui_start_y)
+    end
+end
+
 return EntityController
