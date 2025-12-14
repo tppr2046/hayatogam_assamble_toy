@@ -730,32 +730,53 @@ end
 
 Stone = {}
 
-function Stone:init(x, y, ground_y)
+function Stone:init(x, y, ground_y, target_id, image_path)
     local stone_img = nil
-    pcall(function()
-        stone_img = playdate.graphics.image.new("images/stone")
-    end)
+    local img_width = 16
+    local img_height = 16
+    
+    -- 加載圖片並獲取尺寸
+    if image_path then
+        local ok, img = pcall(function()
+            return playdate.graphics.image.new(image_path)
+        end)
+        if ok and img then
+            stone_img = img
+            local ok_size, w, h = pcall(function() return img:getSize() end)
+            if ok_size and w and h then
+                img_width = w
+                img_height = h
+            end
+        end
+    else
+        -- 預設圖片
+        pcall(function()
+            stone_img = playdate.graphics.image.new("images/stone")
+        end)
+    end
     
     local stone = {
         x = x,
         y = y,
-        width = 16,
-        height = 16,
+        width = img_width,
+        height = img_height,
         vx = 0,
         vy = 0,
-        is_grounded = (y >= ground_y - 16),
+        is_grounded = (y >= ground_y - img_height),
         is_grabbed = false,  -- 是否被爪子抓住
         ground_y = ground_y,
         image = stone_img,
-        damage = 15  -- 砸到敵人的傷害
+        damage = 15,  -- 砸到敵人的傷害
+        target_id = target_id,  -- 指定要放到哪個目標
+        is_placed = false  -- 是否已經放到指定目標
     }
     setmetatable(stone, { __index = Stone })
     return stone
 end
 
 function Stone:update(dt, gravity)
-    if self.is_grabbed then
-        -- 被抓住時不更新物理
+    if self.is_grabbed or self.is_placed then
+        -- 被抓住或已放置時不更新物理
         return
     end
     
@@ -778,6 +799,10 @@ function Stone:update(dt, gravity)
 end
 
 function Stone:draw(camera_x)
+    if self.is_placed then
+        return  -- 已放置的石頭不顯示
+    end
+    
     local screen_x = self.x - camera_x
     if self.image then
         pcall(function() self.image:draw(screen_x, self.y) end)
@@ -807,7 +832,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     safe_ground_y = safe_ground_y - ui_offset
     
     local controller = {
-        obstacles = (scene_data and scene_data.obstacles) or {},
+        obstacles = {},  -- 先初始化為空，稍後處理
         ground_y = safe_ground_y,
         enemies = {}, -- 新增敵人列表
         projectiles = {}, -- 新增砲彈列表
@@ -817,6 +842,39 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         player_move_speed = player_move_speed or 2.0 -- 供敵人計算砲彈速度
     }
     setmetatable(controller, { __index = EntityController })
+    
+    -- 初始化障礙物（加載圖片和計算尺寸）
+    local obstacles_data = (scene_data and scene_data.obstacles) or {}
+    for _, odata in ipairs(obstacles_data) do
+        local obs = {
+            x = odata.x,
+            y = odata.y,
+            width = 0,
+            height = 0,
+            image = nil
+        }
+        
+        -- 加載圖片並獲取尺寸
+        if odata.image then
+            local ok, img = pcall(function()
+                return playdate.graphics.image.new(odata.image)
+            end)
+            if ok and img then
+                obs.image = img
+                local ok_size, w, h = pcall(function() return img:getSize() end)
+                if ok_size and w and h then
+                    obs.width = w
+                    obs.height = h
+                end
+            end
+        else
+            -- 如果沒有圖片，使用指定的寬高或預設值
+            obs.width = odata.width or 40
+            obs.height = odata.height or 40
+        end
+        
+        table.insert(controller.obstacles, obs)
+    end
     
     -- 初始化敵人
     for _, edata in ipairs(enemies_data or {}) do
@@ -828,7 +886,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     local stones_data = (scene_data and scene_data.stones) or {}
     for _, sdata in ipairs(stones_data) do
         local stone_y = sdata.y == 0 and (safe_ground_y - 16) or sdata.y
-        local stone = Stone:init(sdata.x, stone_y, safe_ground_y)
+        local stone = Stone:init(sdata.x, stone_y, safe_ground_y, sdata.target_id, sdata.image)
         table.insert(controller.stones, stone)
     end
     
@@ -841,10 +899,13 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     if single_target then
         local target_y = single_target.y == 0 and (safe_ground_y - 16) or single_target.y
         local target = {
+            id = single_target.id or "default",
             x = single_target.x,
             y = target_y,
             width = single_target.width or 32,
-            height = single_target.height or 32
+            height = single_target.height or 32,
+            placed_stones = {},  -- 已放置的石頭列表
+            is_completed = false  -- 是否已完成
         }
         table.insert(controller.delivery_targets, target)
     end
@@ -852,12 +913,25 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     for _, tdata in ipairs(targets_data) do
         local target_y = tdata.y == 0 and (safe_ground_y - 16) or tdata.y
         local target = {
+            id = tdata.id or "target" .. #controller.delivery_targets + 1,
             x = tdata.x,
             y = target_y,
             width = tdata.width or 32,
-            height = tdata.height or 32
+            height = tdata.height or 32,
+            placed_stones = {},  -- 已放置的石頭列表
+            is_completed = false  -- 是否已完成
         }
         table.insert(controller.delivery_targets, target)
+    end
+    
+    -- 計算每個目標需要的石頭數量
+    for _, target in ipairs(controller.delivery_targets) do
+        target.required_count = 0
+        for _, stone in ipairs(controller.stones) do
+            if stone.target_id == target.id then
+                target.required_count = target.required_count + 1
+            end
+        end
     end
     
     print("LOG: EntityController initialized with " .. #controller.obstacles .. " obstacles and " .. #controller.enemies .. " enemies.")
@@ -961,10 +1035,9 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         print("LOG: Enemy killed by stone")
                     end
                     
-                    -- 石頭落地停止
-                    stone.vx = 0
-                    stone.vy = 0
-                    stone.is_grounded = true
+                    -- 石頭減速但繼續受重力影響
+                    stone.vx = stone.vx * 0.5  -- 減少水平速度
+                    -- 不強制設定 vy = 0，讓石頭繼續受重力影響
                     break
                 end
             end
@@ -1040,7 +1113,7 @@ function EntityController:draw(camera_x)
     -- 繪製地面（只繪製一條橫線）
     gfx.drawLine(0, ground_y, 400, ground_y) 
 
-    -- 繪製障礙物 (原有的邏輯保持不變)
+    -- 繪製障礙物
     for i, obs in ipairs(self.obstacles) do
         
         if not obs then goto next_obstacle end 
@@ -1053,7 +1126,14 @@ function EntityController:draw(camera_x)
         local obs_y = ground_y - obs_height
 
         if obs_screen_x < 400 and obs_screen_x + obs_width > 0 then
-            gfx.fillRect(obs_screen_x, obs_y, obs_width, obs_height)
+            if obs.image then
+                -- 繪製圖片
+                pcall(function() obs.image:draw(obs_screen_x, obs_y) end)
+            else
+                -- 備用：繪製方塊
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillRect(obs_screen_x, obs_y, obs_width, obs_height)
+            end
         end
         
         ::next_obstacle::
@@ -1071,10 +1151,12 @@ function EntityController:draw(camera_x)
     
     -- 繪製目標物件（黑色填充）
     for _, target in ipairs(self.delivery_targets) do
-        local screen_x = target.x - camera_x
-        if screen_x >= -target.width and screen_x <= 400 then
-            gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(screen_x, target.y, target.width, target.height)
+        if not target.is_completed then  -- 只繪製未完成的目標
+            local screen_x = target.x - camera_x
+            if screen_x >= -target.width and screen_x <= 400 then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillRect(screen_x, target.y, target.width, target.height)
+            end
         end
     end
     

@@ -195,7 +195,7 @@ local parts_data = {
         arm_rotate_speed = 2.0,  -- 上下鍵每幀旋轉速度（度）
         claw_angle_min = 0,  -- 爪子閉合角度（度）
         claw_angle_max = 45,  -- 爪子張開角度（度）
-        crank_degrees_per_rotation = 30,  -- crank 轉 1 圈產生的爪子角度變化
+        crank_degrees_per_rotation = 45,  -- crank 轉 1 圈產生的爪子角度變化
         grab_threshold = 20,  -- 抓取/投擲的角度臨界值（度）
         throw_speed_mult = 5.0  -- 投擲物體的速度倍率
     }

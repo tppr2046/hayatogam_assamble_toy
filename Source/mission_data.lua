@@ -66,11 +66,14 @@ local missions = {
             
             -- 場景障礙物件
             obstacles = {
+                 { x = 500, y = 0, image = "images/gun_panel.png" }  -- x, y 為位置，y=0 表示在地面上，image 為圖片路徑
             },
             
             -- 可互動物件（石頭）
             stones = {
-                { x = 200, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
+                { x = 200, y = 0, target_id = "target1", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+                { x = 410, y = 0, target_id = "target2", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+
             },
             
             -- 任務敵人（添加測試敵人）
@@ -80,7 +83,11 @@ local missions = {
             },
             
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
-            delivery_target = { x = 400, y = 0, width = 40, height = 40 }  -- y=0 表示在地面上
+            delivery_targets = {
+                { id = "target1", x = 350, y = 0, width = 40, height = 40 },  -- id 用於匹配石頭的 target_id
+                { id = "target2", x = 450, y = 0, width = 40, height = 40 }  -- id 用於匹配石頭的 target_id
+
+            }
         },
         
         -- 任務獎勵（資源）

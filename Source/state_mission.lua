@@ -579,24 +579,53 @@ function StateMission.update()
             -- 目標類型：把石頭放到指定地點
             elseif obj.type == "DELIVER_STONE" then
                 if entity_controller and entity_controller.delivery_targets and entity_controller.stones then
+                    -- 檢查石頭與目標的碰撞
                     for _, stone in ipairs(entity_controller.stones) do
-                        for _, target in ipairs(entity_controller.delivery_targets) do
-                            -- 檢查石頭是否與目標物件碰撞
-                            if stone.x and stone.y and target.x and target.y then
-                                local stone_right = stone.x + stone.width
-                                local stone_bottom = stone.y + stone.height
-                                local target_right = target.x + target.width
-                                local target_bottom = target.y + target.height
-                                
-                                -- AABB 碰撞檢測
-                                if stone.x < target_right and stone_right > target.x and
-                                   stone.y < target_bottom and stone_bottom > target.y then
-                                    print("MISSION SUCCESS: Stone delivered to target!")
-                                    setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
-                                    return
+                        if not stone.is_placed and stone.target_id then
+                            -- 找到該石頭對應的目標
+                            for _, target in ipairs(entity_controller.delivery_targets) do
+                                if target.id == stone.target_id and not target.is_completed then
+                                    -- 檢查石頭是否與目標物件碰撞
+                                    if stone.x and stone.y and target.x and target.y then
+                                        local stone_right = stone.x + stone.width
+                                        local stone_bottom = stone.y + stone.height
+                                        local target_right = target.x + target.width
+                                        local target_bottom = target.y + target.height
+                                        
+                                        -- AABB 碰撞檢測
+                                        if stone.x < target_right and stone_right > target.x and
+                                           stone.y < target_bottom and stone_bottom > target.y then
+                                            -- 石頭放置到目標上
+                                            stone.is_placed = true
+                                            table.insert(target.placed_stones, stone)
+                                            print("LOG: Stone placed on target " .. target.id .. " (" .. #target.placed_stones .. "/" .. target.required_count .. ")")
+                                            
+                                            -- 檢查該目標是否完成
+                                            if #target.placed_stones >= target.required_count then
+                                                target.is_completed = true
+                                                print("LOG: Target " .. target.id .. " completed!")
+                                            end
+                                            break
+                                        end
+                                    end
                                 end
                             end
                         end
+                    end
+                    
+                    -- 檢查是否所有石頭都已放置到指定目標
+                    local all_placed = true
+                    for _, stone in ipairs(entity_controller.stones) do
+                        if stone.target_id and not stone.is_placed then
+                            all_placed = false
+                            break
+                        end
+                    end
+                    
+                    if all_placed and #entity_controller.stones > 0 then
+                        print("MISSION SUCCESS: All stones delivered to targets!")
+                        setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
+                        return
                     end
                 end
             end
