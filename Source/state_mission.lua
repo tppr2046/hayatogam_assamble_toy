@@ -236,6 +236,11 @@ function StateMission.setup()
     max_hp = stats.total_hp or 100
     current_hp = max_hp
 
+    -- 播放任務關卡 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playMissionBGM then
+        _G.SoundManager.playMissionBGM()
+    end
+
     -- 讀取並啟用任務對話（如果設定）
     dialog_active = false
     dialog_lines = nil

@@ -58,6 +58,10 @@ function StateMissionSelect:setup()
     scroll_offset = 0
     
     print("StateMissionSelect setup complete. Available missions: " .. #mission_list)
+    -- 播放標題/一般介面 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
 end
 
 function StateMissionSelect:update()

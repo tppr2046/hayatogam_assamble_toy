@@ -21,6 +21,10 @@ function StateMenu.setup()
     gfx.setFont(font)
     selected_index = 1
     print("LOG: StateMenu initialized.")
+    -- 播放標題/一般介面 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
 end
 
 function StateMenu.update()

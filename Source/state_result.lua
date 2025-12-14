@@ -15,6 +15,10 @@ local reward_rubber = 0
 
 function StateResult.setup(success, message, mission_id)
     gfx.setFont(font)
+    -- 播放標題/一般介面 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
     result_success = success or false
     result_message = message or ""
     reward_steel = 0

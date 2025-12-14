@@ -58,6 +58,12 @@ local show_ready_menu = false   -- 是否顯示 READY 選單
 local FLASH_DURATION = 12 -- 幀數
 local flash_timer = 0
 local flash_col = nil
+-- 播放標題/一般介面 BGM（循環）
+function StateHQ.setupBGM()
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
+end
 local flash_row = nil
 
 -- 底部菜單選項清單
@@ -222,6 +228,10 @@ end
 
 function StateHQ.setup()
     gfx.setFont(font) 
+    -- 播放標題/一般介面 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
     
     -- 初始化 MechController（用於繪製介面圖）
     if MechController and MechController.init then

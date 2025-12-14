@@ -16,6 +16,10 @@ local VISIBLE_ITEMS = 7  -- 畫面可顯示的零件數量
 
 function StateShop.setup()
     gfx.setFont(font)
+    -- 播放標題/一般介面 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
     shop_selected_part_index = 1
     cursor_on_back = false
     shop_confirm_mode = false

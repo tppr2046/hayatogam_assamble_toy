@@ -19,6 +19,10 @@ local save_info = {}  -- 存檔資訊快取
 -- ==========================================
 function StateSaveSelect.setup(select_mode)
     gfx.setFont(font)
+    -- 播放標題/一般介面 BGM（循環）
+    if _G.SoundManager and _G.SoundManager.playTitleBGM then
+        _G.SoundManager.playTitleBGM()
+    end
     mode = select_mode or "new_game"
     confirm_mode = false
     confirm_choice = 1

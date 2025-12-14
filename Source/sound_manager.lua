@@ -8,6 +8,8 @@ SoundManager = {}
 SoundManager.synth_cursor = nil      -- 游標移動音效
 SoundManager.synth_select = nil      -- 選擇音效
 SoundManager.synth_hit = nil         -- 擊中音效
+SoundManager.bgm_player = nil        -- 目前的 BGM 播放器
+SoundManager.current_bgm = nil       -- 目前播放的 BGM 檔名
 
 -- ==========================================
 -- 初始化音效系統
@@ -125,6 +127,53 @@ function SoundManager.stopAll()
     if SoundManager.synth_cursor then SoundManager.synth_cursor:stop() end
     if SoundManager.synth_select then SoundManager.synth_select:stop() end
     if SoundManager.synth_hit then SoundManager.synth_hit:stop() end
+    if SoundManager.bgm_player then SoundManager.bgm_player:stop() end
+end
+
+-- ==========================================
+-- BGM 控制：播放/停止背景音樂（循環）
+-- ==========================================
+function SoundManager.playBGM(path)
+    -- 如果已在播放相同檔案，忽略
+    if SoundManager.current_bgm == path and SoundManager.bgm_player then
+        print("SOUND: Already playing BGM -> " .. tostring(path))
+        return
+    end
+    -- 停止舊的 BGM
+    if SoundManager.bgm_player then
+        print("SOUND: Stopping previous BGM")
+        SoundManager.bgm_player:stop()
+        SoundManager.bgm_player = nil
+    end
+    -- 建立新的檔案播放器（不使用 pcall 以便看到錯誤訊息）
+    print("SOUND: Loading BGM file -> " .. tostring(path))
+    local player = playdate.sound.fileplayer.new(path)
+    if player then
+        SoundManager.bgm_player = player
+        SoundManager.current_bgm = path
+        -- 設定循環播放
+        player:setVolume(0.7)
+        player:play(0)  -- 0 = 無限循環
+        print("SOUND: BGM started playing -> " .. tostring(path))
+    else
+        print("SOUND ERROR: Failed to create fileplayer for: " .. tostring(path))
+    end
+end
+
+function SoundManager.stopBGM()
+    if SoundManager.bgm_player then
+        SoundManager.bgm_player:stop()
+        SoundManager.bgm_player = nil
+        SoundManager.current_bgm = nil
+    end
+end
+
+function SoundManager.playTitleBGM()
+    SoundManager.playBGM("audio/bgm_title")
+end
+
+function SoundManager.playMissionBGM()
+    SoundManager.playBGM("audio/bgm1")
 end
 
 return SoundManager
