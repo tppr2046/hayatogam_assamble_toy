@@ -215,19 +215,6 @@ function recalcMechStats()
     _G.GameState.mech_stats.total_weight = total_weight
 end
 
--- 繪製網狀 Dither 覆蓋 (簡單方格樣式)
-local function drawDither(x, y, w, h)
-    local step = 6
-    local fillSize = math.max(1, step - 2)
-    for yy = y, y + h - 1, step do
-        for xx = x, x + w - 1, step do
-            local r = math.floor((xx / step) + (yy / step))
-            if (r % 2) == 0 then
-                gfx.fillRect(xx, yy, fillSize, fillSize)
-            end
-        end
-    end
-end
 
 -- ==========================================
 -- 狀態機接口

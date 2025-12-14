@@ -75,7 +75,7 @@ function StateSaveSelect.update()
                     SaveManager.createNewSave(selected_slot)
                     SaveManager.loadSave(selected_slot)
                 end
-                setState(_G.StateHQ)  -- 進入 HQ
+                setState(_G.StateMissionSelect)  -- 先進入任務選擇
             else
                 -- CANCEL：返回存檔選擇
                 confirm_mode = false
@@ -125,15 +125,15 @@ function StateSaveSelect.update()
                         SaveManager.createNewSave(selected_slot)
                         SaveManager.loadSave(selected_slot)
                     end
-                    setState(_G.StateHQ)  -- 進入 HQ
+                    setState(_G.StateMissionSelect)  -- 先進入任務選擇
                 end
             elseif mode == "continue" then
                 if slot_exists then
-                    -- 讀取存檔並進入 HQ
+                    -- 讀取存檔並進入任務選擇
                     if SaveManager then
                         SaveManager.loadSave(selected_slot)
                     end
-                    setState(_G.StateHQ)
+                    setState(_G.StateMissionSelect)
                 else
                     -- 空格：無法繼續（可選擇是否顯示錯誤訊息或忽略）
                     print("WARNING: Cannot continue from empty save slot!")

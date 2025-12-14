@@ -8,6 +8,7 @@ local missions = {
         category = "ELIMINATION", 
         description = "Eliminate all incoming trainer units and learn movement controls.",
         prerequisite = 0,  -- 0 表示初始任務，無前置要求
+        time_limit = 60,  -- 關卡時間限制（秒），-1 表示無時間限制
         
         -- 關卡目標
         objective = {
@@ -36,7 +37,7 @@ local missions = {
             },
             
             -- 石頭目標地點（用於 DELIVER_STONE 目標）
-            delivery_zone = nil  -- { x = 600, y = 200, width = 40, height = 40 }
+            delivery_target = nil  -- { x = 600, y = 200, width = 40, height = 40 }
         },
         
         -- 任務獎勵（資源）
@@ -50,11 +51,12 @@ local missions = {
         category = "ELIMINATION", 
         description = "Eliminate all incoming trainer units and learn movement controls.",
         prerequisite = "M001",  -- 需要完成 M001 才會顯示
+        time_limit = -1,  -- 關卡時間限制（秒），-1 表示無時間限制
         
         -- 關卡目標
         objective = {
-            type = "ELIMINATE_ALL",  -- 可選: "ELIMINATE_ALL", "DELIVER_STONE"
-            description = "Defeat all enemies"
+            type = "DELIVER_STONE",  -- 可選: "ELIMINATE_ALL", "DELIVER_STONE"
+            description = "Deliver the stone to the target zone"
         },
         
         -- 關卡場景設定
@@ -68,17 +70,17 @@ local missions = {
             
             -- 可互動物件（石頭）
             stones = {
---                { x = 400, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
+                { x = 200, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
             },
             
             -- 任務敵人（添加測試敵人）
             enemies = {
                 { type = "BASIC_ENEMY", x = 300, y = 0 },
-                { type = "BASIC_ENEMY", x = 500, y = 0 },
+--                { type = "BASIC_ENEMY", x = 500, y = 0 },
             },
             
-            -- 石頭目標地點（用於 DELIVER_STONE 目標）
-            delivery_zone = nil  -- { x = 600, y = 200, width = 40, height = 40 }
+            -- 石頭目標物件（用於 DELIVER_STONE 目標）
+            delivery_target = { x = 400, y = 0, width = 40, height = 40 }  -- y=0 表示在地面上
         },
         
         -- 任務獎勵（資源）

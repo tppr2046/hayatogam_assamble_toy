@@ -63,6 +63,8 @@ local entity_controller = nil
 local current_hp = 0 -- 追蹤機甲當前 HP
 local max_hp = 1     -- 機甲最大 HP (在 setup 中獲取)
 local current_mission_id = nil -- 當前任務 ID（用於檢查目標）
+local mission_time_limit = -1  -- 任務時間限制（秒），-1 表示無時間限制
+local mission_elapsed_time = 0 -- 任務經過時間（秒）
 
 
 -- ==========================================
@@ -190,6 +192,15 @@ function StateMission.setup()
     -- Initialize entity controller for the current scene (so ground/obstacles/enemies draw)
     -- 儲存當前任務 ID 用於目標檢查
     current_mission_id = mission_id
+    
+    -- 初始化任務時間限制
+    mission_elapsed_time = 0
+    if mission_id and MissionDataToUse and MissionDataToUse[mission_id] then
+        mission_time_limit = MissionDataToUse[mission_id].time_limit or -1
+    else
+        mission_time_limit = -1
+    end
+    
     if current_scene and EntityController then
         local enemies = (current_scene.enemies) or {}
         entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED, UI_HEIGHT)
@@ -384,65 +395,67 @@ function StateMission.update()
         -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）
         mech_controller:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
         
-        -- 更新 CLAW 抓取邏輯
-        if mech_controller.active_part_id == "CLAW" then
-            -- 計算爪子末端位置
-            local eq = _G.GameState.mech_stats.equipped_parts or {}
-            for _, item in ipairs(eq) do
-                if item.id == "CLAW" then
-                    local pdata = _G.PartsData and _G.PartsData["CLAW"]
-                    if pdata and pdata._img and pdata._arm_img then
-                        local cell_size = mech_grid.cell_size
-                        local base_x = mech_x + (item.col - 1) * cell_size
-                        local base_y_top = mech_y + (mech_grid.rows - item.row) * cell_size
-                        local ok, base_w, base_h = pcall(function() return pdata._img:getSize() end)
-                        local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+        -- 更新 CLAW 抓取邏輯（不論是否激活 CLAW 都要更新石頭位置）
+        local eq = _G.GameState.mech_stats.equipped_parts or {}
+        for _, item in ipairs(eq) do
+            if item.id == "CLAW" then
+                local pdata = _G.PartsData and _G.PartsData["CLAW"]
+                if pdata and pdata._img and pdata._arm_img then
+                    local cell_size = mech_grid.cell_size
+                    local base_x = mech_x + (item.col - 1) * cell_size
+                    local base_y_top = mech_y + (mech_grid.rows - item.row) * cell_size
+                    local ok, base_w, base_h = pcall(function() return pdata._img:getSize() end)
+                    local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+                    
+                    if ok and base_w and base_h and arm_ok and arm_w and arm_h then
+                        local base_y = base_y_top + (cell_size - base_h)
+                        local pivot_x = base_x + base_w / 2
+                        local pivot_y = base_y + base_h / 2
                         
-                        if ok and base_w and base_h and arm_ok and arm_w and arm_h then
-                            local base_y = base_y_top + (cell_size - base_h)
-                            local pivot_x = base_x + base_w / 2
-                            local pivot_y = base_y + base_h / 2
-                            
-                            -- 計算臂末端（爪子位置）
-                            local angle_rad = math.rad(-mech_controller.claw_arm_angle)
-                            local cos_a = math.cos(angle_rad)
-                            local sin_a = math.sin(angle_rad)
-                            local claw_tip_x = pivot_x + arm_w * cos_a
-                            local claw_tip_y = pivot_y + arm_w * sin_a
-                            
-                            -- 如果有抓住石頭，更新石頭位置
-                            mech_controller:updateGrabbedStone(claw_tip_x, claw_tip_y)
-                            
-                            -- 如果按下 A 鍵嘗試抓取
-                            if mech_controller.try_grab then
-                                mech_controller:tryGrabStone(claw_tip_x, claw_tip_y, entity_controller.stones, 20)
-                                mech_controller.try_grab = false
-                            end
+                        -- 計算臂末端（爪子位置）
+                        local angle_rad = math.rad(-mech_controller.claw_arm_angle)
+                        local cos_a = math.cos(angle_rad)
+                        local sin_a = math.sin(angle_rad)
+                        local claw_tip_x = pivot_x + arm_w * cos_a
+                        local claw_tip_y = pivot_y + arm_w * sin_a
+                        
+                        -- 如果有抓住石頭，更新石頭位置（不論是否激活 CLAW）
+                        mech_controller:updateGrabbedStone(claw_tip_x, claw_tip_y)
+                        
+                        -- 如果 CLAW 激活且按下 A 鍵嘗試抓取
+                        if mech_controller.active_part_id == "CLAW" and mech_controller.try_grab then
+                            mech_controller:tryGrabStone(claw_tip_x, claw_tip_y, entity_controller.stones, 20)
+                            mech_controller.try_grab = false
                         end
                     end
-                    break
                 end
+                break
             end
         end
         
         -- 檢查武器零件碰撞 (攻擊敵人)
-        -- SWORD 只在轉動時才攻擊
+        -- SWORD 和 CLAW 只在轉動時才攻擊
         local weapon_parts = {}
-        if mech_controller.sword_is_attacking then
+        if mech_controller.sword_is_attacking or mech_controller.claw_is_attacking then
             local eq = _G.GameState.mech_stats.equipped_parts or {}
             for _, item in ipairs(eq) do
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata and pdata.attack and pdata.attack > 0 then
-                    -- 武器只在激活時才有攻擊判定
-                    if mech_controller.active_part_id == item.id then
+                    -- 檢查該武器是否處於攻擊狀態
+                    local is_weapon_attacking = false
+                    if item.id == "SWORD" and mech_controller.sword_is_attacking and mech_controller.active_part_id == item.id then
+                        is_weapon_attacking = true
+                    elseif item.id == "CLAW" and mech_controller.claw_is_attacking and mech_controller.active_part_id == item.id then
+                        is_weapon_attacking = true
+                    end
+                    
+                    if is_weapon_attacking then
                     -- 計算武器在世界座標的位置
                     local cell_size = mech_grid.cell_size
                     local wx = mech_x + (item.col - 1) * cell_size
                     local wy = mech_y + (mech_grid.rows - item.row) * cell_size
                     local ww = cell_size
                     local wh = cell_size
-                    
-                    print("    Base weapon position: x=" .. math.floor(wx) .. ", y=" .. math.floor(wy) .. ", w=" .. ww .. ", h=" .. wh)
                     
                     -- 如果是 SWORD 且已激活，根據旋轉角度計算碰撞框
                     if item.id == "SWORD" and pdata._img then
@@ -469,6 +482,31 @@ function StateMission.update()
                             ww = max_x - min_x
                             wh = max_y - min_y
                         end
+                    -- 如果是 CLAW 且已激活，根據爪臂角度計算碰撞框
+                    elseif item.id == "CLAW" and pdata._arm_img then
+                        local ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
+                        if ok and arm_w and arm_h then
+                            -- 計算 CLAW 實際攻擊範圍：以格子中心為軸心，臂的長度為半徑
+                            local center_x = wx + cell_size / 2
+                            local center_y = wy + cell_size / 2
+                            local arm_length = arm_w  -- 臂的長度
+                            
+                            -- 根據當前角度計算爪尖位置
+                            local angle_rad = math.rad(-mech_controller.claw_arm_angle)
+                            local tip_x = center_x + math.cos(angle_rad) * arm_length
+                            local tip_y = center_y + math.sin(angle_rad) * arm_length
+                            
+                            -- 碰撞框包含從中心到爪尖的矩形區域
+                            local min_x = math.min(center_x, tip_x) - 12
+                            local max_x = math.max(center_x, tip_x) + 12
+                            local min_y = math.min(center_y, tip_y) - 12
+                            local max_y = math.max(center_y, tip_y) + 12
+                            
+                            wx = min_x
+                            wy = min_y
+                            ww = max_x - min_x
+                            wh = max_y - min_y
+                        end
                     end
                     
                     table.insert(weapon_parts, {
@@ -486,12 +524,24 @@ function StateMission.update()
         if #weapon_parts > 0 then
             entity_controller:checkWeaponCollision(weapon_parts)
         end
-        end  -- 結束 if sword_is_attacking
+        end  -- 結束 if sword_is_attacking or claw_is_attacking
     end
     
     -- 5. 更新計時器
     if timer > 0 then
         timer = timer - 1 
+    end
+    
+    -- 5.1 更新任務計時器
+    if mission_time_limit > 0 then
+        mission_elapsed_time = mission_elapsed_time + (1 / 30)  -- 假設 30 FPS
+        
+        -- 檢查是否超時
+        if mission_elapsed_time >= mission_time_limit then
+            print("MISSION FAILED: Time limit exceeded!")
+            setState(_G.StateResult, false, "Time limit exceeded!")
+            return
+        end
     end
     
     -- 6. 遊戲結束/勝利條件檢查
@@ -528,16 +578,23 @@ function StateMission.update()
             
             -- 目標類型：把石頭放到指定地點
             elseif obj.type == "DELIVER_STONE" then
-                if mission.delivery_zone and entity_controller and entity_controller.stones then
-                    local zone = mission.delivery_zone
+                if entity_controller and entity_controller.delivery_targets and entity_controller.stones then
                     for _, stone in ipairs(entity_controller.stones) do
-                        -- 檢查石頭是否在目標區域內
-                        if stone.x and stone.y then
-                            if stone.x >= zone.x and stone.x < zone.x + zone.width and
-                               stone.y >= zone.y and stone.y < zone.y + zone.height then
-                                print("MISSION SUCCESS: Stone delivered to target zone!")
-                                setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
-                                return
+                        for _, target in ipairs(entity_controller.delivery_targets) do
+                            -- 檢查石頭是否與目標物件碰撞
+                            if stone.x and stone.y and target.x and target.y then
+                                local stone_right = stone.x + stone.width
+                                local stone_bottom = stone.y + stone.height
+                                local target_right = target.x + target.width
+                                local target_bottom = target.y + target.height
+                                
+                                -- AABB 碰撞檢測
+                                if stone.x < target_right and stone_right > target.x and
+                                   stone.y < target_bottom and stone_bottom > target.y then
+                                    print("MISSION SUCCESS: Stone delivered to target!")
+                                    setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
+                                    return
+                                end
                             end
                         end
                     end
@@ -569,8 +626,34 @@ function StateMission.draw()
     local hp_bar_height = 10
     local hp_percent = current_hp / max_hp
     
-    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_bar_y - 15)
+    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_bar_y - 5)
     gfx.drawRect(hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height)
+    
+    -- 3.1 繪製計時器（如果有時間限制）
+    if mission_time_limit > 0 then
+        local remaining_time = math.max(0, mission_time_limit - mission_elapsed_time)
+        local seconds = math.floor(remaining_time)
+        local time_text = string.format("TIME: %d", seconds)
+        local time_text_width = gfx.getTextSize(time_text)
+        local time_x = (SCREEN_WIDTH - time_text_width) / 2
+        local time_y = 5
+        
+        -- 如果時間少於10秒，閃爍警告
+        if remaining_time <= 10 then
+            if math.floor(mission_elapsed_time * 2) % 2 == 0 then
+                gfx.setColor(gfx.kColorBlack)
+            else
+                gfx.setColor(gfx.kColorWhite)
+            end
+            gfx.fillRect(time_x - 5, time_y - 2, time_text_width + 10, 15)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText(time_text, time_x, time_y)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        else
+            gfx.drawText(time_text, time_x, time_y)
+        end
+    end
     
     if current_hp > 0 then
         gfx.setColor(gfx.kColorBlack) 

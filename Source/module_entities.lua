@@ -47,6 +47,8 @@ function MechController:init()
         claw_grip_angle = 0,  -- 爪子的開合角度（0=閉合，max=張開）
         claw_grip_angle_prev = 0,  -- 上一幀的爪子角度（用於檢測開合狀態變化）
         claw_grabbed_stone = nil,  -- 當前抓住的石頭
+        claw_is_attacking = false,  -- 爪子是否在攻擊狀態
+        claw_last_attack_angle = 0,  -- 上次攻擊時的角度
         
         -- 玩家受擊效果
         hit_shake_timer = 0,
@@ -68,12 +70,12 @@ function MechController:init()
     end
     
     local ok_dither, dither_img = pcall(function()
-        return playdate.graphics.image.new("images/dither")
+        return playdate.graphics.image.new("images/x")
     end)
     if ok_dither and dither_img then
         mc.ui_images.dither = dither_img
     else
-        print("WARNING: Failed to load dither.png")
+        print("WARNING: Failed to load x.png")
     end
     
     -- 從 PartsData 載入每個零件的 UI 圖片
@@ -361,6 +363,19 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             end
         end
         
+        -- 檢測爪臂快速轉動以觸發攻擊
+        local arm_angular_velocity = self.claw_arm_angle - self.claw_arm_angle_prev
+        if math.abs(arm_angular_velocity) >= 2 then  -- 轉動速度達到 2 度/幀即可攻擊
+            if not self.claw_last_attack_angle or math.abs(self.claw_arm_angle - self.claw_last_attack_angle) >= 20 then
+                self.claw_is_attacking = true
+                self.claw_last_attack_angle = self.claw_arm_angle
+            else
+                self.claw_is_attacking = false
+            end
+        else
+            self.claw_is_attacking = false
+        end
+        
         -- Crank 控制爪子開合
         local crankChange = playdate.getCrankChange()
         if crankChange and math.abs(crankChange) > 0 then
@@ -393,20 +408,22 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                     -- 投擲石頭
                     local stone = self.claw_grabbed_stone
                     
-                    -- 計算拋射速度（根據臂的角度）
-                    local angle_rad = math.rad(self.claw_arm_angle)
-                    local launch_speed = 8
-                    
-                    -- 計算臂旋轉產生的額外速度（角速度轉線速度）
-                    -- 假設臂長約 30 像素
-                    local arm_length = 30
+                    -- 計算臂旋轉產生的速度（角速度轉線速度）
+                    local arm_length = 30  -- 臂長約 30 像素
                     local arm_angular_velocity = self.claw_arm_angle - self.claw_arm_angle_prev  -- 度/幀
                     local arm_angular_velocity_rad = math.rad(arm_angular_velocity)  -- 弧度/幀
-                    local arm_tangent_velocity = arm_length * arm_angular_velocity_rad  -- 像素/幀
                     
-                    -- 基礎投擲速度 + 臂旋轉產生的速度
-                    local vx = math.cos(angle_rad) * launch_speed + arm_tangent_velocity * math.cos(angle_rad + math.pi/2)
-                    local vy = -math.sin(angle_rad) * launch_speed + arm_tangent_velocity * (-math.sin(angle_rad + math.pi/2))
+                    -- 從 parts_data 讀取投擲速度倍率
+                    local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 4.0
+                    
+                    -- 根據爪臂角度計算切線方向
+                    -- 爪臂角度為正時向前（右），為負時向後（左）
+                    local angle_rad = math.rad(self.claw_arm_angle)
+                    
+                    -- 切線速度 = 角速度 × 半徑 × 速度倍率，方向垂直於臂
+                    -- 如果角速度為正（逆時針），石頭向左飛；為負（順時針），石頭向右飛
+                    local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult  -- 加上速度倍率
+                    local vy = 0  -- 初始 y 速度為 0，僅受重力影響
                     
                     stone:launch(vx, vy)
                     self.claw_grabbed_stone = nil
@@ -497,15 +514,20 @@ end
 -- 嘗試抓取石頭
 function MechController:tryGrabStone(claw_tip_x, claw_tip_y, stones, grab_range)
     grab_range = grab_range or 20
+    
+    -- 從 parts_data 獲取抓取臨界值
+    local pdata = _G.PartsData and _G.PartsData["CLAW"]
+    local grip_threshold = pdata and pdata.grab_threshold or 10
+    
     for _, stone in ipairs(stones or {}) do
         if not stone.is_grabbed then
             local dx = (stone.x + stone.width/2) - claw_tip_x
             local dy = (stone.y + stone.height/2) - claw_tip_y
             local distance = math.sqrt(dx*dx + dy*dy)
-            if distance < grab_range and self.claw_grip_angle < 10 then  -- 爪子必須閉合才能抓
+            if distance < grab_range and self.claw_grip_angle < grip_threshold then  -- 爪子必須閉合才能抓
                 stone.is_grabbed = true
                 self.claw_grabbed_stone = stone
-                print("LOG: Grabbed stone at distance=" .. math.floor(distance))
+                print("LOG: Grabbed stone at distance=" .. math.floor(distance) .. ", grip_angle=" .. math.floor(self.claw_grip_angle))
                 return true
             end
         end
@@ -790,6 +812,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         enemies = {}, -- 新增敵人列表
         projectiles = {}, -- 新增砲彈列表
         stones = {},  -- 新增石頭列表
+        delivery_target = nil,  -- 交付目標物件
         GRAVITY = 0.5, -- 將重力常數傳入
         player_move_speed = player_move_speed or 2.0 -- 供敵人計算砲彈速度
     }
@@ -807,6 +830,34 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         local stone_y = sdata.y == 0 and (safe_ground_y - 16) or sdata.y
         local stone = Stone:init(sdata.x, stone_y, safe_ground_y)
         table.insert(controller.stones, stone)
+    end
+    
+    -- 初始化交付目標物件
+    controller.delivery_targets = {}
+    -- 支援單個目標（delivery_target）或多個目標（delivery_targets）
+    local single_target = scene_data and scene_data.delivery_target
+    local targets_data = (scene_data and scene_data.delivery_targets) or {}
+    
+    if single_target then
+        local target_y = single_target.y == 0 and (safe_ground_y - 16) or single_target.y
+        local target = {
+            x = single_target.x,
+            y = target_y,
+            width = single_target.width or 32,
+            height = single_target.height or 32
+        }
+        table.insert(controller.delivery_targets, target)
+    end
+    
+    for _, tdata in ipairs(targets_data) do
+        local target_y = tdata.y == 0 and (safe_ground_y - 16) or tdata.y
+        local target = {
+            x = tdata.x,
+            y = target_y,
+            width = tdata.width or 32,
+            height = tdata.height or 32
+        }
+        table.insert(controller.delivery_targets, target)
     end
     
     print("LOG: EntityController initialized with " .. #controller.obstacles .. " obstacles and " .. #controller.enemies .. " enemies.")
@@ -1016,6 +1067,15 @@ function EntityController:draw(camera_x)
     -- 繪製石頭
     for _, stone in ipairs(self.stones) do
         stone:draw(camera_x)
+    end
+    
+    -- 繪製目標物件（黑色填充）
+    for _, target in ipairs(self.delivery_targets) do
+        local screen_x = target.x - camera_x
+        if screen_x >= -target.width and screen_x <= 400 then
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(screen_x, target.y, target.width, target.height)
+        end
     end
     
     -- 繪製砲彈
@@ -1440,12 +1500,15 @@ function MechController:drawPartUI(part_id, x, y, size)
         return
     end
     
+    -- 取得零件類型
+    local part_type = pdata.part_type
+    
     -- 繪製 ui_panel（底圖）
     local panel_key = part_id .. "_panel"
     local panel_img = ui[panel_key]
     if panel_img then
         -- 根據零件類型決定是否旋轉
-        if part_id == "CANON" then
+        if part_type == "CANON" then
             -- CANON 的 panel 不旋轉，直接繪製
             pcall(function() panel_img:draw(x, y) end)
             
@@ -1475,7 +1538,7 @@ function MechController:drawPartUI(part_id, x, y, size)
                     pcall(function() button_img:draw(button_x, y) end)
                 end
             end
-        elseif part_id == "CLAW" then
+        elseif part_type == "CLAW" then
             -- CLAW 的 panel 需要旋轉（使用臂角度），左對齊
             local rotated_img = panel_img:rotatedImage(self.claw_arm_angle)
             if rotated_img then
@@ -1491,7 +1554,7 @@ function MechController:drawPartUI(part_id, x, y, size)
     -- 繪製 ui_stick（如果有）
     local stick_img = ui[part_id .. "_stick"]
     if stick_img then
-        if part_id == "SWORD" then
+        if part_type == "SWORD" then
             -- SWORD 的 stick 需要旋轉，以格子中心為軸心，角度鏡射
             local center_x = x + size / 2
             local center_y = y + size / 2
@@ -1503,7 +1566,7 @@ function MechController:drawPartUI(part_id, x, y, size)
                 -- 以格子中心點為旋轉中心繪製
                 pcall(function() rotated_img:draw(center_x - rw/2, center_y - rh/2) end)
             end
-        elseif part_id == "WHEEL" or part_id == "FEET" then
+        elseif part_type == "WHEEL" or part_type == "FEET" then
             -- WHEEL/FEET 的 stick 左右移動
             -- 假設 panel 是 96 像素寬（3 格）
             local panel_img_width = 96
