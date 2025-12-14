@@ -1655,21 +1655,14 @@ local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_
     
     local safe_ground_y = self.ground_y or 240 
     
-    -- 1. 檢查地形碰撞（機甲底部中心點和兩端點）
-    local check_points = {
-        target_x + mech_width / 2,  -- 中心點
-        target_x + 5,               -- 左側
-        target_x + mech_width - 5   -- 右側
-    }
+    -- 1. 檢查地形碰撞
+    -- 使用機甲中心點的地面高度，因為機甲會旋轉以匹配斜坡角度
+    local center_x = target_x + mech_width / 2
+    local terrain_y = self:getGroundHeight(center_x)
     
-    for _, check_x in ipairs(check_points) do
-        local terrain_y = self:getGroundHeight(check_x)
-        if mech_bottom >= terrain_y then
-            local terrain_stop = terrain_y - mech_height
-            if not final_y_stop or terrain_stop < final_y_stop then
-                final_y_stop = terrain_stop
-            end
-        end
+    -- 只要機甲底部觸碰或低於地面，就設置停靠點
+    if mech_bottom >= terrain_y then
+        final_y_stop = terrain_y - mech_height
     end
     
     -- 2. 合併障礙物和石頭為檢查列表
