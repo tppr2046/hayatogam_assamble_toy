@@ -84,8 +84,8 @@ local missions = {
             
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
             delivery_targets = {
-                { id = "target1", x = 350, y = 0, width = 40, height = 40 },  -- id 用於匹配石頭的 target_id
-                { id = "target2", x = 450, y = 0, width = 40, height = 40 }  -- id 用於匹配石頭的 target_id
+                { id = "target1", x = 350, y = 0, image = "images/X.png" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target2", x = 450, y = 0, image = "images/X.png" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
 
             }
         },

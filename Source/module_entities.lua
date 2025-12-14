@@ -897,13 +897,37 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     local targets_data = (scene_data and scene_data.delivery_targets) or {}
     
     if single_target then
-        local target_y = single_target.y == 0 and (safe_ground_y - 16) or single_target.y
+        local target_img = nil
+        local target_width = 32
+        local target_height = 32
+        
+        -- 加載圖片並獲取尺寸
+        if single_target.image then
+            local ok, img = pcall(function()
+                return playdate.graphics.image.new(single_target.image)
+            end)
+            if ok and img then
+                target_img = img
+                local ok_size, w, h = pcall(function() return img:getSize() end)
+                if ok_size and w and h then
+                    target_width = w
+                    target_height = h
+                end
+            end
+        else
+            -- 使用指定的寬高
+            target_width = single_target.width or 32
+            target_height = single_target.height or 32
+        end
+        
+        local target_y = single_target.y == 0 and (safe_ground_y - target_height) or single_target.y
         local target = {
             id = single_target.id or "default",
             x = single_target.x,
             y = target_y,
-            width = single_target.width or 32,
-            height = single_target.height or 32,
+            width = target_width,
+            height = target_height,
+            image = target_img,
             placed_stones = {},  -- 已放置的石頭列表
             is_completed = false  -- 是否已完成
         }
@@ -911,13 +935,37 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     end
     
     for _, tdata in ipairs(targets_data) do
-        local target_y = tdata.y == 0 and (safe_ground_y - 16) or tdata.y
+        local target_img = nil
+        local target_width = 32
+        local target_height = 32
+        
+        -- 加載圖片並獲取尺寸
+        if tdata.image then
+            local ok, img = pcall(function()
+                return playdate.graphics.image.new(tdata.image)
+            end)
+            if ok and img then
+                target_img = img
+                local ok_size, w, h = pcall(function() return img:getSize() end)
+                if ok_size and w and h then
+                    target_width = w
+                    target_height = h
+                end
+            end
+        else
+            -- 使用指定的寬高
+            target_width = tdata.width or 32
+            target_height = tdata.height or 32
+        end
+        
+        local target_y = tdata.y == 0 and (safe_ground_y - target_height) or tdata.y
         local target = {
             id = tdata.id or "target" .. #controller.delivery_targets + 1,
             x = tdata.x,
             y = target_y,
-            width = tdata.width or 32,
-            height = tdata.height or 32,
+            width = target_width,
+            height = target_height,
+            image = target_img,
             placed_stones = {},  -- 已放置的石頭列表
             is_completed = false  -- 是否已完成
         }
@@ -1149,13 +1197,19 @@ function EntityController:draw(camera_x)
         stone:draw(camera_x)
     end
     
-    -- 繪製目標物件（黑色填充）
+    -- 繪製目標物件
     for _, target in ipairs(self.delivery_targets) do
         if not target.is_completed then  -- 只繪製未完成的目標
             local screen_x = target.x - camera_x
             if screen_x >= -target.width and screen_x <= 400 then
-                gfx.setColor(gfx.kColorBlack)
-                gfx.fillRect(screen_x, target.y, target.width, target.height)
+                if target.image then
+                    -- 繪製圖片
+                    pcall(function() target.image:draw(screen_x, target.y) end)
+                else
+                    -- 備用：繪製黑色方塊
+                    gfx.setColor(gfx.kColorBlack)
+                    gfx.fillRect(screen_x, target.y, target.width, target.height)
+                end
             end
         end
     end
