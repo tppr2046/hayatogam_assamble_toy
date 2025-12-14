@@ -179,9 +179,167 @@ local missions = {
             dialog = {
                 image = "images/bg_building3.png",
                 lines = {
-                    "這是 M003 測試關卡。",
-                    "將示範多種敵人行為與背景視差。",
-                    "按 A 逐句前進，最後開始任務。"
+                    "Mission 3",
+                    "Go Go Now",
+                    "Press A to advance each line, and start the mission at the end."
+                }
+            },
+            
+            -- 地形配置（全平坦用於測試）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up30", height_offset = 0 },     -- 測試斜坡停止
+                { type = "flat", height_offset = -37 },
+                { type = "flat", height_offset = -37 },
+                { type = "down30", height_offset = -37 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
+            obstacles = {},
+            stones = {},
+            
+            -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
+            enemies = {
+                { type = "BASIC_ENEMY", x = 280, y = -37 },      -- 會在斜坡前停止
+                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
+                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
+                { type = "MINE", x = 850, y = 0 },             -- 地雷1
+                { type = "MINE", x = 950, y = 0 },             -- 地雷2
+            },
+            
+            delivery_targets = {}
+        },
+        
+        -- 任務獎勵（資源）
+        reward_steel = 50,
+        reward_copper = 30,
+        reward_rubber = 25
+    },
+
+        ["M004"] = {
+        id = "M004", 
+        name = "ENEMY TEST", 
+        category = "ELIMINATION", 
+        description = "Test all new enemy types: BASIC, JUMP, SWORD, MINE.",
+        prerequisite = "M001",  -- 需要完成 M001 才會顯示
+        time_limit = -1,  -- 無時間限制
+        
+        -- 關卡目標
+        objective = {
+            type = "ELIMINATE_ALL",
+            description = "Defeat all enemies"
+        },
+        
+        -- 關卡場景設定
+        scene = {
+            width = 1200, 
+            ground_y = 220, 
+            -- 背景層設定應為純陣列，不含其他欄位
+            backgrounds = {
+                { layer = 0, x = 30, y = 45, image = "images/bg_building3.png" },
+                { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
+                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" }
+            },
+
+            -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
+            dialog = {
+                image = "images/bg_building3.png",
+                lines = {
+                    "Mission 4",
+                    "Go Go Now",
+                    "Press A to advance each line, and start the mission at the end."
+                }
+            },
+            
+            -- 地形配置（全平坦用於測試）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up30", height_offset = 0 },     -- 測試斜坡停止
+                { type = "flat", height_offset = -37 },
+                { type = "flat", height_offset = -37 },
+                { type = "down30", height_offset = -37 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
+            obstacles = {},
+            stones = {},
+            
+            -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
+            enemies = {
+                { type = "BASIC_ENEMY", x = 280, y = -37 },      -- 會在斜坡前停止
+                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
+                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
+                { type = "MINE", x = 850, y = 0 },             -- 地雷1
+                { type = "MINE", x = 950, y = 0 },             -- 地雷2
+            },
+            
+            delivery_targets = {}
+        },
+        
+        -- 任務獎勵（資源）
+        reward_steel = 50,
+        reward_copper = 30,
+        reward_rubber = 25
+    },
+
+    ["M005"] = {
+        id = "M005", 
+        name = "ENEMY TEST", 
+        category = "ELIMINATION", 
+        description = "Test all new enemy types: BASIC, JUMP, SWORD, MINE.",
+        prerequisite = "M001",  -- 需要完成 M001 才會顯示
+        time_limit = -1,  -- 無時間限制
+        
+        -- 關卡目標
+        objective = {
+            type = "ELIMINATE_ALL",
+            description = "Defeat all enemies"
+        },
+        
+        -- 關卡場景設定
+        scene = {
+            width = 1200, 
+            ground_y = 220, 
+            -- 背景層設定應為純陣列，不含其他欄位
+            backgrounds = {
+                { layer = 0, x = 30, y = 45, image = "images/bg_building3.png" },
+                { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
+                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" }
+            },
+
+            -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
+            dialog = {
+                image = "images/bg_building3.png",
+                lines = {
+                    "Mission 5",
+                    "Go Go Now",
+                    "Press A to advance each line, and start the mission at the end."
                 }
             },
             

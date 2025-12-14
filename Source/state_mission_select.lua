@@ -17,6 +17,7 @@ local scroll_offset = 0   -- 捲動偏移量
 
 local FONT_SMALL = nil
 local FONT_LARGE = nil
+local SCREEN_HEIGHT = 240
 
 function StateMissionSelect:setup()
     print("StateMissionSelect setup called")
@@ -86,7 +87,8 @@ function StateMissionSelect:update()
         if selected_index < 1 then
             selected_index = #mission_list
         end
-        scroll_offset = math.max(0, selected_index - 3)
+        local max_offset = math.max(0, #mission_list - 4)
+        scroll_offset = math.min(math.max(0, selected_index - 1), max_offset)
         
         -- 播放游標移動音效
         if _G.SoundManager and _G.SoundManager.playCursorMove then
@@ -99,7 +101,8 @@ function StateMissionSelect:update()
         if selected_index > #mission_list then
             selected_index = 1
         end
-        scroll_offset = math.max(0, selected_index - 3)
+        local max_offset = math.max(0, #mission_list - 4)
+        scroll_offset = math.min(math.max(0, selected_index - 1), max_offset)
         
         -- 播放游標移動音效
         if _G.SoundManager and _G.SoundManager.playCursorMove then
@@ -119,7 +122,10 @@ function StateMissionSelect:draw()
     gfx.setFont(FONT_SMALL)
     local y = 50
     local line_height = 40
-    local visible_count = 4  -- 一次顯示 4 個任務
+    local available_height = SCREEN_HEIGHT - y - 30
+    local visible_count = math.max(1, math.floor(available_height / line_height))
+
+    local MissionData = _G.MissionData or {}
     
     for i = 1, math.min(visible_count, #mission_list) do
         local index = scroll_offset + i
@@ -163,7 +169,15 @@ function StateMissionSelect:draw()
     end
     
     -- 繪製控制提示
-    gfx.drawText("A: SELECT", 10, 225)
+        -- 顯示上/下捲動提示箭頭
+        if scroll_offset > 0 then
+            gfx.drawText("^", 390, 35)
+        end
+        local max_offset = math.max(0, #mission_list - visible_count)
+        if scroll_offset < max_offset then
+            gfx.drawText("v", 390, 210)
+        end
+        gfx.drawText("A: SELECT", 10, 225)
 end
 
 function StateMissionSelect:cleanup()

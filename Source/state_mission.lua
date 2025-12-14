@@ -687,10 +687,10 @@ function StateMission.draw()
         print("Drawing dialog...")
         -- 上方圖片
         if dialog_image then
-            pcall(function() dialog_image:draw(100, 40) end)
+            pcall(function() dialog_image:draw(0, 0) end)
         end
         -- 下方對話框
-        local box_x, box_y, box_w, box_h = 10, SCREEN_HEIGHT - UI_HEIGHT - 30, SCREEN_WIDTH - 20, 50
+        local box_x, box_y, box_w, box_h = 10, SCREEN_HEIGHT - UI_HEIGHT - 40, SCREEN_WIDTH - 20, 80
         gfx.setColor(gfx.kColorWhite)
         gfx.fillRect(box_x, box_y, box_w, box_h)
         gfx.setColor(gfx.kColorBlack)
@@ -698,7 +698,10 @@ function StateMission.draw()
         -- 打字機文字
         local text = dialog_lines[dialog_index] or ""
         local shown = string.sub(text, 1, math.min(#text, math.floor(typewriter_progress)))
-        gfx.drawText(shown, box_x + 8, box_y + 8)
+        -- 自動斷行：在對話框矩形內換行並向下排版
+        pcall(function()
+            gfx.drawTextInRect(shown, box_x + 8, box_y + 6, box_w - 16, box_h - 12)
+        end)
         return
     end
 
