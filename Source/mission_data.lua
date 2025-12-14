@@ -21,6 +21,25 @@ local missions = {
             width = 800, 
             ground_y = 220, 
             
+            -- 地形配置（64px為一單位）
+            -- 類型: "flat", "up15", "up30", "up45", "down15", "down30", "down45"
+            -- height_offset: 相對於 ground_y 的高度偏移（負值=往上）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up15", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
+                { type = "flat", height_offset = -17 },   -- 接續上一段的結束高度
+                { type = "flat", height_offset = -17 },
+                { type = "down15", height_offset = -17 }, -- 從 -17 往下降到17
+                { type = "flat", height_offset = 0 },     -- 回到0
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
             -- 場景障礙物件
             obstacles = {
             },
@@ -63,6 +82,24 @@ local missions = {
         scene = {
             width = 800, 
             ground_y = 220, 
+            
+            -- 地形配置（64px為一單位）
+            -- 類型: "flat", "up15", "up30", "up45", "down15", "down30", "down45"
+            terrain = {
+                { type = "flat" },
+                { type = "flat" },
+                { type = "flat" },
+                { type = "up15" },
+                { type = "up30" },
+                { type = "flat" },
+                { type = "down30" },
+                { type = "flat" },
+                { type = "flat" },
+                { type = "flat" },
+                { type = "flat" },
+                { type = "flat" },
+                { type = "flat" }
+            },
             
             -- 場景障礙物件
             obstacles = {

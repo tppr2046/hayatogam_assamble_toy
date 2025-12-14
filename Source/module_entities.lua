@@ -560,7 +560,7 @@ function Projectile:init(x, y, vx, vy, damage, is_player_bullet, ground_y)
 end
 
 -- 砲彈更新
-function Projectile:update(dt, GRAVITY)
+function Projectile:update(dt, GRAVITY, entity_controller)
     if not self.active then return end
     
     -- 應用物理
@@ -570,9 +570,10 @@ function Projectile:update(dt, GRAVITY)
     self.vy = self.vy + g * dt
     self.y = self.y + self.vy * dt
     
-    -- 檢查是否碰到地面
-    if self.y + self.height >= self.ground_y then
-        self.y = self.ground_y - self.height
+    -- 檢查是否碰到地形
+    local ground_height = entity_controller and entity_controller:getGroundHeight(self.x) or self.ground_y
+    if self.y + self.height >= ground_height then
+        self.y = ground_height - self.height
         self.active = false
     end
 end
@@ -774,7 +775,7 @@ function Stone:init(x, y, ground_y, target_id, image_path)
     return stone
 end
 
-function Stone:update(dt, gravity)
+function Stone:update(dt, gravity, entity_controller)
     if self.is_grabbed or self.is_placed then
         -- 被抓住或已放置時不更新物理
         return
@@ -785,9 +786,10 @@ function Stone:update(dt, gravity)
         self.vy = self.vy + gravity
         self.y = self.y + self.vy
         
-        -- 地面碰撞
-        if self.y >= self.ground_y - self.height then
-            self.y = self.ground_y - self.height
+        -- 地形碰撞
+        local ground_height = entity_controller and entity_controller:getGroundHeight(self.x) or self.ground_y
+        if self.y >= ground_height - self.height then
+            self.y = ground_height - self.height
             self.vy = 0
             self.vx = 0  -- 落地後停止
             self.is_grounded = true
@@ -834,6 +836,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     local controller = {
         obstacles = {},  -- 先初始化為空，稍後處理
         ground_y = safe_ground_y,
+        terrain = {},  -- 地形數據
         enemies = {}, -- 新增敵人列表
         projectiles = {}, -- 新增砲彈列表
         stones = {},  -- 新增石頭列表
@@ -842,6 +845,19 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         player_move_speed = player_move_speed or 2.0 -- 供敵人計算砲彈速度
     }
     setmetatable(controller, { __index = EntityController })
+    
+    -- 初始化地形（64px單位）
+    local terrain_data = (scene_data and scene_data.terrain) or {}
+    for i, tdata in ipairs(terrain_data) do
+        local terrain_type = tdata.type or "flat"
+        local height_offset = tdata.height_offset or 0  -- 相對於 ground_y 的高度偏移
+        table.insert(controller.terrain, {
+            type = terrain_type,
+            x = (i - 1) * 64,  -- 每單位64px寬
+            width = 64,
+            height_offset = height_offset
+        })
+    end
     
     -- 初始化障礙物（加載圖片和計算尺寸）
     local obstacles_data = (scene_data and scene_data.obstacles) or {}
@@ -1016,7 +1032,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     for i = #self.projectiles, 1, -1 do
         local p = self.projectiles[i]
         if p.active then
-            p:update(dt, self.GRAVITY)
+            p:update(dt, self.GRAVITY, self)  -- 傳入 entity_controller
             
             -- 檢查敵人砲彈是否擊中機甲
             if not p.is_player_bullet and self:checkMechCollision(mech_x, mech_y, mech_width, mech_height, p.x, p.y, p.width, p.height) then
@@ -1060,7 +1076,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     -- 3. 更新石頭
     for i = #self.stones, 1, -1 do
         local stone = self.stones[i]
-        stone:update(dt, self.GRAVITY)
+        stone:update(dt, self.GRAVITY, self)  -- 傳入 entity_controller
         
         -- 檢查石頭是否與敵人碰撞（造成傷害）
         if not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
@@ -1158,8 +1174,22 @@ function EntityController:draw(camera_x)
     local ground_y = self.ground_y
     gfx.setColor(gfx.kColorBlack)
     
-    -- 繪製地面（只繪製一條橫線）
-    gfx.drawLine(0, ground_y, 400, ground_y) 
+    -- 繪製地形
+    for _, terrain in ipairs(self.terrain) do
+        local screen_x = terrain.x - camera_x
+        
+        -- 只繪製在畫面內的地形
+        if screen_x < 400 and screen_x + 64 > 0 then
+            local x1, y1, x2, y2 = self:getTerrainPoints(terrain.type, screen_x, ground_y, terrain.height_offset)
+            
+            -- 繪製地形線
+            gfx.drawLine(x1, y1, x2, y2)
+            
+            -- 繪製到地面底部的填充（可選）
+            -- gfx.fillTriangle(x1, y1, x2, y2, x2, 240)
+            -- gfx.fillTriangle(x1, y1, x1, 240, x2, 240)
+        end
+    end 
 
     -- 繪製障礙物
     for i, obs in ipairs(self.obstacles) do
@@ -1220,8 +1250,106 @@ function EntityController:draw(camera_x)
     end
 end
 
--- checkCollision 函式保持不變 (用於機甲與場景的垂直/水平碰撞檢查)
--- ... (您的 checkCollision 函式內容) ...
+-- 獲取地形兩端點坐標
+function EntityController:getTerrainPoints(terrain_type, screen_x, base_y, height_offset)
+    local y_start = base_y + (height_offset or 0)
+    local x1, y1, x2, y2 = screen_x, y_start, screen_x + 64, y_start
+    
+    if terrain_type == "up15" then
+        y2 = y_start - 17  -- tan(15°) ≈ 0.27, 64 * 0.27 ≈ 17
+    elseif terrain_type == "up30" then
+        y2 = y_start - 37  -- tan(30°) ≈ 0.58, 64 * 0.58 ≈ 37
+    elseif terrain_type == "up45" then
+        y2 = y_start - 64  -- tan(45°) = 1, 64 * 1 = 64
+    elseif terrain_type == "down15" then
+        y2 = y_start + 17
+    elseif terrain_type == "down30" then
+        y2 = y_start + 37
+    elseif terrain_type == "down45" then
+        y2 = y_start + 64
+    end
+    
+    return x1, y1, x2, y2
+end
+
+-- 獲取指定X位置的地面高度
+function EntityController:getGroundHeight(world_x)
+    -- 找到對應的地形單位
+    for _, terrain in ipairs(self.terrain) do
+        if world_x >= terrain.x and world_x < terrain.x + 64 then
+            local base_y = self.ground_y + (terrain.height_offset or 0)
+            local relative_x = world_x - terrain.x  -- 在地形單位內的相對位置
+            local progress = relative_x / 64  -- 0到1的進度
+            
+            if terrain.type == "flat" then
+                return base_y
+            elseif terrain.type == "up15" then
+                return base_y - (17 * progress)
+            elseif terrain.type == "up30" then
+                return base_y - (37 * progress)
+            elseif terrain.type == "up45" then
+                return base_y - (64 * progress)
+            elseif terrain.type == "down15" then
+                return base_y + (17 * progress)
+            elseif terrain.type == "down30" then
+                return base_y + (37 * progress)
+            elseif terrain.type == "down45" then
+                return base_y + (64 * progress)
+            end
+        end
+    end
+    
+    -- 預設返回基準地面高度
+    return self.ground_y
+end
+
+-- 獲取指定X位置的地形類型
+function EntityController:getTerrainType(world_x)
+    for _, terrain in ipairs(self.terrain) do
+        if world_x >= terrain.x and world_x < terrain.x + 64 then
+            return terrain.type
+        end
+    end
+    return "flat"
+end
+
+-- 檢查移動方向是否能爬上斜坡
+-- direction: 1=向右, -1=向左
+function EntityController:canClimbSlope(world_x, direction, climb_power)
+    local terrain_type = self:getTerrainType(world_x)
+    
+    -- 向右移動時檢查向上斜坡
+    if direction > 0 then
+        if terrain_type == "up15" and climb_power >= 1 then
+            return true
+        elseif terrain_type == "up30" and climb_power >= 2 then
+            return true
+        elseif terrain_type == "up45" and climb_power >= 3 then
+            return true
+        elseif terrain_type:sub(1, 4) == "down" then
+            return true  -- 下坡總是可以走
+        elseif terrain_type == "flat" then
+            return true
+        end
+    -- 向左移動時檢查向下斜坡（從左看是上坡）
+    elseif direction < 0 then
+        if terrain_type == "down15" and climb_power >= 1 then
+            return true
+        elseif terrain_type == "down30" and climb_power >= 2 then
+            return true
+        elseif terrain_type == "down45" and climb_power >= 3 then
+            return true
+        elseif terrain_type:sub(1, 2) == "up" then
+            return true  -- 從左往右看的下坡
+        elseif terrain_type == "flat" then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- checkCollision 函式 (用於機甲與場景的垂直/水平碰撞檢查，包含地形)
 local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_old, mech_width, mech_height)
     local mech_left = target_x
     local mech_right = target_x + mech_width
@@ -1233,7 +1361,24 @@ local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_
     
     local safe_ground_y = self.ground_y or 240 
     
-    -- 合併障礙物和石頭為檢查列表
+    -- 1. 檢查地形碰撞（機甲底部中心點和兩端點）
+    local check_points = {
+        target_x + mech_width / 2,  -- 中心點
+        target_x + 5,               -- 左側
+        target_x + mech_width - 5   -- 右側
+    }
+    
+    for _, check_x in ipairs(check_points) do
+        local terrain_y = self:getGroundHeight(check_x)
+        if mech_bottom >= terrain_y then
+            local terrain_stop = terrain_y - mech_height
+            if not final_y_stop or terrain_stop < final_y_stop then
+                final_y_stop = terrain_stop
+            end
+        end
+    end
+    
+    -- 2. 合併障礙物和石頭為檢查列表
     local all_obstacles = {}
     for _, obs in ipairs(self.obstacles) do
         table.insert(all_obstacles, {x = obs.x, width = obs.width, height = obs.height})
@@ -1246,6 +1391,7 @@ local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_
         end
     end
 
+    -- 3. 檢查障礙物碰撞
     for i, obs in ipairs(all_obstacles) do
         
         if not obs then goto next_collision_check end 
@@ -1259,11 +1405,11 @@ local function checkCollision(self, target_x, target_y, mech_vy_current, mech_y_
         local obs_top = safe_ground_y - obs_height 
         local obs_bottom = safe_ground_y          
 
-        -- 1. 廣義重疊檢查 (AABB 碰撞)
+        -- 廣義重疊檢查 (AABB 碰撞)
         if mech_right > obs_left and mech_left < obs_right and
            mech_bottom > obs_top and mech_top < obs_bottom then
             
-            -- 2. 細分碰撞類型
+            -- 細分碰撞類型
             
             -- **A. 垂直碰撞 (從上方落下)**
             if mech_vy_current >= 0 and mech_y_old + mech_height <= obs_top + 1 and mech_bottom > obs_top then

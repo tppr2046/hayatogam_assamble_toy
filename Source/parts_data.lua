@@ -46,7 +46,8 @@ local parts_data = {
         -- UI 操作介面圖片
         ui_panel = "images/wheel_panel.png",
         ui_stick = "images/wheel_stick.png",
-        move_speed = 2.0  -- 左右移動速度
+        move_speed = 2.0,  -- 左右移動速度
+        climb_power = 1  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
     ["WHEEL2"] = {
         name = "WHEEL",
@@ -66,7 +67,8 @@ local parts_data = {
         -- UI 操作介面圖片
         ui_panel = "images/wheel_panel.png",
         ui_stick = "images/wheel_stick.png",
-        move_speed = 2.0  -- 左右移動速度
+        move_speed = 2.0,  -- 左右移動速度
+        climb_power = 2  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
 
     ["CANON1"] = {
@@ -166,7 +168,8 @@ local parts_data = {
         ui_stick = "images/wheel_stick.png",
         move_speed = 3.0,  -- 左右移動速度
         jump_velocity = -8.0,  -- 跳躍初速度（負值=向上）
-        animation_walk = "images/feet_walk"  -- 行走動畫 imagetable 路徑
+        animation_walk = "images/feet_walk",  -- 行走動畫 imagetable 路徑
+        climb_power = 3  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
     ["CLAW"] = {
         name = "CLAW",
