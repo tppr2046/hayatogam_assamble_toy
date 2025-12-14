@@ -645,7 +645,7 @@ function StateMission.draw()
 
     -- 2. 繪製機甲（使用 MechController）
     if mech_controller then
-        mech_controller:drawMech(mech_x, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame)
+        mech_controller:drawMech(mech_x, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
     end
     
     -- 3. 繪製 HUD (HP 條)
