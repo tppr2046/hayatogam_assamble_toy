@@ -65,6 +65,12 @@ local max_hp = 1     -- 機甲最大 HP (在 setup 中獲取)
 local current_mission_id = nil -- 當前任務 ID（用於檢查目標）
 local mission_time_limit = -1  -- 任務時間限制（秒），-1 表示無時間限制
 local mission_elapsed_time = 0 -- 任務經過時間（秒）
+local dialog_active = false
+local dialog_lines = nil
+local dialog_index = 1
+local dialog_image = nil
+local typewriter_progress = 0
+local typewriter_speed = 40 -- 每秒顯示的字符數
 
 
 -- ==========================================
@@ -229,10 +235,48 @@ function StateMission.setup()
     local stats = (_G and _G.GameState and _G.GameState.mech_stats) or {}
     max_hp = stats.total_hp or 100
     current_hp = max_hp
+
+    -- 讀取並啟用任務對話（如果設定）
+    dialog_active = false
+    dialog_lines = nil
+    dialog_index = 1
+    dialog_image = nil
+    typewriter_progress = 0
+    if current_scene and current_scene.dialog and current_scene.dialog.lines then
+        dialog_lines = current_scene.dialog.lines
+        dialog_active = true
+        typewriter_progress = 0
+        if current_scene.dialog.image then
+            local ok, img = pcall(function() return playdate.graphics.image.new(current_scene.dialog.image) end)
+            if ok and img then dialog_image = img end
+        end
+    end
 end
 
 function StateMission.update()
     if is_paused then return end
+
+    -- 如果對話中，處理打字機效果和按鍵前進
+    if dialog_active then
+        typewriter_progress = typewriter_progress + typewriter_speed * (1/30) -- 假設約 30FPS
+        local current_text = dialog_lines[dialog_index]
+        -- 監聽 A 鍵（正確用法：呼叫 API 並傳入按鍵常數）
+        if playdate.buttonJustPressed and playdate.buttonJustPressed(playdate.kButtonA) then
+            if typewriter_progress < #current_text then
+                -- 尚未完整顯示，直接顯示完整本句
+                typewriter_progress = #current_text
+            else
+                -- 完整顯示後，切到下一句或結束
+                if dialog_index < #dialog_lines then
+                    dialog_index = dialog_index + 1
+                    typewriter_progress = 0
+                else
+                    dialog_active = false
+                end
+            end
+        end
+        return -- 對話中暫停遊戲更新
+    end
 
     -- 0. 記錄舊的 Y 座標 (用於 EntityController 碰撞檢查)
     mech_y_old = mech_y
@@ -638,6 +682,26 @@ function StateMission.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
     
+    -- 若對話中，先繪製對話畫面
+    if dialog_active then
+        print("Drawing dialog...")
+        -- 上方圖片
+        if dialog_image then
+            pcall(function() dialog_image:draw(100, 40) end)
+        end
+        -- 下方對話框
+        local box_x, box_y, box_w, box_h = 10, SCREEN_HEIGHT - UI_HEIGHT - 30, SCREEN_WIDTH - 20, 50
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillRect(box_x, box_y, box_w, box_h)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawRect(box_x, box_y, box_w, box_h)
+        -- 打字機文字
+        local text = dialog_lines[dialog_index] or ""
+        local shown = string.sub(text, 1, math.min(#text, math.floor(typewriter_progress)))
+        gfx.drawText(shown, box_x + 8, box_y + 8)
+        return
+    end
+
     -- 1. 繪製實體 (地面、障礙物、敵人)
     if entity_controller then
         entity_controller:draw(camera_x) 
@@ -691,6 +755,13 @@ function StateMission.draw()
 
     -- 4. 繪製控制介面 UI（使用 MechController）
     if mech_controller then
+        -- 在操作介面下方畫白色背景方塊（略大於介面）
+        local ui_w = UI_GRID_COLS * UI_CELL_SIZE
+        local ui_h = UI_GRID_ROWS * UI_CELL_SIZE
+        local bg_margin = 6
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillRect(UI_START_X - bg_margin, UI_START_Y - bg_margin, ui_w + bg_margin*2, ui_h + bg_margin*2)
+        gfx.setColor(gfx.kColorBlack)
         mech_controller:drawUI(_G.GameState.mech_stats, UI_START_X, UI_START_Y, UI_CELL_SIZE, UI_GRID_COLS, UI_GRID_ROWS)
     end
     

@@ -20,6 +20,12 @@ local missions = {
         scene = {
             width = 800, 
             ground_y = 220, 
+            -- 背景層設定：layer=0(後景,慢), layer=1(前景,快); x,y 為初始位置; image 為圖檔
+            backgrounds = {
+                { layer = 0, x = 50, y = 40, image = "images/bg_building3.png" },
+                { layer = 1, x = 120, y = 70, image = "images/bg_building1.png" },
+                { layer = 1, x = 260, y = 60, image = "images/bg_building2.png" }
+            },
             
             -- 地形配置（64px為一單位）
             -- 類型: "flat", "up15", "up30", "up45", "down15", "down30", "down45"
@@ -49,9 +55,18 @@ local missions = {
 --                { x = 400, y = 0 },  -- x, y 為初始位置，y=0 表示在地面上
             },
             
-            -- 任務敵人（添加測試敵人）
+                -- 任務開始前對話（可選）：image 顯示在上方，lines 逐句以打字機顯示
+                dialog = {
+                    image = "images/bg_building1.png",
+                    lines = {
+                        "Welcome pilot, your training begins now.",
+                        "Use the crank to operate your parts.",
+                        "Defeat the enemies to complete the mission."
+                    }
+                },
+            -- 任務敵人（y=0 表示在地面上，負值表示地面上方）
             enemies = {
-                { type = "BASIC_ENEMY", x = 300, y = -17 },
+                { type = "BASIC_ENEMY", x = 300, y = 0 },
                 { type = "BASIC_ENEMY", x = 500, y = 0 },
             },
             
@@ -82,6 +97,10 @@ local missions = {
         scene = {
             width = 800, 
             ground_y = 220, 
+            backgrounds = {
+                { layer = 0, x = 40, y = 50, image = "images/bg_building3.png" },
+                { layer = 1, x = 180, y = 80, image = "images/bg_building1.png" }
+            },
             
             -- 地形配置（64px為一單位）
             -- 類型: "flat", "up15", "up30", "up45", "down15", "down30", "down45"
@@ -113,10 +132,9 @@ local missions = {
 
             },
             
-            -- 任務敵人（添加測試敵人）
+            -- 任務敵人（y=0 表示在地面上，負值表示地面上方）
             enemies = {
                 { type = "BASIC_ENEMY", x = 300, y = 0 },
---                { type = "BASIC_ENEMY", x = 500, y = 0 },
             },
             
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
@@ -150,6 +168,22 @@ local missions = {
         scene = {
             width = 1200, 
             ground_y = 220, 
+            -- 背景層設定應為純陣列，不含其他欄位
+            backgrounds = {
+                { layer = 0, x = 30, y = 45, image = "images/bg_building3.png" },
+                { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
+                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" }
+            },
+
+            -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
+            dialog = {
+                image = "images/bg_building3.png",
+                lines = {
+                    "這是 M003 測試關卡。",
+                    "將示範多種敵人行為與背景視差。",
+                    "按 A 逐句前進，最後開始任務。"
+                }
+            },
             
             -- 地形配置（全平坦用於測試）
             terrain = {
@@ -177,9 +211,9 @@ local missions = {
             obstacles = {},
             stones = {},
             
-            -- 測試所有敵人類型
+            -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
             enemies = {
-                { type = "BASIC_ENEMY", x = 250, y = 0 },      -- 會在斜坡前停止
+                { type = "BASIC_ENEMY", x = 280, y = -37 },      -- 會在斜坡前停止
                 { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
                 { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
                 { type = "MINE", x = 850, y = 0 },             -- 地雷1

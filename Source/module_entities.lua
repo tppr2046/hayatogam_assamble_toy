@@ -663,8 +663,15 @@ function Enemy:init(x, y, type_id, ground_y)
         move_type = data.move_type,
         attack_type = data.attack_type
     }
-    -- 確保敵人站在地面上
-    e.y = ground_y - e.height 
+    -- 處理敵人高度：y 參數表示相對於地面的偏移（負值=上方，0=地面）
+    -- 如果 y <= 0，設置為地面上方；如果 y > 0，表示絕對位置
+    if y <= 0 then
+        -- y 是相對於地面的偏移，0表示地面上
+        e.y = ground_y - e.height + y
+    else
+        -- y > 0 時，確保在地面上或以上
+        e.y = math.min(y, ground_y - e.height)
+    end
     setmetatable(e, { __index = Enemy })
     print("LOG: Created Enemy " .. type_id .. " at " .. x .. " (" .. img_width .. "x" .. img_height .. ")")
     -- 從敵人資料讀取砲彈 multiplier（可在 enemy_data.lua 調整）
@@ -991,6 +998,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         obstacles = {},  -- 先初始化為空，稍後處理
         ground_y = safe_ground_y,
         terrain = {},  -- 地形數據
+        backgrounds = {}, -- 背景層列表
         enemies = {}, -- 新增敵人列表
         projectiles = {}, -- 新增砲彈列表
         stones = {},  -- 新增石頭列表
@@ -1013,6 +1021,33 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         })
     end
     
+    -- 初始化背景層（兩層視差捲動）
+    local bgs_data = (scene_data and scene_data.backgrounds) or {}
+    for _, b in ipairs(bgs_data) do
+        local bg = {
+            layer = (b.layer or 0),
+            x = b.x or 0,
+            y = b.y or 0,
+            image = nil,
+            width = 0,
+            height = 0
+        }
+        if b.image then
+            local ok, img = pcall(function()
+                return playdate.graphics.image.new(b.image)
+            end)
+            if ok and img then
+                bg.image = img
+                local ok_size, w, h = pcall(function() return img:getSize() end)
+                if ok_size and w and h then
+                    bg.width = w
+                    bg.height = h
+                end
+            end
+        end
+        table.insert(controller.backgrounds, bg)
+    end
+
     -- 初始化障礙物（加載圖片和計算尺寸）
     local obstacles_data = (scene_data and scene_data.obstacles) or {}
     for _, odata in ipairs(obstacles_data) do
@@ -1396,6 +1431,22 @@ function EntityController:draw(camera_x)
     local ground_y = self.ground_y
     gfx.setColor(gfx.kColorBlack)
     
+    -- 繪製背景（先後景，再前景），背景隨畫面反向捲動；不重複平鋪
+    if self.backgrounds and #self.backgrounds > 0 then
+        local sorted = { }
+        for _, bg in ipairs(self.backgrounds) do table.insert(sorted, bg) end
+        table.sort(sorted, function(a, b) return (a.layer or 0) < (b.layer or 0) end)
+        for _, bg in ipairs(sorted) do
+            local parallax = (bg.layer == 1) and 0.6 or 0.3  -- 前景較快，後景較慢
+            local screen_x = bg.x - (camera_x * parallax)
+            local screen_y = bg.y
+            if bg.image then
+                -- 單次繪製，不進行重複平鋪
+                pcall(function() bg.image:draw(screen_x, screen_y) end)
+            end
+        end
+    end
+    
     -- 繪製地形
     for _, terrain in ipairs(self.terrain) do
         local screen_x = terrain.x - camera_x
@@ -1407,9 +1458,9 @@ function EntityController:draw(camera_x)
             -- 繪製地形線
             gfx.drawLine(x1, y1, x2, y2)
             
-            -- 繪製到地面底部的填充（可選）
-            -- gfx.fillTriangle(x1, y1, x2, y2, x2, 240)
-            -- gfx.fillTriangle(x1, y1, x1, 240, x2, 240)
+            -- 使用填充遮擋背景：將地形線下方填滿至畫面底部，以遮住背景
+            gfx.fillTriangle(x1, y1, x2, y2, x2, 240)
+            gfx.fillTriangle(x1, y1, x1, 240, x2, 240)
         end
     end 
 
