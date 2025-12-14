@@ -624,14 +624,44 @@ function Enemy:init(x, y, type_id, ground_y)
         image = enemy_img,  -- 儲存圖片
         ground_y = ground_y,
         vx = 1.0, -- 基礎水平速度
+        vy = 0,   -- 垂直速度（跳躍用）
         move_dir = 1, -- 1 for right, -1 for left
         is_alive = true,
+        is_grounded = true,  -- 是否在地面上
         move_timer = 0,
         fire_timer = 0,
         fire_cooldown = 2.0, -- 每 2 秒發射一次
         -- 子彈發射位置偏移
         bullet_offset_x = data.bullet_offset_x or (img_width / 2),
-        bullet_offset_y = data.bullet_offset_y or (img_height / 2)
+        bullet_offset_y = data.bullet_offset_y or (img_height / 2),
+        -- 移動參數
+        move_probability = data.move_probability or 0.5,
+        move_range = data.move_range or 50,
+        move_speed = data.move_speed or 20,
+        origin_x = x,  -- 記錄初始位置
+        -- 跳躍參數
+        jump_velocity = data.jump_velocity or -6.0,
+        jump_cooldown = data.jump_cooldown or 2.0,
+        jump_horizontal = data.jump_horizontal or 30,
+        jump_timer = 0,
+        -- sword 參數
+        sword_angle = 0,
+        sword_swing_cooldown = data.sword_swing_cooldown or 3.0,
+        sword_swing_speed = data.sword_swing_speed or 180,
+        sword_swing_range = data.sword_swing_range or 90,
+        sword_timer = 0,
+        sword_swinging = false,
+        sword_direction = 1,  -- 1=前揮, -1=後揮
+        -- 地雷參數
+        explode_delay = data.explode_delay or 2.0,
+        explode_radius = data.explode_radius or 50,
+        explode_damage = data.explode_damage or 20,
+        is_triggered = false,
+        explode_timer = 0,
+        is_exploded = false,
+        -- 移動類型和攻擊類型
+        move_type = data.move_type,
+        attack_type = data.attack_type
     }
     -- 確保敵人站在地面上
     e.y = ground_y - e.height 
@@ -643,7 +673,7 @@ function Enemy:init(x, y, type_id, ground_y)
     return e
 end
 
-function Enemy:update(dt, mech_x, controller)
+function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     if not self.is_alive then return end
     
     self.move_timer = self.move_timer + dt
@@ -658,19 +688,118 @@ function Enemy:update(dt, mech_x, controller)
         self.hit_shake_offset_x = 0
     end
 
-    -- 左右移動邏輯 (BASIC_ENEMY)
-    if self.type_id == "BASIC_ENEMY" then
-        if self.move_timer > 2.0 then -- 每 2 秒換一次方向
-            self.move_dir = self.move_dir * -1
+    -- 根據 move_type 處理移動
+    if self.move_type == "MOVE FORWARD/BACK" then
+        -- BASIC_ENEMY: 前後移動，檢查斜坡
+        if self.move_timer > 2.0 then
             self.move_timer = 0
+            -- 依照機率決定是否移動
+            if math.random() < self.move_probability then
+                self.move_dir = self.move_dir * -1
+            end
         end
-        self.x = self.x + self.move_dir * self.vx * dt
+        
+        local new_x = self.x + self.move_dir * self.move_speed * dt
+        
+        -- 檢查是否超出移動範圍
+        if math.abs(new_x - self.origin_x) < self.move_range then
+            -- 檢查新位置是否在斜坡上
+            if controller then
+                local terrain_type = controller:getTerrainType(new_x)
+                if terrain_type == "flat" then
+                    self.x = new_x
+                else
+                    -- 遇到斜坡，停止移動並換方向
+                    self.move_dir = self.move_dir * -1
+                end
+            else
+                self.x = new_x
+            end
+        else
+            -- 超出範圍，換方向
+            self.move_dir = self.move_dir * -1
+        end
+        
+    elseif self.move_type == "JUMP" then
+        -- 跳躍敵人
+        self.jump_timer = self.jump_timer + dt
+        
+        -- 應用重力
+        if not self.is_grounded then
+            self.vy = self.vy + (controller and controller.GRAVITY or 0.5)
+            self.y = self.y + self.vy
+            self.x = self.x + self.move_dir * self.jump_horizontal * dt
+            
+            -- 檢查是否落地
+            local ground_height = controller and controller:getGroundHeight(self.x) or self.ground_y
+            if self.y >= ground_height - self.height then
+                self.y = ground_height - self.height
+                self.vy = 0
+                self.is_grounded = true
+            end
+        end
+        
+        -- 跳躍邏輯
+        if self.is_grounded and self.jump_timer >= self.jump_cooldown then
+            self.jump_timer = 0
+            self.vy = self.jump_velocity
+            self.is_grounded = false
+            -- 隨機決定跳躍方向
+            if math.random() < 0.5 then
+                self.move_dir = self.move_dir * -1
+            end
+        end
+        
+    elseif self.move_type == "IMMOBILE" then
+        -- 不移動的敵人
     end
 
-    -- 射擊邏輯
-    if self.fire_timer >= self.fire_cooldown then
-        self:fire(mech_x, controller)
-        self.fire_timer = 0
+    -- 根據 attack_type 處理攻擊
+    if self.attack_type == "FIRE BULLET" then
+        if self.fire_timer >= self.fire_cooldown then
+            self:fire(mech_x, controller)
+            self.fire_timer = 0
+        end
+        
+    elseif self.attack_type == "SWING SWORD" then
+        self.sword_timer = self.sword_timer + dt
+        
+        if self.sword_swinging then
+            -- 正在揮劍
+            self.sword_angle = self.sword_angle + self.sword_direction * self.sword_swing_speed * dt
+            
+            -- 檢查是否到達範圍極限
+            if self.sword_direction > 0 and self.sword_angle >= self.sword_swing_range / 2 then
+                self.sword_direction = -1
+            elseif self.sword_direction < 0 and self.sword_angle <= -self.sword_swing_range / 2 then
+                self.sword_swinging = false
+                self.sword_angle = 0
+            end
+        else
+            -- 等待下次揮劍
+            if self.sword_timer >= self.sword_swing_cooldown then
+                self.sword_timer = 0
+                self.sword_swinging = true
+                self.sword_direction = 1
+            end
+        end
+        
+    elseif self.attack_type == "CONTACT" then
+        -- 接觸傷害（跳躍敵人）
+        -- 碰撞檢測由 EntityController:updateAll 處理
+        
+    elseif self.attack_type == "EXPLODE" then
+        -- 地雷邏輯
+        if not self.is_triggered then
+            -- 檢查是否被觸發（玩家或砲彈碰到）
+            -- 這部分由 updateAll 或其他系統處理
+        elseif not self.is_exploded then
+            self.explode_timer = self.explode_timer + dt
+            if self.explode_timer >= self.explode_delay then
+                self.is_exploded = true
+                -- 爆炸傷害由 updateAll 處理
+            end
+        end
     end
 end
 
@@ -723,6 +852,31 @@ function Enemy:draw(camera_x)
     local hp_percent = self.hp / hp_max
     gfx.setColor(gfx.kColorBlack)
     gfx.fillRect(screen_x, self.y - 5, self.width * hp_percent, 3) 
+    
+    -- 繪製劍（SWORD_ENEMY）
+    if self.attack_type == "SWING SWORD" then
+        local sword_length = 30
+        local center_x = screen_x + self.width / 2
+        local center_y = self.y + self.height / 2
+        
+        local angle_rad = math.rad(self.sword_angle)
+        local end_x = center_x + math.cos(angle_rad) * sword_length
+        local end_y = center_y + math.sin(angle_rad) * sword_length
+        
+        gfx.setLineWidth(3)
+        gfx.drawLine(center_x, center_y, end_x, end_y)
+        gfx.setLineWidth(1)
+    end
+    
+    -- 繪製地雷閃爍（MINE）
+    if self.attack_type == "EXPLODE" and self.is_triggered and not self.is_exploded then
+        -- 倒數時閃爍
+        local blink_speed = 10  -- 閃爍速度
+        if math.floor(self.explode_timer * blink_speed) % 2 == 0 then
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(screen_x - 2, self.y - 2, self.width + 4, self.height + 4)
+        end
+    end
 end
 
 -- [[ ========================================== ]]
@@ -1019,11 +1173,62 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     -- 1. 更新敵人 (讓敵人移動和射擊)
     for i, enemy in ipairs(self.enemies) do
         if enemy.is_alive then
-            enemy:update(dt, mech_x, self)
+            enemy:update(dt, mech_x, mech_y, mech_width, mech_height, self)
             
             -- 檢查敵人與機甲碰撞 (扣 HP 邏輯)
             if self:checkMechCollision(mech_x, mech_y, mech_width, mech_height, enemy.x, enemy.y, enemy.width, enemy.height) then
-                 mech_damage_taken = mech_damage_taken + enemy.attack * dt -- 持續傷害
+                -- 特殊處理：地雷被玩家踩到時觸發
+                if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
+                    enemy.is_triggered = true
+                    enemy.explode_timer = 0
+                    print("LOG: Mine triggered by player!")
+                end
+                
+                if enemy.attack_type == "CONTACT" then
+                    -- 接觸傷害（一次性）
+                    if not enemy.has_hit_player then
+                        mech_damage_taken = mech_damage_taken + enemy.attack
+                        enemy.has_hit_player = true
+                    end
+                else
+                    -- 持續傷害
+                    mech_damage_taken = mech_damage_taken + enemy.attack * dt
+                end
+            else
+                enemy.has_hit_player = false  -- 離開碰撞範圍後重置
+            end
+            
+            -- 檢查 sword 敵人的劍揮擊
+            if enemy.attack_type == "SWING SWORD" and enemy.sword_swinging then
+                -- 計算劍的位置（簡化為矩形區域）
+                local sword_length = 30
+                local sword_x = enemy.x + enemy.width / 2
+                local sword_y = enemy.y + enemy.height / 2
+                
+                -- 劍的角度決定攻擊範圍
+                local angle_rad = math.rad(enemy.sword_angle)
+                local sword_end_x = sword_x + math.cos(angle_rad) * sword_length
+                local sword_end_y = sword_y + math.sin(angle_rad) * sword_length
+                
+                -- 簡化碰撞：檢查劍尖是否在機甲範圍內
+                if sword_end_x >= mech_x and sword_end_x <= mech_x + mech_width and
+                   sword_end_y >= mech_y and sword_end_y <= mech_y + mech_height then
+                    if not enemy.sword_has_hit then
+                        mech_damage_taken = mech_damage_taken + enemy.attack
+                        enemy.sword_has_hit = true
+                    end
+                else
+                    enemy.sword_has_hit = false
+                end
+            end
+            
+            -- 檢查地雷爆炸
+            if enemy.attack_type == "EXPLODE" and enemy.is_exploded then
+                local distance = math.sqrt((mech_x - enemy.x)^2 + (mech_y - enemy.y)^2)
+                if distance < enemy.explode_radius then
+                    mech_damage_taken = mech_damage_taken + enemy.explode_damage
+                end
+                enemy.is_alive = false  -- 爆炸後移除
             end
         end
     end
@@ -1044,6 +1249,15 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             if p.is_player_bullet then
                 for _, enemy in ipairs(self.enemies) do
                     if enemy.is_alive and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, p.x, p.y, p.width, p.height) then
+                        -- 特殊處理：地雷被砲彈擊中時觸發
+                        if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
+                            enemy.is_triggered = true
+                            enemy.explode_timer = 0
+                            p.active = false
+                            print("LOG: Mine triggered by projectile!")
+                            break
+                        end
+                        
                         -- 擊中敵人
                         enemy.hp = enemy.hp - p.damage
                         p.active = false -- 砲彈銷毀
@@ -1082,6 +1296,14 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         if not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
             for _, enemy in ipairs(self.enemies) do
                 if enemy.is_alive and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, stone.x, stone.y, stone.width, stone.height) then
+                    -- 特殊處理：地雷被石頭擊中時觸發
+                    if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
+                        enemy.is_triggered = true
+                        enemy.explode_timer = 0
+                        print("LOG: Mine triggered by stone!")
+                        break
+                    end
+                    
                     -- 石頭砸到敵人
                     enemy.hp = enemy.hp - stone.damage
                     enemy.hit_shake_timer = 0.3
@@ -1602,7 +1824,7 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
     if pdata._arm_img then
         local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
         if arm_ok and arm_w and arm_h then
-            local angle_rad = math.rad(-self.claw_arm_angle - rotation_angle)
+            local angle_rad = math.rad(-self.claw_arm_angle + rotation_angle)
             local cos_a = math.cos(angle_rad)
             local sin_a = math.sin(angle_rad)
             local arm_center_offset_x = arm_w / 2
@@ -1611,7 +1833,7 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
             local arm_center_x = pivot_x + rotated_dx
             local arm_center_y = pivot_y + rotated_dy
             
-            pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -self.claw_arm_angle - rotation_angle) end)
+            pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -self.claw_arm_angle + rotation_angle) end)
             
             -- 計算臂末端位置（爪子軸心）
             local arm_end_rotated_dx = arm_w * cos_a
@@ -1621,13 +1843,13 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
             
             -- 繪製上爪
             if pdata._upper_img then
-                local total_angle = -self.claw_arm_angle - self.claw_grip_angle - rotation_angle
+                local total_angle = -self.claw_arm_angle - self.claw_grip_angle + rotation_angle
                 pcall(function() pdata._upper_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
             end
             
             -- 繪製下爪
             if pdata._lower_img then
-                local total_angle = -self.claw_arm_angle + self.claw_grip_angle - rotation_angle
+                local total_angle = -self.claw_arm_angle + self.claw_grip_angle + rotation_angle
                 pcall(function() pdata._lower_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
             end
         end
@@ -1659,14 +1881,14 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
             local img_center_y = original_y + ih / 2
             local dx_from_pivot = img_center_x - pivot_x
             local dy_from_pivot = img_center_y - pivot_y
-            local angle_rad = math.rad(-self.sword_angle - rotation_angle)
+            local angle_rad = math.rad(-self.sword_angle + rotation_angle)
             local cos_a = math.cos(angle_rad)
             local sin_a = math.sin(angle_rad)
             local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
             local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
             local new_center_x = pivot_x + rotated_dx
             local new_center_y = pivot_y + rotated_dy
-            pdata._img:drawRotated(new_center_x, new_center_y, -self.sword_angle - rotation_angle)
+            pdata._img:drawRotated(new_center_x, new_center_y, -self.sword_angle + rotation_angle)
         end
         gfx.popContext()
         

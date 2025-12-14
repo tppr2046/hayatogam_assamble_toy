@@ -51,7 +51,7 @@ local missions = {
             
             -- 任務敵人（添加測試敵人）
             enemies = {
-                { type = "BASIC_ENEMY", x = 300, y = 0 },
+                { type = "BASIC_ENEMY", x = 300, y = -17 },
                 { type = "BASIC_ENEMY", x = 500, y = 0 },
             },
             
@@ -131,6 +131,68 @@ local missions = {
         reward_steel = 30,
         reward_copper = 20,
         reward_rubber = 15
+    },
+    ["M003"] = {
+        id = "M003", 
+        name = "ENEMY TEST", 
+        category = "ELIMINATION", 
+        description = "Test all new enemy types: BASIC, JUMP, SWORD, MINE.",
+        prerequisite = "M001",  -- 需要完成 M001 才會顯示
+        time_limit = -1,  -- 無時間限制
+        
+        -- 關卡目標
+        objective = {
+            type = "ELIMINATE_ALL",
+            description = "Defeat all enemies"
+        },
+        
+        -- 關卡場景設定
+        scene = {
+            width = 1200, 
+            ground_y = 220, 
+            
+            -- 地形配置（全平坦用於測試）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up30", height_offset = 0 },     -- 測試斜坡停止
+                { type = "flat", height_offset = -37 },
+                { type = "flat", height_offset = -37 },
+                { type = "down30", height_offset = -37 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
+            obstacles = {},
+            stones = {},
+            
+            -- 測試所有敵人類型
+            enemies = {
+                { type = "BASIC_ENEMY", x = 250, y = 0 },      -- 會在斜坡前停止
+                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
+                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
+                { type = "MINE", x = 850, y = 0 },             -- 地雷1
+                { type = "MINE", x = 950, y = 0 },             -- 地雷2
+            },
+            
+            delivery_targets = {}
+        },
+        
+        -- 任務獎勵（資源）
+        reward_steel = 50,
+        reward_copper = 30,
+        reward_rubber = 25
     }
 
 
