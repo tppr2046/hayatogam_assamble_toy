@@ -1,4 +1,4 @@
---metrics={"baseline":7,"xHeight":1,"capHeight":0,"pairs":{},"left":[],"right":[]}
+--metrics={"baseline":7,"xHeight":0,"capHeight":0,"pairs":{},"left":[],"right":[]}
 tracking=1
 
 0	8
@@ -65,4 +65,36 @@ w	8
 x	8
 y	8
 z	8
+!	5
+"	7
+#	7
+$	7
+%	7
+&	7
+'	6
+(	5
+)	6
+*	7
++	7
+,	7
+-	7
+.	6
+/	6
+:	5
+;	5
+<	6
+>	7
+=	7
+?	7
+@	7
+[	5
+]	7
+\	6
+^	7
+_	7
+`	4
+{	5
+|	5
+}	7
+~	7
 
