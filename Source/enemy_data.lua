@@ -36,8 +36,9 @@ return {
         jump_velocity = -6.0,     -- 跳躍初速度
         jump_cooldown = 2.0,      -- 跳躍間隔（秒）
         jump_horizontal = 30,     -- 水平移動速度
-        -- 敵人圖片
-        image = "images/enemy1"
+        -- 敵人圖片（3-frame imagetable）
+        -- Frame 1: 站立, Frame 2: 跳起, Frame 3: 空中
+        image = "images/enemy_jump"
     },
     
     ["SWORD_ENEMY"] = {
@@ -49,7 +50,9 @@ return {
         sword_swing_min = -180,         -- 揮動最小角度（度）
         sword_swing_max = 0,       -- 揮動最大角度（度）
         -- 敵人圖片
-        image = "images/enemy2"
+        image = "images/enemy2",
+        -- 劍圖片（可選，若不指定則使用預設的直線繪制）
+        sword_image = "images/enemy2_sword"
     },
     
     ["MINE"] = {

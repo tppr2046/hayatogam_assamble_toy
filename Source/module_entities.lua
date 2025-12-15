@@ -595,20 +595,55 @@ Enemy = {}
 function Enemy:init(x, y, type_id, ground_y)
     local data = EnemyData[type_id]
     
-    -- 載入敵人圖片
+    -- 載入敵人圖片或imagetable
     local enemy_img = nil
+    local enemy_imagetable = nil
     local img_width = 24
     local img_height = 32
     if data.image then
-        local ok, img = pcall(function()
-            return playdate.graphics.image.new(data.image)
-        end)
-        if ok and img then
-            enemy_img = img
-            local ok_size, w, h = pcall(function() return img:getSize() end)
-            if ok_size and w and h then
-                img_width = w
-                img_height = h
+        -- JUMP_ENEMY: 嘗試載入imagetable
+        if type_id == "JUMP_ENEMY" then
+            local ok_table, imagetable = pcall(function()
+                return playdate.graphics.imagetable.new(data.image)
+            end)
+            if ok_table and imagetable then
+                enemy_imagetable = imagetable
+                -- 取得第一幀的大小
+                local frame1 = imagetable:getImage(1)
+                if frame1 then
+                    local ok_size, w, h = pcall(function() return frame1:getSize() end)
+                    if ok_size and w and h then
+                        img_width = w
+                        img_height = h
+                    end
+                end
+                enemy_img = imagetable:getImage(1)  -- 預設顯示第1幀
+            else
+                -- imagetable失敗，回退到普通image
+                local ok_img, img = pcall(function()
+                    return playdate.graphics.image.new(data.image)
+                end)
+                if ok_img and img then
+                    enemy_img = img
+                    local ok_size, w, h = pcall(function() return img:getSize() end)
+                    if ok_size and w and h then
+                        img_width = w
+                        img_height = h
+                    end
+                end
+            end
+        else
+            -- 其他敵人: 使用普通image
+            local ok, img = pcall(function()
+                return playdate.graphics.image.new(data.image)
+            end)
+            if ok and img then
+                enemy_img = img
+                local ok_size, w, h = pcall(function() return img:getSize() end)
+                if ok_size and w and h then
+                    img_width = w
+                    img_height = h
+                end
             end
         end
     end
@@ -622,12 +657,15 @@ function Enemy:init(x, y, type_id, ground_y)
         width = img_width,
         height = img_height,
         image = enemy_img,  -- 儲存圖片
+        imagetable = enemy_imagetable,  -- JUMP_ENEMY 的 imagetable
         ground_y = ground_y,
         vx = 1.0, -- 基礎水平速度
         vy = 0,   -- 垂直速度（跳躍用）
         move_dir = 1, -- 1 for right, -1 for left
         is_alive = true,
         is_grounded = true,  -- 是否在地面上
+        jump_state = "grounded",  -- "grounded", "jumping", "landing"（用於 JUMP_ENEMY 動畫）
+        landing_frame_timer = 0,  -- 著陸幀計時器
         move_timer = 0,
         fire_timer = 0,
         fire_cooldown = 2.0, -- 每 2 秒發射一次
@@ -653,6 +691,7 @@ function Enemy:init(x, y, type_id, ground_y)
         sword_timer = 0,
         sword_swinging = false,
         sword_direction = 1,  -- 1=前揮, -1=後揮
+        sword_image = nil,  -- 劍圖片（可選）
         -- 地雷參數
         explode_delay = data.explode_delay or 2.0,
         explode_radius = data.explode_radius or 50,
@@ -678,6 +717,15 @@ function Enemy:init(x, y, type_id, ground_y)
     -- 從敵人資料讀取砲彈 multiplier（可在 enemy_data.lua 調整）
     e.projectile_speed_mult = (data and data.projectile_speed_mult) or 1.0
     e.projectile_grav_mult = (data and data.projectile_grav_mult) or 1.0
+    -- 載入劍圖片（若有提供）
+    if data and data.sword_image then
+        local ok_sword, sword_img = pcall(function()
+            return playdate.graphics.image.new(data.sword_image)
+        end)
+        if ok_sword and sword_img then
+            e.sword_image = sword_img
+        end
+    end
     return e
 end
 
@@ -738,20 +786,45 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self.y = self.y + self.vy
             self.x = self.x + self.move_dir * self.jump_horizontal * dt
             
+            -- 更新動畫幀：在空中時使用第3幀
+            if self.imagetable then
+                self.image = self.imagetable:getImage(3)  -- Frame 3: 在空中
+            end
+            
             -- 檢查是否落地
             local ground_height = controller and controller:getGroundHeight(self.x) or self.ground_y
             if self.y >= ground_height - self.height then
                 self.y = ground_height - self.height
                 self.vy = 0
                 self.is_grounded = true
+                self.jump_state = "landing"  -- 進入著陸狀態
+                self.landing_frame_timer = 0
+            end
+        end
+        
+        -- 著陸動畫：顯示第2幀然後回到第1幀
+        if self.jump_state == "landing" and self.imagetable then
+            self.landing_frame_timer = self.landing_frame_timer + dt
+            if self.landing_frame_timer < 0.1 then
+                -- 著陸後0.1秒內顯示第2幀
+                self.image = self.imagetable:getImage(2)
+            else
+                -- 然後回到第1幀
+                self.image = self.imagetable:getImage(1)
+                self.jump_state = "grounded"
             end
         end
         
         -- 跳躍邏輯
-        if self.is_grounded and self.jump_timer >= self.jump_cooldown then
+        if self.is_grounded and self.jump_state ~= "landing" and self.jump_timer >= self.jump_cooldown then
             self.jump_timer = 0
             self.vy = self.jump_velocity
             self.is_grounded = false
+            self.jump_state = "jumping"  -- 進入跳躍狀態
+            -- 跳起時使用第2幀
+            if self.imagetable then
+                self.image = self.imagetable:getImage(2)  -- Frame 2: 跳起
+            end
             -- 隨機決定跳躍方向
             if math.random() < 0.5 then
                 self.move_dir = self.move_dir * -1
@@ -863,17 +936,25 @@ function Enemy:draw(camera_x)
     
     -- 繪製劍（SWORD_ENEMY）
     if self.attack_type == "SWING SWORD" then
-        local sword_length = 30
         local center_x = screen_x + self.width / 2
         local center_y = self.y + self.height / 2
-        
         local angle_rad = math.rad(self.sword_angle)
-        local end_x = center_x + math.cos(angle_rad) * sword_length
-        local end_y = center_y + math.sin(angle_rad) * sword_length
         
-        gfx.setLineWidth(3)
-        gfx.drawLine(center_x, center_y, end_x, end_y)
-        gfx.setLineWidth(1)
+        if self.sword_image then
+            -- 使用自訂劍圖片，帶旋轉
+            pcall(function()
+                self.sword_image:drawRotated(center_x, center_y, self.sword_angle)
+            end)
+        else
+            -- 預設：直線繪制
+            local sword_length = 30
+            local end_x = center_x + math.cos(angle_rad) * sword_length
+            local end_y = center_y + math.sin(angle_rad) * sword_length
+            
+            gfx.setLineWidth(3)
+            gfx.drawLine(center_x, center_y, end_x, end_y)
+            gfx.setLineWidth(1)
+        end
     end
     
     -- 繪製地雷閃爍（MINE）
@@ -1795,7 +1876,13 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     if self.active_part_id then
         for _, item in ipairs(eq) do
             if item.id == self.active_part_id then
-                self:drawActivePart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame, terrain_angle)
+                -- SWORD 和 CLAW 不使用地形旋轉，一次使用
+                local part_rotation_angle = terrain_angle
+                local pdata = _G.PartsData and _G.PartsData[item.id]
+                if pdata and (pdata.part_type == "SWORD" or pdata.part_type == "CLAW") then
+                    part_rotation_angle = 0
+                end
+                self:drawActivePart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame, part_rotation_angle)
                 break
             end
         end
@@ -1869,7 +1956,7 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
     if pdata._arm_img then
         local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
         if arm_ok and arm_w and arm_h then
-            local angle_rad = math.rad(-self.claw_arm_angle + rotation_angle)
+            local angle_rad = math.rad(-self.claw_arm_angle)
             local cos_a = math.cos(angle_rad)
             local sin_a = math.sin(angle_rad)
             local arm_center_offset_x = arm_w / 2
@@ -1878,7 +1965,7 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
             local arm_center_x = pivot_x + rotated_dx
             local arm_center_y = pivot_y + rotated_dy
             
-            pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -self.claw_arm_angle + rotation_angle) end)
+            pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -self.claw_arm_angle) end)
             
             -- 計算臂末端位置（爪子軸心）
             local arm_end_rotated_dx = arm_w * cos_a
@@ -1926,14 +2013,14 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
             local img_center_y = original_y + ih / 2
             local dx_from_pivot = img_center_x - pivot_x
             local dy_from_pivot = img_center_y - pivot_y
-            local angle_rad = math.rad(-self.sword_angle + rotation_angle)
+            local angle_rad = math.rad(-self.sword_angle)
             local cos_a = math.cos(angle_rad)
             local sin_a = math.sin(angle_rad)
             local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
             local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
             local new_center_x = pivot_x + rotated_dx
             local new_center_y = pivot_y + rotated_dy
-            pdata._img:drawRotated(new_center_x, new_center_y, -self.sword_angle + rotation_angle)
+            pdata._img:drawRotated(new_center_x, new_center_y, -self.sword_angle)
         end
         gfx.popContext()
         
