@@ -36,6 +36,7 @@ _G.StateHQ = import "state_hq"
 _G.StateShop = import "state_shop"
 _G.StateMission = import "state_mission"
 _G.StateResult = import "state_result"
+_G.StateCredits = import "state_credits"
 
 -- ==========================================
 -- 3. 遊戲狀態機變數
@@ -58,6 +59,7 @@ function setState(newState, ...)
         if s == _G.StateHQ then return "StateHQ" end
         if s == _G.StateMission then return "StateMission" end
         if s == _G.StateResult then return "StateResult" end
+        if s == _G.StateCredits then return "StateCredits" end
         return tostring(s)
     end
 

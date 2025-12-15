@@ -65,7 +65,11 @@ function StateMenu.update()
             -- CONTINUE: 進入存檔選擇畫面（模式為繼續遊戲）
             setState(_G.StateSaveSelect, "continue")
         elseif selection == "CREDITS" then
-            print("Action: Show Credits (Not implemented)")
+            if _G.StateCredits then
+                setState(_G.StateCredits)
+            else
+                print("Action: Show Credits (StateCredits not found)")
+            end
         end
     end
 end
