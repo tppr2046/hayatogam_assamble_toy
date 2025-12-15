@@ -58,6 +58,7 @@ local show_ready_menu = false   -- 是否顯示 READY 選單
 local FLASH_DURATION = 12 -- 幀數
 local flash_timer = 0
 local flash_col = nil
+local cursor_blink_tick = 0  -- 控制粗邊框的閃爍
 -- 播放標題/一般介面 BGM（循環）
 function StateHQ.setupBGM()
     if _G.SoundManager and _G.SoundManager.playTitleBGM then
@@ -195,6 +196,25 @@ local function removeEquippedPart(index)
         end
     end
     table.remove(eq, index)
+
+    -- 將零件重新加入可用清單（TOP/BOTTOM/BOTH）
+    local parts_by_category = _G.GameState and _G.GameState.parts_by_category
+    local pdata = _G.PartsData and _G.PartsData[item.id]
+    if parts_by_category and pdata then
+        local pr = pdata.placement_row or "BOTH"
+        local function insert_if_missing(cat)
+            local list = parts_by_category[cat]
+            if list then
+                local exists = false
+                for _, pid in ipairs(list) do
+                    if pid == item.id then exists = true break end
+                end
+                if not exists then table.insert(list, item.id) end
+            end
+        end
+        if pr == "TOP" or pr == "BOTH" then insert_if_missing("TOP") end
+        if pr == "BOTTOM" or pr == "BOTH" then insert_if_missing("BOTTOM") end
+    end
     print("LOG: Removed part", item.id, "from", item.col, item.row)
     -- 重算 mech_stats 以避免累加/重複扣除造成誤差
     if _G and _G.GameState and _G.GameState.mech_stats then
@@ -497,6 +517,12 @@ function StateHQ.update()
                 -- 播放游標移動音效
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
+                end
+            elseif playdate.buttonJustPressed(playdate.kButtonB) then
+                -- 取消放置，返回零件清單
+                is_placing_part = false
+                if _G.SoundManager and _G.SoundManager.playCancel then
+                    _G.SoundManager.playCancel()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 嘗試放置
@@ -894,6 +920,9 @@ function StateHQ.update()
             flash_timer = 0
         end
     end
+
+    -- 更新粗邊框閃爍計時
+    cursor_blink_tick = (cursor_blink_tick + 1) % 20
 end
 
 
@@ -902,6 +931,8 @@ function StateHQ.draw()
     gfx.clear(gfx.kColorWhite)
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font) 
+    -- 使用時間為基準的閃爍，避免某些情況下 tick 未更新導致不閃爍
+    local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
     
     -- 1. 繪製組裝網格背景
     
@@ -976,13 +1007,13 @@ function StateHQ.draw()
     end
 
     -- 如果在解除裝備模式，繪製選中框
-    if is_unequip_mode then
+    if is_unequip_mode and blink_on then
         local cursor_x = GRID_START_X + (unequip_selected_col - 1) * GRID_CELL_SIZE
         local cursor_y = GRID_START_Y + (GRID_ROWS - unequip_selected_row) * GRID_CELL_SIZE
         
         -- 繪製粗框標示選取的零件
         gfx.setColor(gfx.kColorBlack)
-        gfx.setLineWidth(3)
+        gfx.setLineWidth(2)
         
         -- 找出選中格子所屬的零件並繪製完整範圍的框
         local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -1280,6 +1311,49 @@ function StateHQ.draw()
                         end
                     end
                 end
+
+    -- 繪製置中的粗框（放置模式／拆卸模式），在零件圖上層
+    if blink_on then
+        -- 放置模式：在組裝格中繪製粗邊框
+        if hq_mode == "EQUIP" and is_placing_part and selected_category and selected_part_index then
+            local parts_list = _G.GameState.parts_by_category[selected_category]
+            local part_id = parts_list and parts_list[selected_part_index]
+            local pdata = _G.PartsData and _G.PartsData[part_id]
+            if pdata then
+                local w = pdata.slot_x or 1
+                local h = pdata.slot_y or 1
+                local fx = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
+                local fy = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE - (h - 1) * GRID_CELL_SIZE
+                local fw = w * GRID_CELL_SIZE
+                local fh = h * GRID_CELL_SIZE
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(2)
+                gfx.drawRect(fx, fy, fw, fh)
+                gfx.setLineWidth(1)
+            end
+        end
+
+        -- 拆卸模式：在選中的零件上繪製粗邊框
+        if is_unequip_mode then
+            local eq2 = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq2) do
+                local slot_w = item.w or 1
+                local slot_h = item.h or 1
+                if unequip_selected_col >= item.col and unequip_selected_col < item.col + slot_w and
+                   unequip_selected_row >= item.row and unequip_selected_row < item.row + slot_h then
+                    local fx = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE
+                    local fy = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE - (slot_h - 1) * GRID_CELL_SIZE
+                    local fw = slot_w * GRID_CELL_SIZE
+                    local fh = slot_h * GRID_CELL_SIZE
+                    gfx.setColor(gfx.kColorBlack)
+                    gfx.setLineWidth(2)
+                    gfx.drawRect(fx, fy, fw, fh)
+                    gfx.setLineWidth(1)
+                    break
+                end
+            end
+        end
+    end
     
     -- 6. 繪製機甲狀態
     gfx.drawText("MECH STATS:", detail_x, detail_y)

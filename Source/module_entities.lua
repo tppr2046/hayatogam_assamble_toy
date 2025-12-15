@@ -260,8 +260,8 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         end
         
     elseif part_type == "CANON" then
-        -- CANON：crank 旋轉 + A 發射
-        local pdata = _G.PartsData and _G.PartsData["CANON"]
+        -- CANON：crank 旋轉 + A 發射（支援 CANON1/2 等不同 ID）
+        local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
         local angle_min = pdata and pdata.angle_min or -45  -- 預設 -45 度
         local angle_max = pdata and pdata.angle_max or 45  -- 預設 +45 度
         local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 15  -- 預設 crank 轉 1 圈產生 15 度變化
@@ -286,7 +286,8 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             if pdata and self.canon_fire_timer >= (pdata.fire_cooldown or 0.5) then
                 local eq = _G.GameState.mech_stats.equipped_parts or {}
                 for _, item in ipairs(eq) do
-                    if item.id == "CANON" then
+                    local ipdata = _G.PartsData and _G.PartsData[item.id]
+                    if ipdata and ipdata.part_type == "CANON" and item.id == self.active_part_id then
                         local cell_size = mech_grid.cell_size
                         local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
                         local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
@@ -936,23 +937,37 @@ function Enemy:draw(camera_x)
     
     -- 繪製劍（SWORD_ENEMY）
     if self.attack_type == "SWING SWORD" then
-        local center_x = screen_x + self.width / 2
-        local center_y = self.y + self.height / 2
+        local enemy_data = EnemyData[self.type_id] or {}
+        local pivot_offset_x = enemy_data.sword_pivot_offset_x or 0
+        local pivot_offset_y = enemy_data.sword_pivot_offset_y or 0
+        
+        -- 世界座標下的旋轉軸心
+        local pivot_x = screen_x + self.width / 2 + pivot_offset_x
+        local pivot_y = self.y + self.height / 2 + pivot_offset_y
         local angle_rad = math.rad(self.sword_angle)
         
         if self.sword_image then
-            -- 使用自訂劍圖片，帶旋轉
+            -- 劍圖內部的旋轉軸心偏移（相對於劍圖中心）
+            local img_pivot_offset_x = enemy_data.sword_image_pivot_offset_x or 0
+            local img_pivot_offset_y = enemy_data.sword_image_pivot_offset_y or 0
+            local cos_a = math.cos(angle_rad)
+            local sin_a = math.sin(angle_rad)
+            -- 將圖內偏移隨旋轉計算後套用到繪製位置
+            local rotated_offset_x = img_pivot_offset_x * cos_a - img_pivot_offset_y * sin_a
+            local rotated_offset_y = img_pivot_offset_x * sin_a + img_pivot_offset_y * cos_a
+            local draw_x = pivot_x - rotated_offset_x
+            local draw_y = pivot_y - rotated_offset_y
             pcall(function()
-                self.sword_image:drawRotated(center_x, center_y, self.sword_angle)
+                self.sword_image:drawRotated(draw_x, draw_y, self.sword_angle)
             end)
         else
             -- 預設：直線繪制
             local sword_length = 30
-            local end_x = center_x + math.cos(angle_rad) * sword_length
-            local end_y = center_y + math.sin(angle_rad) * sword_length
+            local end_x = pivot_x + math.cos(angle_rad) * sword_length
+            local end_y = pivot_y + math.sin(angle_rad) * sword_length
             
             gfx.setLineWidth(3)
-            gfx.drawLine(center_x, center_y, end_x, end_y)
+            gfx.drawLine(pivot_x, pivot_y, end_x, end_y)
             gfx.setLineWidth(1)
         end
     end

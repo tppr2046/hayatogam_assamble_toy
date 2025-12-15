@@ -49,6 +49,12 @@ return {
         sword_swing_speed = 180,     -- 揮動速度（度/秒）
         sword_swing_min = -180,         -- 揮動最小角度（度）
         sword_swing_max = 0,       -- 揮動最大角度（度）
+        -- 劍旋轉軸心位置偏移（相對於敵人中心的偏移，x, y）
+        sword_pivot_offset_x = 0,    -- 軸心 X 偏移（正值向右）
+        sword_pivot_offset_y = 0,    -- 軸心 Y 偏移（正值向下）
+        -- 劍圖內部旋轉軸心偏移（相對於劍圖中心的偏移，x, y）
+        sword_image_pivot_offset_x = -16,  -- 劍圖軸心 X 偏移（正值向右）
+        sword_image_pivot_offset_y = 0,  -- 劍圖軸心 Y 偏移（正值向下）
         -- 敵人圖片
         image = "images/enemy2",
         -- 劍圖片（可選，若不指定則使用預設的直線繪制）
