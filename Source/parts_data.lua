@@ -22,6 +22,7 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
         ui_panel = "images/gun_panel.png",
+        operation_hint = "Auto Fire",
         -- GUN 特有屬性：砲彈發射
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
         projectile_damage = 5,  -- 砲彈傷害
@@ -46,6 +47,7 @@ local parts_data = {
         -- UI 操作介面圖片
         ui_panel = "images/wheel_panel.png",
         ui_stick = "images/wheel_stick.png",
+        operation_hint = "Move Left/Right",
         move_speed = 2.0,  -- 左右移動速度
         climb_power = 1  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
@@ -67,6 +69,7 @@ local parts_data = {
         -- UI 操作介面圖片
         ui_panel = "images/wheel_panel.png",
         ui_stick = "images/wheel_stick.png",
+        operation_hint = "Move Left/Right",
         move_speed = 2.0,  -- 左右移動速度
         climb_power = 2  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
@@ -88,6 +91,7 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
         ui_panel = "images/canon_panel.png",
+        operation_hint = "Adjust Angle with Crank",
         -- CANON 特有屬性：砲彈發射
         fire_cooldown = 0.5,  -- 每 0.5 秒可以發射一次
         projectile_damage = 10,  -- 砲彈傷害
@@ -115,6 +119,7 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
         ui_panel = "images/canon_panel.png",
+        operation_hint = "Adjust Angle with Crank",
         -- CANON 特有屬性：砲彈發射
         fire_cooldown = 1,  -- 每 0.5 秒可以發射一次
         projectile_damage = 20,  -- 砲彈傷害
@@ -145,7 +150,8 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
         ui_panel = "images/sword_panel.png",
-        ui_stick = "images/sword_stick.png"
+        ui_stick = "images/sword_stick.png",
+        operation_hint = "Swing Sword with Crank",
     },
     ["FEET"] = {
         name = "FEET",
@@ -166,6 +172,7 @@ local parts_data = {
         -- UI 操作介面圖片（先用與 WHEEL 相同的圖）
         ui_panel = "images/wheel_panel.png",
         ui_stick = "images/wheel_stick.png",
+        operation_hint = "Left/Right to move, A to Jump",
         move_speed = 3.0,  -- 左右移動速度
         jump_velocity = -8.0,  -- 跳躍初速度（負值=向上）
         animation_walk = "images/feet_walk",  -- 行走動畫 imagetable 路徑
@@ -189,6 +196,7 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部
         -- UI 操作介面圖片（先用與 CANON 相同的圖）
         ui_panel = "images/claw_control",
+        operation_hint = "Crank to use Claw, up/down to use Crank",
         -- CLAW 特有屬性
         arm_image = "images/claw_arm.png",  -- 臂的圖片
         upper_image = "images/claw_upper.png",  -- 上爪圖片

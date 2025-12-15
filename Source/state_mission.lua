@@ -727,7 +727,7 @@ function StateMission.draw()
     local hp_bar_height = 10
     local hp_percent = current_hp / max_hp
     
-    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_bar_y - 5)
+    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_bar_y - 7)
     gfx.drawRect(hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height)
     
     -- 3.1 繪製計時器（如果有時間限制）
@@ -770,11 +770,34 @@ function StateMission.draw()
         gfx.setColor(gfx.kColorWhite)
         gfx.fillRect(UI_START_X - bg_margin, UI_START_Y - bg_margin, ui_w + bg_margin*2, ui_h + bg_margin*2)
         gfx.setColor(gfx.kColorBlack)
+        -- 先正常繪製 UI 圖片與面板
         mech_controller:drawUI(_G.GameState.mech_stats, UI_START_X, UI_START_Y, UI_CELL_SIZE, UI_GRID_COLS, UI_GRID_ROWS)
+        -- 以白色繪製操作說明文字（避免影響圖片顯示）
+        local hint_text = ""
+        local operation_hint_text = nil
+        if mech_controller.active_part_id then
+            -- 已選定零件：顯示取消選擇及零件操作方式
+            hint_text = "B to unselect part"
+            local part_data = _G.PartsData and _G.PartsData[mech_controller.active_part_id]
+            if part_data and part_data.operation_hint and part_data.operation_hint ~= "" then
+                operation_hint_text = part_data.operation_hint
+            end
+        else
+            -- 尚未選擇零件：顯示選擇提示
+            hint_text = "up/down: select part, A: use the part"
+        end
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        local line1_x = UI_START_X + 120
+        local line1_y = UI_START_Y + (UI_GRID_ROWS * UI_CELL_SIZE) - 30
+        gfx.drawText(hint_text, line1_x, line1_y)
+        if operation_hint_text then
+            gfx.drawText(operation_hint_text, line1_x, line1_y + 12)
+        end
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
     end
     
     -- 5. 繪製調試信息
-    gfx.drawText("Mech X: " .. math.floor(mech_x), 10, SCREEN_HEIGHT - 15)
+--    gfx.drawText("Mech X: " .. math.floor(mech_x), 10, SCREEN_HEIGHT - 15)
 end
 
 return StateMission

@@ -90,7 +90,7 @@ function StateMenu.draw()
         local y = menu_y_start + (i - 1) * line_height
         
         if i == selected_index then
-            gfx.drawText(">" .. option .. "<", menu_x, y)
+            gfx.drawText("[" .. option .. "]", menu_x, y)
         else
             gfx.drawText(option, menu_x, y)
         end

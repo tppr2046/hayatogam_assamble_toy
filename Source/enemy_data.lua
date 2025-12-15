@@ -46,7 +46,8 @@ return {
         -- 劍揮動參數
         sword_swing_cooldown = 3.0,  -- 揮動間隔（秒）
         sword_swing_speed = 180,     -- 揮動速度（度/秒）
-        sword_swing_range = 90,      -- 揮動範圍（度數）
+        sword_swing_min = -180,         -- 揮動最小角度（度）
+        sword_swing_max = 0,       -- 揮動最大角度（度）
         -- 敵人圖片
         image = "images/enemy2"
     },

@@ -648,7 +648,8 @@ function Enemy:init(x, y, type_id, ground_y)
         sword_angle = 0,
         sword_swing_cooldown = data.sword_swing_cooldown or 3.0,
         sword_swing_speed = data.sword_swing_speed or 180,
-        sword_swing_range = data.sword_swing_range or 90,
+        sword_swing_min = data.sword_swing_min or -45,
+        sword_swing_max = data.sword_swing_max or 45,
         sword_timer = 0,
         sword_swinging = false,
         sword_direction = 1,  -- 1=前揮, -1=後揮
@@ -774,13 +775,13 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         if self.sword_swinging then
             -- 正在揮劍
             self.sword_angle = self.sword_angle + self.sword_direction * self.sword_swing_speed * dt
-            
-            -- 檢查是否到達範圍極限
-            if self.sword_direction > 0 and self.sword_angle >= self.sword_swing_range / 2 then
+            -- 到達邊界則反向或結束一次揮擊
+            if self.sword_direction > 0 and self.sword_angle >= self.sword_swing_max then
                 self.sword_direction = -1
-            elseif self.sword_direction < 0 and self.sword_angle <= -self.sword_swing_range / 2 then
+            elseif self.sword_direction < 0 and self.sword_angle <= self.sword_swing_min then
                 self.sword_swinging = false
-                self.sword_angle = 0
+                -- 重置至最小角或 0 視覺效果需求
+                self.sword_angle = self.sword_swing_min
             end
         else
             -- 等待下次揮劍
@@ -2120,10 +2121,12 @@ function MechController:drawPartUI(part_id, x, y, size)
             end
         elseif part_type == "CLAW" then
             -- CLAW 的 panel 需要旋轉（使用臂角度），左對齊
-            local rotated_img = panel_img:rotatedImage(self.claw_arm_angle)
+            local rotated_img = panel_img:rotatedImage(90-self.claw_arm_angle)
+            local center_x = x + size / 2
+            local center_y = y + size / 2
             if rotated_img then
                 local rw, rh = rotated_img:getSize()
-                pcall(function() rotated_img:draw(x, y + (size - rh)/2) end)
+                pcall(function() rotated_img:draw(center_x - rw/2, center_y - rh/2) end)
             end
         else
             -- 其他零件直接繪製
