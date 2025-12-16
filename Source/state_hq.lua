@@ -398,6 +398,12 @@ function StateHQ.setup()
                         else
                             pcall(function() pdata._img:draw(0, 0) end)
                         end
+                        -- 繪製 CLAW 的額外部件到 scaled image
+                        if pid == "CLAW" then
+                            if pdata._arm_img then pcall(function() pdata._arm_img:draw(math.max(0, dx or 0), math.max(0, dy or 0)) end) end
+                            if pdata._upper_img then pcall(function() pdata._upper_img:draw(math.max(0, dx or 0), math.max(0, dy or 0)) end) end
+                            if pdata._lower_img then pcall(function() pdata._lower_img:draw(math.max(0, dx or 0), math.max(0, dy or 0)) end) end
+                        end
                         gfx.popContext()
                         pdata._img_scaled = buf
                     end
@@ -978,8 +984,8 @@ function StateHQ.draw()
     
     -- Grid and parts rendering handled below (draw grid lines, then draw each equipped part once)
     
-    -- 3. 繪製零件預覽 (選中零件後，即使沒進入放置模式也顯示預覽)
-    if hq_mode == "EQUIP" and selected_category and selected_part_index and not cursor_on_ready then
+    -- 3. 繪製零件預覽 (選中零件後，即使沒進入放置模式也顯示預覽；解除模式時不顯示)
+    if hq_mode == "EQUIP" and selected_category and selected_part_index and not cursor_on_ready and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
@@ -1114,7 +1120,7 @@ function StateHQ.draw()
     end
     
     -- 4. 繪製零件清單 (左側) - 分類顯示
-    gfx.drawText("PARTS:", 10, 30)
+    gfx.drawText("PARTS:", 5, 30)
     local list_y = 50
     local line_height = 15
     
@@ -1158,7 +1164,7 @@ function StateHQ.draw()
                 end
                 
                 local text = part_id
-                if i == selected_part_index and not cursor_on_ready then
+                if i == selected_part_index and not cursor_on_ready and not is_unequip_mode then
                     if blink_on then
                         text = "> " .. text .. " <"
                     else
@@ -1193,8 +1199,8 @@ function StateHQ.draw()
         end
     end
     
-    -- 預覽模式：在組裝格子上顯示 dither.png
-    if selected_category and selected_part_index and not cursor_on_ready and not is_placing_part then
+    -- 預覽模式：在組裝格子上顯示 dither.png（解除模式時不顯示預覽）
+    if selected_category and selected_part_index and not cursor_on_ready and not is_placing_part and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = _G.PartsData and _G.PartsData[part_id]
@@ -1381,11 +1387,9 @@ function StateHQ.draw()
                             pcall(function() pdata._img:draw(draw_x, draw_y) end)
                             -- CLAW 特殊處理：繪製額外部件
                             if pid == "CLAW" then
-                                if pdata._arm_img and pdata._upper_img and pdata._lower_img then
-                                    pdata._arm_img:draw(draw_x, draw_y)
-                                    pdata._upper_img:draw(draw_x, draw_y)
-                                    pdata._lower_img:draw(draw_x, draw_y)
-                                end
+                                if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
+                                if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
+                                if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
                             end
                             -- CANON 特殊處理：繪製底座
                             if pid == "CANON1" or pid == "CANON2" then

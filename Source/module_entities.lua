@@ -2155,7 +2155,11 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
                 end
                 -- 零件佔用的其他格子保持空白（不繪製任何東西）
             else
-                -- 沒有零件，繪製空格邊框（不使用 empty.png）
+                -- 沒有零件，繪製 empty.png
+                if self.ui_images and self.ui_images.empty then
+                    pcall(function() self.ui_images.empty:draw(cx, cy) end)
+                end
+                -- 繪製邊框
                 gfx.setColor(gfx.kColorBlack)
                 gfx.setLineWidth(1)
                 gfx.drawRect(cx, cy, ui_cell_size, ui_cell_size)

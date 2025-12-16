@@ -140,7 +140,7 @@ local parts_data = {
         hp = 10,
         weight = 5,
         attack = 3,  -- 攻擊力
-        slot_x = 1,
+        slot_x = 2,
         slot_y = 1,
         -- 購買成本
         cost_steel = 40,
@@ -186,7 +186,7 @@ local parts_data = {
         hp = 15,
         weight = 8,
         attack = 8,  -- 攻擊力（揮動攻擊）
-        slot_x = 1,
+        slot_x = 2,
         slot_y = 1,
         -- 購買成本
         cost_steel = 35,
