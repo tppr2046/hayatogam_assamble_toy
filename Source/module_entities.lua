@@ -1943,6 +1943,24 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     -- 特殊處理 CLAW（繪製底座 + 臂 + 爪子）
     elseif part_type == "CLAW" then
         self:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
+    -- 特殊處理 CANON（繪製底座 + 砲管）
+    elseif part_type == "CANON" then
+        -- 繪製底座（不旋轉）
+        if pdata._base_img then
+            local ok_base, base_width, base_height = pcall(function() return pdata._base_img:getSize() end)
+            if ok_base and base_height then
+                local base_y = py_top + cell_size - base_height
+                pcall(function() pdata._base_img:draw(px, base_y) end)
+            else
+                pcall(function() pdata._base_img:draw(px, py_top) end)
+            end
+        end
+        -- 繪製砲管（旋轉）
+        if rotation_angle ~= 0 then
+            pcall(function() pdata._img:drawRotated(px + iw/2, part_y + ih/2, rotation_angle) end)
+        else
+            pcall(function() pdata._img:draw(px, part_y) end)
+        end
     else
         -- 使用靜態圖片
         if rotation_angle ~= 0 then
@@ -2040,31 +2058,45 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
         gfx.popContext()
         
     elseif part_type == "CANON" then
-        -- 計算 CANON 位置
+        -- 計算 CANON 位置（底座 + 砲管）
         local cx = (item.col - 1) * cell_size
         local cy = (mech_grid.rows - item.row) * cell_size
-        local pivot_x = draw_x + cx + cell_size / 2
-        local pivot_y = body_draw_y + cy + cell_size / 2
+        local base_x = draw_x + cx
         
-        gfx.pushContext()
-        local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
-        if ok and iw and ih then
-            local original_x = draw_x + cx
-            local original_y = body_draw_y + cy + cell_size - ih
-            local img_center_x = original_x + iw / 2
-            local img_center_y = original_y + ih / 2
-            local dx_from_pivot = img_center_x - pivot_x
-            local dy_from_pivot = img_center_y - pivot_y
-            local angle_rad = math.rad(-self.canon_angle)
-            local cos_a = math.cos(angle_rad)
-            local sin_a = math.sin(angle_rad)
-            local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
-            local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
-            local new_center_x = pivot_x + rotated_dx
-            local new_center_y = pivot_y + rotated_dy
-            pdata._img:drawRotated(new_center_x, new_center_y, -self.canon_angle - rotation_angle)
+        -- 繪製底座（不旋轉）
+        if pdata._base_img then
+            local ok, base_width, base_height = pcall(function() return pdata._base_img:getSize() end)
+            if ok and base_height then
+                local base_y = body_draw_y + cy + cell_size - base_height
+                pcall(function() pdata._base_img:draw(base_x, base_y) end)
+            else
+                pcall(function() pdata._base_img:draw(base_x, body_draw_y + cy) end)
+            end
         end
-        gfx.popContext()
+        
+        -- 繪製砲管（旋轉）
+        if pdata._img then
+            local pivot_x = draw_x + cx + cell_size / 2
+            local pivot_y = body_draw_y + cy + cell_size / 2
+            
+            local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+            if ok and iw and ih then
+                local original_x = draw_x + cx
+                local original_y = body_draw_y + cy + cell_size - ih
+                local img_center_x = original_x + iw / 2
+                local img_center_y = original_y + ih / 2
+                local dx_from_pivot = img_center_x - pivot_x
+                local dy_from_pivot = img_center_y - pivot_y
+                local angle_rad = math.rad(-self.canon_angle)
+                local cos_a = math.cos(angle_rad)
+                local sin_a = math.sin(angle_rad)
+                local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
+                local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
+                local new_center_x = pivot_x + rotated_dx
+                local new_center_y = pivot_y + rotated_dy
+                pdata._img:drawRotated(new_center_x, new_center_y, -self.canon_angle - rotation_angle)
+            end
+        end
         
     elseif part_type == "FEET" then
         -- 繪製 FEET（使用 drawPart）

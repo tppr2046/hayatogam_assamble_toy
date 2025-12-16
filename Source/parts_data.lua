@@ -86,7 +86,8 @@ local parts_data = {
         cost_copper = 30,
         cost_rubber = 10,
             color = gfx.kColorBlack,
-            image = "images/canon.png",
+            image = "images/canon.png",  -- 砲管
+            base_image = "images/canon_base.png",  -- 底座
             placement_row = "TOP",
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
@@ -114,7 +115,8 @@ local parts_data = {
         cost_copper = 30,
         cost_rubber = 10,
             color = gfx.kColorBlack,
-            image = "images/canon.png",
+            image = "images/canon.png",  -- 砲管
+            base_image = "images/canon_base.png",  -- 底座
             placement_row = "TOP",
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片

@@ -365,6 +365,16 @@ function StateHQ.setup()
                     end
                 end
             end
+            
+            -- 載入 CANON 的底座圖片
+            if pdata.base_image then
+                local base_img = gfx.image.new(pdata.base_image)
+                if base_img then
+                    pdata._base_img = base_img
+                else
+                    print("ERROR: Failed to load base_image for", pid, pdata.base_image)
+                end
+            end
         end
     end
     -- Pre-render scaled images that match grid cell sizes so a part that is w x h
@@ -981,6 +991,13 @@ function StateHQ.draw()
                     if pdata._upper_img then pcall(function() pdata._upper_img:draw(preview_x, draw_y) end) end
                     if pdata._lower_img then pcall(function() pdata._lower_img:draw(preview_x, draw_y) end) end
                 end
+                -- CANON 特殊處理：繪製底座
+                if part_id == "CANON1" or part_id == "CANON2" then
+                    if pdata._base_img then
+                        print("DEBUG: Drawing base_img for", part_id, "in scaled branch")
+                        pcall(function() pdata._base_img:draw(preview_x, draw_y) end)
+                    end
+                end
                 gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(preview_x, draw_y, sw, sh)
             elseif pdata._img then
@@ -999,6 +1016,19 @@ function StateHQ.draw()
                     if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
                     if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
                     if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
+                end
+                -- CANON 特殊處理：繪製底座（在砲管後繪製，這樣底座會顯示在上面）
+                if part_id == "CANON1" or part_id == "CANON2" then
+                    if pdata._base_img then
+                        local ok_base, base_width, base_height = pcall(function() return pdata._base_img:getSize() end)
+                        if ok_base and base_width and base_height then
+                            local base_draw_x = preview_x + math.floor((GRID_CELL_SIZE - base_width) / 2)
+                            local base_draw_y = preview_y + math.floor((GRID_CELL_SIZE - base_height) / 2)
+                            pcall(function() pdata._base_img:draw(base_draw_x, base_draw_y) end)
+                        else
+                            pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
+                        end
+                    end
                 end
                 gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(preview_x, preview_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
@@ -1227,6 +1257,12 @@ function StateHQ.draw()
                                     pcall(function() pdata._lower_img:draw(draw_x, draw_y) end)
                                 end
                             end
+                            -- 繪製 CANON 的底座
+                            if pid == "CANON1" or pid == "CANON2" then
+                                if pdata._base_img then
+                                    pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
+                                end
+                            end
                         else
                             -- no image: draw text label at the origin cell
                             gfx.setColor(gfx.kColorBlack)
@@ -1277,10 +1313,12 @@ function StateHQ.draw()
                                     pcall(function() pdata._lower_img:draw(px, py_top) end)
                                 end
                             end
-                            
-                            -- 繪製格線
-                            gfx.setColor(gfx.kColorBlack)
-                            gfx.drawRect(px, py_top, pw, ph)
+                            -- 繪製 CANON 的底座
+                            if pid == "CANON1" or pid == "CANON2" then
+                                if pdata._base_img then
+                                    pcall(function() pdata._base_img:draw(px, py_top) end)
+                                end
+                            end
                         elseif pdata and pdata._img then
                             -- fallback: draw original with bottom-left anchoring (no scaling)
                             local iw, ih
@@ -1302,6 +1340,12 @@ function StateHQ.draw()
                                     pdata._arm_img:draw(draw_x, draw_y)
                                     pdata._upper_img:draw(draw_x, draw_y)
                                     pdata._lower_img:draw(draw_x, draw_y)
+                                end
+                            end
+                            -- CANON 特殊處理：繪製底座
+                            if pid == "CANON1" or pid == "CANON2" then
+                                if pdata._base_img then
+                                    pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
                                 end
                             end
                         else
