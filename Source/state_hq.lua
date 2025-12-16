@@ -468,6 +468,28 @@ function StateHQ.update()
                     -- 從 equipped_parts 移除
                     table.remove(eq, i)
                     
+                    -- 將零件重新添加到左側清單
+                    local part_data = _G.PartsData and _G.PartsData[item.id]
+                    if part_data then
+                        local placement_row = part_data.placement_row
+                        local category = (placement_row == "TOP") and "TOP" or "BOTTOM"
+                        
+                        -- 檢查該零件是否已在清單中（避免重複）
+                        local parts_list = _G.GameState.parts_by_category[category] or {}
+                        local already_in_list = false
+                        for _, pid in ipairs(parts_list) do
+                            if pid == item.id then
+                                already_in_list = true
+                                break
+                            end
+                        end
+                        
+                        -- 如果不在清單中，加入
+                        if not already_in_list then
+                            table.insert(_G.GameState.parts_by_category[category], item.id)
+                        end
+                    end
+                    
                     -- 從 GRID_MAP 清除
                     for r = item.row, item.row + slot_h - 1 do
                         for c = item.col, item.col + slot_w - 1 do
@@ -476,7 +498,6 @@ function StateHQ.update()
                     end
                     
                     -- 扣除 HP 和 Weight
-                    local part_data = _G.PartsData and _G.PartsData[item.id]
                     if part_data then
                         if part_data.hp then
                             _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) - part_data.hp
