@@ -159,9 +159,6 @@ function StateSaveSelect.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
     
-    -- 計算閃爍狀態
-    local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
-    
     -- 標題
     local title = "SELECT SAVE FILE"
     local title_width = gfx.getTextSize(title)
@@ -182,19 +179,18 @@ function StateSaveSelect.draw()
             info = "Empty"
         end
         
-        -- 選中標記（閃爍）
+        -- 選中時黑底白字（與任務選擇風格一致）
         if i == selected_slot and not selected_back then
-            if blink_on then
-                text = "> " .. text .. " <"
-            else
-                text = "  " .. text .. "  "
-            end
+            local band_x = 40
+            local band_y = y - 6
+            local band_w = 320
+            local band_h = 34
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(band_x, band_y, band_w, band_h)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
         end
-        
         gfx.drawText(text, 50, y)
         gfx.drawText(info, 180, y)
-        
-        -- 顯示資源（如果存檔存在）
         if save_info[i].exists then
             local resources = string.format("S:%d C:%d R:%d", 
                 save_info[i].steel or 0, 
@@ -202,17 +198,29 @@ function StateSaveSelect.draw()
                 save_info[i].rubber or 0)
             gfx.drawText(resources, 180, y + 12)
         end
+        if i == selected_slot and not selected_back then
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+            gfx.setColor(gfx.kColorBlack)
+        end
     end
     
-    -- 繪製 BACK 選項（閃爍）
+    -- 繪製 BACK 選項（選中時黑底白字）
     local back_y = 70 + SAVE_SLOTS * 40 + 10
-    local back_text
+    local back_text = "BACK"
     if selected_back then
-        back_text = blink_on and "> BACK <" or "  BACK  "
+        local text_w, text_h = gfx.getTextSize(back_text)
+        local pad_x, pad_y = 6, 2
+        local bx = 50 - pad_x
+        local by = back_y - pad_y
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(bx, by, text_w + pad_x * 2, text_h + pad_y * 2)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(back_text, 50, back_y)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        gfx.setColor(gfx.kColorBlack)
     else
-        back_text = "  BACK"
+        gfx.drawText(back_text, 50, back_y)
     end
-    gfx.drawText(back_text, 50, back_y)
     
     -- 提示文字
     if not confirm_delete_mode then
