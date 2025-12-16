@@ -1470,24 +1470,35 @@ function StateHQ.draw()
     local back_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - back_text_width) / 2
     gfx.drawText(back_text, back_x, back_y)
     
-    -- 如果顯示 READY 選單
+    -- 如果顯示 READY 選單（以彈出視窗方式顯示，蓋住下方文字）
     if show_ready_menu then
-        local menu_y = ready_y + 15
+        local dialog_w = 200
+        local dialog_h = 60
+        local dialog_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - dialog_w) / 2
+        local dialog_y = ready_y - 10
+
+        -- 覆蓋背景並繪製對話框框體
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillRect(dialog_x, dialog_y, dialog_w, dialog_h)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawRect(dialog_x, dialog_y, dialog_w, dialog_h)
+
         local options = {"Start Mission", "Back to equip"}
         for i = 1, 2 do
             local text = options[i]
             if i == menu_option_index then
                 if blink_on then
-                    text = "> " .. text
+                    text = "> " .. text .. " <"
                 else
-                    text = "  " .. text
+                    text = "  " .. text .. "  "
                 end
             else
-                text = "  " .. text
+                text = "  " .. text .. "  "
             end
             local text_width = gfx.getTextSize(text)
-            local menu_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - text_width) / 2
-            gfx.drawText(text, menu_x, menu_y + (i - 1) * 12)
+            local menu_x = dialog_x + (dialog_w - text_width) / 2
+            local menu_y = dialog_y + 15 + (i - 1) * 16
+            gfx.drawText(text, menu_x, menu_y)
         end
     end
     
@@ -1566,25 +1577,25 @@ function StateHQ.draw()
     end
     
     -- 顯示當前選中的零件資訊
-    local info_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
-    if selected_category and selected_part_index and not cursor_on_ready then
-        local parts_list = _G.GameState.parts_by_category[selected_category]
-        local part_id = parts_list and parts_list[selected_part_index]
-        if part_id then
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawText("Selected: " .. part_id, info_x, UI_START_Y)
-        end
-    else
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawText("Select category", info_x, UI_START_Y)
-    end
+--    local info_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
+--    if selected_category and selected_part_index and not cursor_on_ready then
+--        local parts_list = _G.GameState.parts_by_category[selected_category]
+--        local part_id = parts_list and parts_list[selected_part_index]
+--        if part_id then
+--            gfx.setColor(gfx.kColorBlack)
+--            gfx.drawText("Selected: " .. part_id, info_x, UI_START_Y)
+--        end
+--    else
+--        gfx.setColor(gfx.kColorBlack)
+--       gfx.drawText("Select category", info_x, UI_START_Y)
+--    end
     
     -- 9. 顯示關卡簡介（下半部右側）
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or "M001"
     if MissionData and MissionData[mission_id] then
         local mission = MissionData[mission_id]
-        local brief_x = info_x
-        local brief_y = UI_START_Y + 25
+        local brief_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
+        local brief_y = UI_START_Y 
         
         gfx.setColor(gfx.kColorBlack)
         gfx.drawText("MISSION:", brief_x, brief_y)
