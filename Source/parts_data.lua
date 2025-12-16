@@ -196,8 +196,8 @@ local parts_data = {
         image = "images/claw_base.png",  -- 主圖片為底座
         placement_row = "TOP",
         align_image_top = false,  -- 圖片底部對齊格子底部
-        -- UI 操作介面圖片（先用與 CANON 相同的圖）
-        ui_panel = "images/claw_control",
+        -- UI 操作介面圖片
+        ui_panel = "images/claw_panel.png",
         operation_hint = "Crank to use Claw, up/down to use Crank",
         -- CLAW 特有屬性
         arm_image = "images/claw_arm.png",  -- 臂的圖片

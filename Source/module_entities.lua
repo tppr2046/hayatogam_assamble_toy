@@ -127,6 +127,26 @@ function MechController:init()
         print("WARNING: Failed to load canon_button.pdt")
     end
     
+    -- 載入 CLAW 專用的 control 圖片
+    local ok_claw_control, claw_control_img = pcall(function()
+        return playdate.graphics.image.new("images/claw_control")
+    end)
+    if ok_claw_control and claw_control_img then
+        mc.ui_images.claw_control = claw_control_img
+    else
+        print("WARNING: Failed to load claw_control.png")
+    end
+    
+    -- 載入 CLAW 專用的 control_v 圖片表
+    local ok_claw_control_v, claw_control_v_table = pcall(function()
+        return playdate.graphics.imagetable.new("images/claw_control_v")
+    end)
+    if ok_claw_control_v and claw_control_v_table then
+        mc.ui_images.claw_control_v = claw_control_v_table
+    else
+        print("WARNING: Failed to load claw_control_v.pdt")
+    end
+    
     return mc
 end
 
@@ -305,6 +325,10 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                         
                         entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult)
                         self.canon_fire_timer = 0
+                        -- 播放砲台發射音效
+                        if _G.SoundManager and _G.SoundManager.playCanonFire then
+                            _G.SoundManager.playCanonFire()
+                        end
                         break
                     end
                 end
@@ -317,6 +341,9 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         local pdata = _G.PartsData and _G.PartsData["FEET"]
         local move_speed = (pdata and pdata.move_speed) or 3.0
         
+        -- FEET 使用與 WHEEL 相同的 wheel_stick_offset 邏輯
+        local max_stick_offset = 40
+        
         local moving = false
         local direction = 0
         
@@ -324,11 +351,22 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             dx = dx - move_speed
             moving = true
             direction = -1
+            self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 5)
         end
         if playdate.buttonIsPressed(playdate.kButtonRight) then
             dx = dx + move_speed
             moving = true
             direction = 1
+            self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 5)
+        end
+        
+        -- 如果沒有按鍵，wheel_stick_offset 回到中心
+        if not playdate.buttonIsPressed(playdate.kButtonLeft) and not playdate.buttonIsPressed(playdate.kButtonRight) then
+            if self.wheel_stick_offset > 0 then
+                self.wheel_stick_offset = math.max(0, self.wheel_stick_offset - 5)
+            elseif self.wheel_stick_offset < 0 then
+                self.wheel_stick_offset = math.min(0, self.wheel_stick_offset + 5)
+            end
         end
         
         self.feet_is_moving = moving
@@ -700,6 +738,7 @@ function Enemy:init(x, y, type_id, ground_y)
         is_triggered = false,
         explode_timer = 0,
         is_exploded = false,
+        has_applied_explode_damage = false,
         -- 爆炸动画参數
         explode_image_table = nil,  -- 爆炸动画表
         explode_frame_index = 1,    -- 爆炸动画帧数
@@ -968,10 +1007,10 @@ function Enemy:drawMineExplosion(screen_x)
             return self.explode_image_table:getImage(current_frame)
         end)
         if ok then frame = img end
-        -- Explosion animation: draw at enemy's top-left to rule out centering offset issues
+        -- Explosion animation: draw at enemy's top-left, moved up 20px
         local anim_size = 50
         local draw_x = screen_x
-        local draw_y = self.y
+        local draw_y = self.y - 20
         if frame then
             frame:draw(draw_x, draw_y)
         else
@@ -1422,12 +1461,13 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             end
             
             -- 檢查地雷爆炸
-            if enemy.attack_type == "EXPLODE" and enemy.is_exploded then
+            if enemy.attack_type == "EXPLODE" and enemy.is_exploded and not enemy.has_applied_explode_damage then
                 local distance = math.sqrt((mech_x - enemy.x)^2 + (mech_y - enemy.y)^2)
                 if distance < enemy.explode_radius then
                     mech_damage_taken = mech_damage_taken + enemy.explode_damage
                 end
-                enemy.is_alive = false  -- 爆炸後移除
+                enemy.has_applied_explode_damage = true  -- 只應用一次傷害
+                -- 不要立即設置 is_alive = false，讓動畫播放完畢
             end
         end
     end
@@ -2325,13 +2365,46 @@ function MechController:drawPartUI(part_id, x, y, size)
                 end
             end
         elseif part_type == "CLAW" then
-            -- CLAW 的 panel 需要旋轉（使用臂角度），左對齊
-            local rotated_img = panel_img:rotatedImage(90-self.claw_arm_angle)
-            local center_x = x + size / 2
-            local center_y = y + size / 2
-            if rotated_img then
-                local rw, rh = rotated_img:getSize()
-                pcall(function() rotated_img:draw(center_x - rw/2, center_y - rh/2) end)
+            -- CLAW 的 panel 不旋轉，直接繪製
+            pcall(function() panel_img:draw(x, y) end)
+            
+            -- 檢查是否為當前激活的零件
+            local is_active = (self.active_part_id == part_id)
+            
+            -- 繪製 claw_control_v（左邊控制器，根據上下鍵狀態顯示不同 frame）
+            local control_v_table = ui.claw_control_v
+            if control_v_table then
+                local frame_index = 1  -- 預設 frame 0 (1-based indexing)
+                if is_active then
+                    -- 只有在激活狀態才檢查按鍵狀態
+                    local up_pressed = playdate.buttonIsPressed(playdate.kButtonUp)
+                    local down_pressed = playdate.buttonIsPressed(playdate.kButtonDown)
+                    if up_pressed then
+                        frame_index = 2  -- frame 1 (上鍵按下)
+                    elseif down_pressed then
+                        frame_index = 3  -- frame 2 (下鍵按下)
+                    end
+                end
+                
+                local control_img = control_v_table:getImage(frame_index)
+                if control_img then
+                    -- 左對齊繪製
+                    pcall(function() control_img:draw(x, y) end)
+                end
+            end
+            
+            -- 繪製 claw_control（右邊控制器，隨 crank 角度旋轉）
+            local control_img = ui.claw_control
+            if control_img then
+                local crank_angle = is_active and playdate.getCrankPosition() or 0  -- 非激活狀態顯示預設角度
+                local rotated_control = control_img:rotatedImage(crank_angle)
+                if rotated_control then
+                    local rw, rh = rotated_control:getSize()
+                    -- 右對齊，垂直居中
+                    local panel_w, panel_h = panel_img:getSize()
+                    local control_x = x + panel_w - rw
+                    pcall(function() rotated_control:draw(control_x, y + (size - rh)/2) end)
+                end
             end
         else
             -- 其他零件直接繪製

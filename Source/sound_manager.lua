@@ -76,26 +76,21 @@ function SoundManager.playCursorMove()
 end
 
 -- ==========================================
--- 播放選擇確認音效（0.6秒）
+-- 播放選擇確認音效（使用音檔）
 -- ==========================================
 function SoundManager.playSelect()
-    -- 延遲初始化：如果 synth 還沒創建，先初始化
-    if not SoundManager.synth_select then
-        print("SOUND: Lazy init - creating synth_select")
-        SoundManager.synth_select = playdate.sound.synth.new(playdate.sound.kWaveSawtooth)
-        if SoundManager.synth_select then
-            -- 設定柔和但會停止的包絡線
-            SoundManager.synth_select:setADSR(0.03, 0.07, 0.0, 0.12)  -- Sustain = 0 確保會停止
-            SoundManager.synth_select:setVolume(0.6)
-            print("SOUND: synth_select created successfully (lazy)")
-        else
-            print("SOUND ERROR: Failed to create synth_select (lazy)")
-            return
-        end
-    end
-    
     print("========== SOUND: Playing Select ==========")
-    SoundManager.synth_select:playNote("E5", 0.6)
+    -- 使用檔案播放器播放音檔
+    local ok, player = pcall(function()
+        return playdate.sound.fileplayer.new("audio/choose")
+    end)
+    if ok and player then
+        player:setVolume(0.7)
+        player:play()
+        print("SOUND: choose.wav played successfully")
+    else
+        print("SOUND ERROR: Failed to play choose.wav")
+    end
 end
 
 -- ==========================================
@@ -123,25 +118,39 @@ end
 
 
 -- ==========================================
--- 播放爆炸音效（0.25秒）
+-- 播放爆炸音效（使用音檔）
 -- ==========================================
 function SoundManager.playExplode()
-    -- 延遲初始化：如果 synth 還沒創建，先初始化
-    if not SoundManager.synth_explode then
-        print("SOUND: Lazy init - creating synth_explode")
-        SoundManager.synth_explode = playdate.sound.synth.new(playdate.sound.kWaveNoise)
-        if SoundManager.synth_explode then
-            SoundManager.synth_explode:setADSR(0.005, 0.1, 0.0, 0.15)  -- Sustain = 0 確保會停止
-            SoundManager.synth_explode:setVolume(0.6)
-            print("SOUND: synth_explode created successfully (lazy)")
-        else
-            print("SOUND ERROR: Failed to create synth_explode (lazy)")
-            return
-        end
-    end
-    
     print("========== SOUND: Playing Explode ==========")
-    SoundManager.synth_explode:playNote(60, 0.25)
+    -- 使用檔案播放器播放音檔
+    local ok, player = pcall(function()
+        return playdate.sound.fileplayer.new("audio/explode")
+    end)
+    if ok and player then
+        player:setVolume(0.8)
+        player:play()
+        print("SOUND: explode.wav played successfully")
+    else
+        print("SOUND ERROR: Failed to play explode.wav")
+    end
+end
+
+-- ==========================================
+-- 播放玩家砲台發射音效（使用爆炸音檔）
+-- ==========================================
+function SoundManager.playCanonFire()
+    print("========== SOUND: Playing Canon Fire ==========")
+    -- 使用檔案播放器播放音檔
+    local ok, player = pcall(function()
+        return playdate.sound.fileplayer.new("audio/explode")
+    end)
+    if ok and player then
+        player:setVolume(0.6)  -- 砲台發射音量稍小
+        player:play()
+        print("SOUND: canon fire explode.wav played successfully")
+    else
+        print("SOUND ERROR: Failed to play canon fire explode.wav")
+    end
 end
 
 
