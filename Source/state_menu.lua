@@ -10,7 +10,7 @@ local font = custom_font or gfx.font.systemFont
 
 StateMenu = {}
 
-local menu_options = {"NEW GAME", "CONTINUE", "CREDITS"}
+local menu_options = {"START GAME", "CREDITS"}
 local selected_index = 1
 local menu_x = 100
 local menu_y_start = 100
@@ -58,12 +58,13 @@ function StateMenu.update()
         end
         
         local selection = menu_options[selected_index]
-        if selection == "NEW GAME" then
-            -- NEW GAME: 進入存檔選擇畫面（模式為創建新遊戲）
-            setState(_G.StateSaveSelect, "new_game")
-        elseif selection == "CONTINUE" then
-            -- CONTINUE: 進入存檔選擇畫面（模式為繼續遊戲）
-            setState(_G.StateSaveSelect, "continue")
+        if selection == "START GAME" then
+            -- START GAME: 進入存檔選擇畫面
+            if _G.StateSaveSelect then
+                setState(_G.StateSaveSelect)
+            else
+                print("ERROR: StateSaveSelect not found")
+            end
         elseif selection == "CREDITS" then
             if _G.StateCredits then
                 setState(_G.StateCredits)
