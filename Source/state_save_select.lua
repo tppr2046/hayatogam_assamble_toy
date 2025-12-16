@@ -159,6 +159,9 @@ function StateSaveSelect.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
     
+    -- 計算閃爍狀態
+    local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
+    
     -- 標題
     local title = "SELECT SAVE FILE"
     local title_width = gfx.getTextSize(title)
@@ -179,9 +182,13 @@ function StateSaveSelect.draw()
             info = "Empty"
         end
         
-        -- 選中標記
+        -- 選中標記（閃爍）
         if i == selected_slot and not selected_back then
-            text = "> " .. text .. " <"
+            if blink_on then
+                text = "> " .. text .. " <"
+            else
+                text = "  " .. text .. "  "
+            end
         end
         
         gfx.drawText(text, 50, y)
@@ -197,9 +204,14 @@ function StateSaveSelect.draw()
         end
     end
     
-    -- 繪製 BACK 選項
+    -- 繪製 BACK 選項（閃爍）
     local back_y = 70 + SAVE_SLOTS * 40 + 10
-    local back_text = selected_back and "> BACK <" or "  BACK"
+    local back_text
+    if selected_back then
+        back_text = blink_on and "> BACK <" or "  BACK  "
+    else
+        back_text = "  BACK"
+    end
     gfx.drawText(back_text, 50, back_y)
     
     -- 提示文字
@@ -221,9 +233,19 @@ function StateSaveSelect.draw()
         local msg_width = gfx.getTextSize(msg)
         gfx.drawText(msg, (400 - msg_width) / 2, 100)
         
-        -- 選項
-        local option1 = (confirm_choice == 1) and "> OK <" or "OK"
-        local option2 = (confirm_choice == 2) and "> CANCEL <" or "CANCEL"
+        -- 選項（閃爍）
+        local option1
+        local option2
+        if confirm_choice == 1 then
+            option1 = blink_on and "> OK <" or "  OK  "
+        else
+            option1 = "OK"
+        end
+        if confirm_choice == 2 then
+            option2 = blink_on and "> CANCEL <" or "  CANCEL  "
+        else
+            option2 = "CANCEL"
+        end
         
         gfx.drawText(option1, 120, 130)
         gfx.drawText(option2, 230, 130)

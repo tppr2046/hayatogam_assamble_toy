@@ -1015,12 +1015,17 @@ function StateHQ.draw()
                 -- CANON 特殊處理：繪製底座
                 if part_id == "CANON1" or part_id == "CANON2" then
                     if pdata._base_img then
-                        print("DEBUG: Drawing base_img for", part_id, "in scaled branch")
                         pcall(function() pdata._base_img:draw(preview_x, draw_y) end)
                     end
                 end
                 gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(preview_x, draw_y, sw, sh)
+                -- 在選擇時繪製閃爍邊框
+                if blink_on then
+                    gfx.setLineWidth(3)
+                    gfx.drawRect(preview_x - 2, draw_y - 2, sw + 4, sh + 4)
+                    gfx.setLineWidth(1)
+                end
             elseif pdata._img then
                 local iw, ih
                 local ok, a, b = pcall(function() return pdata._img:getSize() end)
@@ -1053,6 +1058,12 @@ function StateHQ.draw()
                 end
                 gfx.setColor(gfx.kColorBlack)
                 gfx.drawRect(preview_x, preview_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
+                -- 在選擇時繪製閃爍邊框
+                if blink_on then
+                    gfx.setLineWidth(3)
+                    gfx.drawRect(preview_x - 2, preview_y - 2, GRID_CELL_SIZE + 4, GRID_CELL_SIZE + 4)
+                    gfx.setLineWidth(1)
+                end
             end
         end
     end
@@ -1113,14 +1124,23 @@ function StateHQ.draw()
         for i = 1, 2 do
             local text = categories[i]
             if i == selected_part_index then
-                text = "> " .. text .. " <"
+                if blink_on then
+                    text = "> " .. text .. " <"
+                else
+                    text = "  " .. text .. "  "
+                end
             end
             gfx.drawText(text, 10, list_y + (i - 1) * line_height)
         end
         
         -- 繪製 SHOP 選項
         local shop_y = list_y + 2 * line_height
-        local shop_text = cursor_on_shop and "> SHOP <" or "  SHOP"
+        local shop_text
+        if cursor_on_shop then
+            shop_text = blink_on and "> SHOP <" or "  SHOP  "
+        else
+            shop_text = "  SHOP"
+        end
         gfx.drawText(shop_text, 10, shop_y)
     else
         -- 顯示選中分類的零件
@@ -1139,7 +1159,11 @@ function StateHQ.draw()
                 
                 local text = part_id
                 if i == selected_part_index and not cursor_on_ready then
-                    text = "> " .. text .. " <"
+                    if blink_on then
+                        text = "> " .. text .. " <"
+                    else
+                        text = "  " .. text .. "  "
+                    end
                 end
                 
                 local text_x = 10
@@ -1440,7 +1464,7 @@ function StateHQ.draw()
     local back_y = ready_y + 15
     local back_text = "BACK"
     if cursor_on_back then
-        back_text = "> " .. back_text .. " <"
+        back_text = blink_on and "> " .. back_text .. " <" or "    " .. back_text .. "    "
     end
     local back_text_width = gfx.getTextSize(back_text)
     local back_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - back_text_width) / 2
@@ -1453,7 +1477,11 @@ function StateHQ.draw()
         for i = 1, 2 do
             local text = options[i]
             if i == menu_option_index then
-                text = "> " .. text
+                if blink_on then
+                    text = "> " .. text
+                else
+                    text = "  " .. text
+                end
             else
                 text = "  " .. text
             end

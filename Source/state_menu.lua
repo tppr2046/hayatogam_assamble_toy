@@ -82,6 +82,9 @@ function StateMenu.draw()
     gfx.setColor(gfx.kColorBlack)
     -- 確保在 draw 週期中字體仍被設定 (雖然 setup 已經設過，但保留是好習慣)
     gfx.setFont(font)
+    
+    -- 計算閃爍狀態
+    local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
 
     -- 繪製標題
     gfx.drawText("MECH ASSEMBLY GAME", menu_x, 50)
@@ -91,7 +94,12 @@ function StateMenu.draw()
         local y = menu_y_start + (i - 1) * line_height
         
         if i == selected_index then
-            gfx.drawText("[" .. option .. "]", menu_x, y)
+            -- 選中時，><符號閃爍
+            if blink_on then
+                gfx.drawText(">" .. option .. "<", menu_x, y)
+            else
+                gfx.drawText(" " .. option .. " ", menu_x, y)
+            end
         else
             gfx.drawText(option, menu_x, y)
         end

@@ -159,11 +159,19 @@ function StateShop.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
     
+    -- 計算閃爍狀態
+    local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
+    
     -- 繪製標題
     gfx.drawText("SHOP", 10, 10)
     
     -- 繪製 BACK 按鈕（右上角固定）
-    local back_text = cursor_on_back and "> BACK <" or "BACK"
+    local back_text
+    if cursor_on_back then
+        back_text = blink_on and "> BACK <" or "  BACK  "
+    else
+        back_text = "BACK"
+    end
     gfx.drawText(back_text, 320, 10)
     
     -- 繪製資源顯示
@@ -203,15 +211,20 @@ function StateShop.draw()
         
         -- 顯示選擇標記（只在焦點不在 BACK 時）
         if i == shop_selected_part_index and not cursor_on_back then
-            text = "> " .. text
+            if blink_on then
+                text = "> " .. text
+            else
+                text = "  " .. text
+            end
         else
             text = "  " .. text
         end
         
         -- 計算繪製位置（相對於捲動偏移）
         local display_index = i - scroll_offset
-        gfx.drawText(text, 10, shop_list_y + (display_index - 1) * shop_line_height)
-        gfx.drawText(cost_text, 150, shop_list_y + (display_index - 1) * shop_line_height)
+        local item_y = shop_list_y + (display_index - 1) * shop_line_height
+        
+        gfx.drawText(text, 10, item_y)
     end
     
     -- 繪製捲動提示（如果清單超出畫面）
@@ -220,6 +233,93 @@ function StateShop.draw()
     end
     if end_index < #all_parts then
         gfx.drawText("v More below", 10, shop_list_y + VISIBLE_ITEMS * shop_line_height + 5)
+    end
+    
+    -- 繪製選中零件的預覽窗口（不在購買對話框時顯示）
+    if not shop_confirm_mode and not cursor_on_back then
+        local all_parts = {}
+        for pid, _ in pairs(_G.PartsData or {}) do
+            table.insert(all_parts, pid)
+        end
+        table.sort(all_parts)
+        
+        if shop_selected_part_index > 0 and shop_selected_part_index <= #all_parts then
+            local part_id = all_parts[shop_selected_part_index]
+            local part_data = _G.PartsData[part_id]
+            
+            if part_data and part_data._img then
+                -- 繪製預覽窗口背景
+                local preview_x = 240
+                local preview_y = 80
+                local preview_w = 100
+                local preview_h = 100
+                
+                gfx.setColor(gfx.kColorWhite)
+                gfx.fillRect(preview_x, preview_y, preview_w, preview_h)
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawRect(preview_x, preview_y, preview_w, preview_h)
+                
+                -- 繪製零件圖片（原尺寸，居中）
+                local ok, img_width, img_height = pcall(function() return part_data._img:getSize() end)
+                if ok and img_width and img_height then
+                    -- CANON 特殊處理：砲管最左側對齊底座中心點
+                    if part_id == "CANON1" or part_id == "CANON2" then
+                        if part_data._base_img then
+                            local ok_base, base_width, base_height = pcall(function() return part_data._base_img:getSize() end)
+                            if ok_base and base_width and base_height then
+                                -- 計算底座位置（居中）
+                                local base_x = preview_x + (preview_w - base_width) / 2
+                                local base_y = preview_y + (preview_h - base_height) / 2
+                                -- 計算砲管位置：最左側對齊底座中心點
+                                local barrel_x = base_x + base_width / 2  -- 砲管最左側 = 底座中心
+                                local barrel_y = preview_y + (preview_h - img_height) / 2
+                                -- 先繪製底座
+                                pcall(function() part_data._base_img:draw(base_x, base_y) end)
+                                -- 再繪製砲管
+                                pcall(function() part_data._img:draw(barrel_x, barrel_y) end)
+                            else
+                                -- 備用：兩者都居中
+                                local img_x = preview_x + (preview_w - img_width) / 2
+                                local img_y = preview_y + (preview_h - img_height) / 2
+                                pcall(function() part_data._img:draw(img_x, img_y) end)
+                            end
+                        else
+                            -- 沒有底座，砲管居中
+                            local img_x = preview_x + (preview_w - img_width) / 2
+                            local img_y = preview_y + (preview_h - img_height) / 2
+                            pcall(function() part_data._img:draw(img_x, img_y) end)
+                        end
+                    else
+                        -- 其他零件：正常居中
+                        local img_x = preview_x + (preview_w - img_width) / 2
+                        local img_y = preview_y + (preview_h - img_height) / 2
+                        pcall(function() part_data._img:draw(img_x, img_y) end)
+                    end
+                else
+                    -- 無法取得大小，不繪製
+                end
+                
+                -- CLAW 特殊處理：繪製額外部件
+                if part_id == "CLAW" then
+                    local img_x = preview_x + (preview_w - img_width) / 2
+                    local img_y = preview_y + (preview_h - img_height) / 2
+                    if part_data._arm_img then pcall(function() part_data._arm_img:draw(img_x, img_y) end) end
+                    if part_data._upper_img then pcall(function() part_data._upper_img:draw(img_x, img_y) end) end
+                    if part_data._lower_img then pcall(function() part_data._lower_img:draw(img_x, img_y) end) end
+                end
+                
+                -- 繪製資源花費（在窗口上方）
+                local cost_y = preview_y - 20
+                local cost_text = string.format("S:%d C:%d R:%d", 
+                    part_data.cost_steel or 0,
+                    part_data.cost_copper or 0,
+                    part_data.cost_rubber or 0)
+                gfx.drawText(cost_text, preview_x, cost_y)
+                
+                -- 繪製零件名稱
+                gfx.drawText(part_id, preview_x + 5, preview_y + preview_h + 5)
+            end
+        end
     end
     
     -- 繪製確認購買對話框
@@ -243,8 +343,18 @@ function StateShop.draw()
         local part_id = all_parts[shop_selected_part_index]
         gfx.drawText("Buy " .. part_id .. "?", dialog_x + 10, dialog_y + 10)
         
-        local buy_text = shop_confirm_option == 1 and "> BUY <" or "  BUY"
-        local cancel_text = shop_confirm_option == 2 and "> CANCEL <" or "  CANCEL"
+        local buy_text
+        local cancel_text
+        if shop_confirm_option == 1 then
+            buy_text = blink_on and "> BUY <" or "  BUY  "
+        else
+            buy_text = "  BUY"
+        end
+        if shop_confirm_option == 2 then
+            cancel_text = blink_on and "> CANCEL <" or "  CANCEL  "
+        else
+            cancel_text = "  CANCEL"
+        end
         gfx.drawText(buy_text, dialog_x + 30, dialog_y + 35)
         gfx.drawText(cancel_text, dialog_x + 30, dialog_y + 50)
     end
