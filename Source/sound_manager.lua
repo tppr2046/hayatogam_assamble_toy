@@ -8,6 +8,7 @@ SoundManager = {}
 SoundManager.synth_cursor = nil      -- 游標移動音效
 SoundManager.synth_select = nil      -- 選擇音效
 SoundManager.synth_hit = nil         -- 擊中音效
+SoundManager.synth_explode = nil     -- 爆炸音效
 SoundManager.bgm_player = nil        -- 目前的 BGM 播放器
 SoundManager.current_bgm = nil       -- 目前播放的 BGM 檔名
 
@@ -120,6 +121,33 @@ function SoundManager.playHit()
     SoundManager.synth_hit:playNote("C1", 0.5)
 end
 
+
+-- ==========================================
+-- 播放爆炸音效（0.25秒）
+-- ==========================================
+function SoundManager.playExplode()
+    -- 延遲初始化：如果 synth 還沒創建，先初始化
+    if not SoundManager.synth_explode then
+        print("SOUND: Lazy init - creating synth_explode")
+        SoundManager.synth_explode = playdate.sound.synth.new(playdate.sound.kWaveNoise)
+        if SoundManager.synth_explode then
+            SoundManager.synth_explode:setADSR(0.005, 0.1, 0.0, 0.15)  -- Sustain = 0 確保會停止
+            SoundManager.synth_explode:setVolume(0.6)
+            print("SOUND: synth_explode created successfully (lazy)")
+        else
+            print("SOUND ERROR: Failed to create synth_explode (lazy)")
+            return
+        end
+    end
+    
+    print("========== SOUND: Playing Explode ==========")
+    SoundManager.synth_explode:playNote(60, 0.25)
+end
+
+
+
+
+
 -- ==========================================
 -- 停止所有音效
 -- ==========================================
@@ -127,6 +155,7 @@ function SoundManager.stopAll()
     if SoundManager.synth_cursor then SoundManager.synth_cursor:stop() end
     if SoundManager.synth_select then SoundManager.synth_select:stop() end
     if SoundManager.synth_hit then SoundManager.synth_hit:stop() end
+    if SoundManager.synth_explode then SoundManager.synth_explode:stop() end
     if SoundManager.bgm_player then SoundManager.bgm_player:stop() end
 end
 

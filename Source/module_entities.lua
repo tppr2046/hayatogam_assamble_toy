@@ -700,6 +700,11 @@ function Enemy:init(x, y, type_id, ground_y)
         is_triggered = false,
         explode_timer = 0,
         is_exploded = false,
+        -- 爆炸动画参數
+        explode_image_table = nil,  -- 爆炸动画表
+        explode_frame_index = 1,    -- 爆炸动画帧数
+        explode_frame_timer = 0,    -- 爆炸动画身時間
+        explode_frame_duration = 0.1, -- 每帧阻扣時間(秒)
         -- 移動類型和攻擊類型
         move_type = data.move_type,
         attack_type = data.attack_type
@@ -871,20 +876,54 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         -- 碰撞檢測由 EntityController:updateAll 處理
         
     elseif self.attack_type == "EXPLODE" then
-        -- 地雷邏輯
+        -- 地雷逻辑
         if not self.is_triggered then
-            -- 檢查是否被觸發（玩家或砲彈碰到）
-            -- 這部分由 updateAll 或其他系統處理
+            -- 检查是否被触发（玩家或砲彈碰到）
+            -- 这部分由 updateAll 或其他系统处理
         elseif not self.is_exploded then
             self.explode_timer = self.explode_timer + dt
             if self.explode_timer >= self.explode_delay then
                 self.is_exploded = true
-                -- 爆炸傷害由 updateAll 處理
+                -- 加载爆炸动画表（仅加载一次）
+                if not self.explode_image_table then
+                    local ok, table_img = pcall(function()
+                        return playdate.graphics.imagetable.new("images/mine_explode")
+                    end)
+                    if ok and table_img then
+                        self.explode_image_table = table_img
+                        -- 確保從第一幀開始播放
+                        self.explode_frame_index = 0
+                        self.explode_frame_timer = 0
+                        print("LOG: Loaded mine explosion animation, frames: " .. (table_img:getLength() or 0))
+                    else
+                        print("WARNING: Failed to load mine explosion animation")
+                    end
+                end
+                -- 播放爆炸音效
+                if _G.SoundManager and _G.SoundManager.playExplode then
+                    _G.SoundManager.playExplode()
+                end
+            end
+        else
+            -- 爆炸正在进行：更新动画帧
+            if self.explode_image_table then
+                self.explode_frame_timer = self.explode_frame_timer + dt
+                local frame_count = self.explode_image_table:getLength() or 3
+                if self.explode_frame_timer >= self.explode_frame_duration then
+                    self.explode_frame_timer = 0
+                    self.explode_frame_index = self.explode_frame_index + 1
+                    -- When all frames have been played, mark mine as dead
+                    if self.explode_frame_index >= frame_count then
+                        self.is_alive = false
+                    end
+                end
+            else
+                -- No animation table, mark as dead (animation timeout)
+                self.is_alive = false
             end
         end
     end
 end
-
 -- 發射拋物線砲彈 (擊向機甲)
 function Enemy:fire(target_x, controller)
     -- 使用敵人資料中定義的子彈發射位置
@@ -915,6 +954,40 @@ function Enemy:fire(target_x, controller)
     local projectile = Projectile:init(start_x, start_y, vx, vy, self.attack, false, self.ground_y)
     projectile.gravity = projectileGravity
     table.insert(controller.projectiles, projectile)
+end
+
+function Enemy:drawMineExplosion(screen_x)
+    if self.is_exploded and self.explode_image_table then
+        -- Get frame with 1-based indexing (Playdate imagetable uses 1-based indexing)
+        local frame_count = self.explode_image_table:getLength() or 3
+        local current_frame = self.explode_frame_index + 1
+        if current_frame < 1 then current_frame = 1 end
+        if current_frame > frame_count then current_frame = frame_count end
+        local frame = nil
+        local ok, img = pcall(function()
+            return self.explode_image_table:getImage(current_frame)
+        end)
+        if ok then frame = img end
+        -- Explosion animation: draw at enemy's top-left to rule out centering offset issues
+        local anim_size = 50
+        local draw_x = screen_x
+        local draw_y = self.y
+        if frame then
+            frame:draw(draw_x, draw_y)
+        else
+            -- 後備：若影格取得失敗，以白框提示位置（避免“看不到”）
+            playdate.graphics.setColor(playdate.graphics.kColorWhite)
+            playdate.graphics.drawRect(draw_x, draw_y, anim_size, anim_size)
+        end
+        -- 調試：顯示當前爆炸影格
+        playdate.graphics.drawText("EXP:" .. tostring(current_frame) .. "/" .. tostring(frame_count), draw_x, draw_y - 10)
+    elseif self.is_triggered and not self.is_exploded then
+        local blink_speed = 10
+        if math.floor(self.explode_timer * blink_speed) % 2 == 0 then
+            playdate.graphics.setColor(playdate.graphics.kColorWhite)
+            playdate.graphics.fillRect(screen_x - 2, self.y - 2, self.width + 4, self.height + 4)
+        end
+    end
 end
 
 function Enemy:draw(camera_x)
@@ -972,19 +1045,13 @@ function Enemy:draw(camera_x)
         end
     end
     
-    -- 繪製地雷閃爍（MINE）
-    if self.attack_type == "EXPLODE" and self.is_triggered and not self.is_exploded then
-        -- 倒數時閃爍
-        local blink_speed = 10  -- 閃爍速度
-        if math.floor(self.explode_timer * blink_speed) % 2 == 0 then
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(screen_x - 2, self.y - 2, self.width + 4, self.height + 4)
-        end
+    if self.attack_type == "EXPLODE" then
+        self:drawMineExplosion(screen_x)
     end
 end
 
 -- [[ ========================================== ]]
--- [[  Stone 類別 (可互動石頭) ]]
+-- [[  Stone 类別 (可互動石頭) ]]
 -- [[ ========================================== ]]
 
 Stone = {}
