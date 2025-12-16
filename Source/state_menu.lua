@@ -12,8 +12,8 @@ StateMenu = {}
 
 local menu_options = {"START GAME", "CREDITS"}
 local selected_index = 1
-local menu_x = 100
-local menu_y_start = 100
+local menu_x = 150
+local menu_y_start = 150
 local line_height = 20
 
 function StateMenu.setup()
@@ -83,25 +83,25 @@ function StateMenu.draw()
     -- 確保在 draw 週期中字體仍被設定 (雖然 setup 已經設過，但保留是好習慣)
     gfx.setFont(font)
     
-    -- 繪製標題
-    gfx.drawText("MECH ASSEMBLY GAME", menu_x, 50)
+
     
     -- 繪製選單選項
     for i, option in ipairs(menu_options) do
         local y = menu_y_start + (i - 1) * line_height
-        if i == selected_index then
-            -- 選中時使用黑底白字突出顯示（與任務選擇風格一致）
             local text_width, text_height = gfx.getTextSize(option)
-            local padding_x = 6
-            local padding_y = 2
-            gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(menu_x - padding_x, y - padding_y, text_width + padding_x * 2, text_height + padding_y * 2)
-            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-            gfx.drawText(option, menu_x, y)
-            gfx.setImageDrawMode(gfx.kDrawModeCopy)
-            gfx.setColor(gfx.kColorBlack)
-        else
-            gfx.drawText(option, menu_x, y)
+            local option_x = (400 - text_width) / 2  -- 水平置中
+            if i == selected_index then
+                -- 選中時使用黑底白字突出顯示（與任務選擇風格一致）
+                local padding_x = 6
+                local padding_y = 2
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillRect(option_x - padding_x, y - padding_y, text_width + padding_x * 2, text_height + padding_y * 2)
+                gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+                gfx.drawText(option, option_x, y)
+                gfx.setImageDrawMode(gfx.kDrawModeCopy)
+                gfx.setColor(gfx.kColorBlack)
+            else
+                gfx.drawText(option, option_x, y)
         end
     end
 end
