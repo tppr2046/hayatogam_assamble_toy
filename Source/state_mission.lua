@@ -355,6 +355,15 @@ function StateMission.update()
     local new_x = mech_x + dx
     local new_y = mech_y + mech_vy
     
+    -- 邊界檢查：限制玩家不能超出關卡寬度
+    local scene_width = (current_scene and current_scene.width) or 400
+    local mech_width = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
+    if new_x < 0 then
+        new_x = 0
+    elseif new_x + mech_width > scene_width then
+        new_x = scene_width - mech_width
+    end
+    
     -- 計算機甲本體碰撞框（3×2 格）
     local mech_grid = _G.GameState.mech_grid
     local body_w = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
@@ -678,6 +687,17 @@ function StateMission.update()
                                             stone.is_placed = true
                                             table.insert(target.placed_stones, stone)
                                             print("LOG: Stone placed on target " .. target.id .. " (" .. #target.placed_stones .. "/" .. target.required_count .. ")")
+                                            
+                                            -- 播放目標完成音效
+                                            if _G.SoundManager and _G.SoundManager.playTarget then
+                                                _G.SoundManager.playTarget()
+                                            end
+                                            
+                                            -- 釋放爪子的引用
+                                            if mech_controller and mech_controller.claw_grabbed_stone == stone then
+                                                mech_controller.claw_grabbed_stone = nil
+                                                print("LOG: Released claw grip on placed stone")
+                                            end
                                             
                                             -- 檢查該目標是否完成
                                             if #target.placed_stones >= target.required_count then

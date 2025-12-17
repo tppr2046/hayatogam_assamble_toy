@@ -559,7 +559,7 @@ function MechController:tryGrabStone(claw_tip_x, claw_tip_y, stones, grab_range)
     local grip_threshold = pdata and pdata.grab_threshold or 10
     
     for _, stone in ipairs(stones or {}) do
-        if not stone.is_grabbed then
+        if not stone.is_grabbed and not stone.is_placed then
             local dx = (stone.x + stone.width/2) - claw_tip_x
             local dy = (stone.y + stone.height/2) - claw_tip_y
             local distance = math.sqrt(dx*dx + dy*dy)

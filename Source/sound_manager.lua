@@ -153,6 +153,24 @@ function SoundManager.playCanonFire()
     end
 end
 
+-- ==========================================
+-- 播放目標完成音效（石頭放置到目標時）
+-- ==========================================
+function SoundManager.playTarget()
+    print("========== SOUND: Playing Target ==========")
+    -- 使用檔案播放器播放音檔
+    local ok, player = pcall(function()
+        return playdate.sound.fileplayer.new("audio/target")
+    end)
+    if ok and player then
+        player:setVolume(0.7)
+        player:play()
+        print("SOUND: target.wav played successfully")
+    else
+        print("SOUND ERROR: Failed to play target.wav")
+    end
+end
+
 
 
 

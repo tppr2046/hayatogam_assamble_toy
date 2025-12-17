@@ -107,7 +107,7 @@ local missions = {
 
         -- 關卡場景設定
         scene = {
-            width = 800, 
+            width = 1200, 
             ground_y = 220, 
             backgrounds = {
                 { layer = 0, x = 30, y = 40, image = "images/bg_building2.png" },
@@ -165,7 +165,7 @@ local missions = {
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
             delivery_targets = {
                 { id = "target1", x = 350, y = 0, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
-                { id = "target2", x = 600, y = -35, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target2", x = 600, y = -17, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
 
             }
         },
