@@ -459,17 +459,17 @@ local missions = {
             -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
             enemies = {
 
---                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
---                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
-                { type = "BASIC_ENEMY", x = 380, y = 0 },
-                { type = "MINE", x = 250, y = 0 },             -- 地雷1
-                { type = "MINE", x = 550, y = 0 },             -- 地雷2
-                { type = "BASIC_ENEMY", x = 980, y = 0 },      
+                { type = "MINE", x = 250, y = 0 },
+                { type = "BASIC_ENEMY", x = 380, y = -17 },
+                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
+                { type = "JUMP_ENEMY", x = 750, y = 0 },       -- 跳躍敵人
+                { type = "MINE", x = 850, y = 0 },
+                { type = "BASIC_ENEMY", x = 1080, y = 0 },      
             },
             
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
             delivery_targets = {
-                { id = "target1", x = 450, y = 0, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target1", x = 450, y = 110, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
                 { id = "target2", x = 1200, y = 0, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
 
             },

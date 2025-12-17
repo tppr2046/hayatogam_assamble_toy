@@ -73,7 +73,7 @@ function SaveManager.createNewSave(slot_id)
             cell_size = 16
         },
         mech_stats = {
-            total_hp = 0,
+            total_hp = 30,
             total_weight = 0,
             equipped_parts = {}
         }
