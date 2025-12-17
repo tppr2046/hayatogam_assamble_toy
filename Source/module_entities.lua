@@ -1079,8 +1079,16 @@ function Enemy:draw(camera_x)
     if not self.is_alive and not self.is_exploded then return end
     local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)  -- 應用震動偏移
     
-    -- 爆炸動畫播放中，只繪製爆炸效果
+    -- 爆炸動畫播放中，只繪製爆炸效果（但地雷爆炸完成後不繪製）
     if self.attack_type == "EXPLODE" and self.is_exploded then
+        -- 檢查爆炸動畫是否已完成
+        if self.explode_image_table then
+            local frame_count = self.explode_image_table:getLength() or 3
+            if self.explode_frame_index >= frame_count then
+                -- 爆炸動畫已完成，不繪製
+                return
+            end
+        end
         self:drawMineExplosion(screen_x)
         return
     end
@@ -1624,9 +1632,14 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     
                     print("LOG: Stone hit enemy! HP=" .. math.floor(enemy.hp))
                     
-                    if enemy.hp <= 0 then
-                        enemy.is_alive = false
-                        print("LOG: Enemy killed by stone")
+                    if enemy.hp <= 0 and not enemy.is_exploding then
+                        enemy.is_exploding = true
+                        enemy.exploding_frame_index = 0
+                        enemy.exploding_frame_timer = 0
+                        if _G.SoundManager and _G.SoundManager.playExplode then
+                            _G.SoundManager.playExplode()
+                        end
+                        print("LOG: Enemy killed by stone, starting explosion animation")
                     end
                     
                     -- 石頭減速但繼續受重力影響

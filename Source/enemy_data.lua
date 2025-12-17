@@ -69,6 +69,6 @@ return {
         explode_radius = 50,      -- 爆炸範圍（像素）
         explode_damage = 20,      -- 爆炸傷害
         -- 敵人圖片
-        image = "images/stone"
+        image = "images/mine"
     }
 }

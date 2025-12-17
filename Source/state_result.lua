@@ -111,7 +111,7 @@ function StateResult.draw()
     -- 顯示 OK 選項
     local ok_text = "> OK <"
     local ok_width = gfx.getTextSize(ok_text)
-    gfx.drawText(ok_text, (400 - ok_width) / 2, 180)
+    gfx.drawText(ok_text, (400 - ok_width) / 2, 185)
     
     -- 提示文字
     gfx.drawText("Press A to continue", 10, 220)

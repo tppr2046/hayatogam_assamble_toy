@@ -82,8 +82,8 @@ local missions = {
     },
     ["M002"] = {
         id = "M002", 
-        name = "TRAINING MISSION 2", 
-        category = "ELIMINATION", 
+        name = "Delivery Mission", 
+        category = "DELIVER_STONE", 
         description = "Eliminate all incoming trainer units and learn movement controls.",
         prerequisite = "M001",  -- 需要完成 M001 才會顯示
         time_limit = -1,  -- 關卡時間限制（秒），-1 表示無時間限制
@@ -165,7 +165,7 @@ local missions = {
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
             delivery_targets = {
                 { id = "target1", x = 350, y = 0, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
-                { id = "target2", x = 600, y = -17, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target2", x = 600, y = 90, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
 
             }
         },
@@ -177,16 +177,16 @@ local missions = {
     },
     ["M003"] = {
         id = "M003", 
-        name = "ENEMY TEST", 
-        category = "ELIMINATION", 
-        description = "Test all new enemy types: BASIC, JUMP, SWORD, MINE.",
-        prerequisite = "M002",  -- 需要完成 M001 才會顯示
-        time_limit = -1,  -- 無時間限制
+        name = "Dangerous Delivery", 
+        category = "DELIVER_STONE", 
+        description = "Deliver the stone to the target zone.",
+        prerequisite = "M002",  -- 需要完成 M002 才會顯示
+        time_limit = 99,  -- 無時間限制
         
         -- 關卡目標
         objective = {
-            type = "ELIMINATE_ALL",
-            description = "Defeat all enemies"
+            type = "DELIVER_STONE",
+            description = "Deliver the stone to the target zone"
         },
         
         -- 關卡場景設定
@@ -197,16 +197,19 @@ local missions = {
             backgrounds = {
                 { layer = 0, x = 30, y = 65, image = "images/bg_building4.png" },
                 { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
-                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" }
+                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" },
+                { layer = 0, x = 500, y = 55, image = "images/bg_building4.png" },
+                { layer = 1, x = 700, y = 65, image = "images/bg_building3.png"}
             },
 
             -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
             dialog = {
-                image = "images/bg_building3.png",
+                image = "images/dialog_bg",
                 lines = {
-                    "Mission 3",
-                    "Go Go Now",
-                    "Press A to advance each line, and start the mission at the end."
+                    "Thank you, Pilot, but the world is still in danger.",
+                    "More stones, more enemies. We cannot live in peace yet.",
+                    "Take stones to the targets.",
+                    
                 }
             },
             
@@ -215,10 +218,11 @@ local missions = {
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
-                { type = "up30", height_offset = 0 },     -- 測試斜坡停止
-                { type = "flat", height_offset = -37 },
-                { type = "flat", height_offset = -37 },
-                { type = "down30", height_offset = -37 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
@@ -234,27 +238,350 @@ local missions = {
             },
             
             obstacles = {},
-            stones = {},
+
+            -- 可互動物件（石頭）
+            stones = {
+                { x = 200, y = -5, target_id = "target1", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+                { x = 510, y = -5, target_id = "target2", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+
+            },
+
+
             
             -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
             enemies = {
-                { type = "BASIC_ENEMY", x = 280, y = -37 },      -- 會在斜坡前停止
-                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
-                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
-                { type = "MINE", x = 850, y = 0 },             -- 地雷1
-                { type = "MINE", x = 950, y = 0 },             -- 地雷2
+
+--                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
+--                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
+                { type = "BASIC_ENEMY", x = 380, y = 0 },
+                { type = "MINE", x = 250, y = 0 },             -- 地雷1
+                { type = "MINE", x = 550, y = 0 },             -- 地雷2
+                { type = "BASIC_ENEMY", x = 780, y = 0 },      
             },
             
-            delivery_targets = {}
-        },
+            -- 石頭目標物件（用於 DELIVER_STONE 目標）
+            delivery_targets = {
+                { id = "target1", x = 350, y = 0, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target2", x = 900, y = 0, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+
+            },
         
         -- 任務獎勵（資源）
-        reward_steel = 50,
-        reward_copper = 30,
+        reward_steel = 0,
+        reward_copper = 40,
         reward_rubber = 25
     },
 
      
+    },
+    ["M004"] = {
+        id = "M004", 
+        name = "MORE ENEMIES", 
+        category = "ELIMINATION", 
+        description = "Eliminate all enemies.",
+        prerequisite = "M002",  -- 需要完成 M002 才會顯示
+        time_limit = -1,  -- 無時間限制
+        
+        -- 關卡目標
+        objective = {
+            type = "ELIMINATE_ALL",
+            description = "Eliminate all enemies"
+        },
+        
+        -- 關卡場景設定
+        scene = {
+            width = 1200, 
+            ground_y = 220, 
+            -- 背景層設定應為純陣列，不含其他欄位
+            backgrounds = {
+                { layer = 0, x = 30, y = 65, image = "images/bg_building4.png" },
+                { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
+                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" },
+                { layer = 0, x = 500, y = 55, image = "images/bg_building4.png" },
+                { layer = 1, x = 700, y = 65, image = "images/bg_building3.png"}
+            },
+
+            -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
+            dialog = {
+                image = "images/dialog_bg",
+                lines = {
+                    "Thank you, Pilot, now we will move to farther land to build our base.",
+                    "More enemies out there trying to stop us.",
+                    "Clear the area to ensure safe passage.",
+                    
+                }
+            },
+            
+            -- 地形配置（全平坦用於測試）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up15", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
+                { type = "flat", height_offset = -17 },   -- 接續上一段的結束高度
+                { type = "flat", height_offset = -17 },
+                { type = "flat", height_offset = -17 },
+                { type = "down15", height_offset = -17 }, -- 從 -17 往下降到17
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
+            obstacles = {},
+
+            -- 可互動物件（石頭）
+
+
+            
+            -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
+            enemies = {
+
+                { type = "JUMP_ENEMY", x = 250, y = 0 },       -- 跳躍敵人
+                { type = "BASIC_ENEMY", x = 320, y = 0 },
+                { type = "SWORD_ENEMY", x = 380, y = -17 },
+                { type = "BASIC_ENEMY", x = 450, y = -17 },            
+                { type = "BASIC_ENEMY", x = 650, y = 0 },             
+                { type = "BASIC_ENEMY", x = 780, y = 0 },
+                { type = "SWORD_ENEMY", x = 950, y = 0 },      -- 劍敵人
+            },
+            
+            -- 石頭目標物件（用於 DELIVER_STONE 目標）
+
+        
+        -- 任務獎勵（資源）
+        reward_steel = 60,
+        reward_copper = 10,
+        reward_rubber = 5
+    },
+
+     
+    },
+
+
+    ["M005"] = {
+        id = "M005", 
+        name = "Brave Delivery", 
+        category = "DELIVER_STONE", 
+        description = "Deliver the stone to the target zone.",
+        prerequisite = "M003",  -- 需要完成 M003 才會顯示
+        time_limit = -1,  -- 無時間限制
+        
+        -- 關卡目標
+        objective = {
+            type = "DELIVER_STONE",
+            description = "Deliver the stone to the target zone"
+        },
+        
+        -- 關卡場景設定
+        scene = {
+            width = 1600, 
+            ground_y = 220, 
+            -- 背景層設定應為純陣列，不含其他欄位
+            backgrounds = {
+                { layer = 0, x = 30, y = 65, image = "images/bg_building4.png" },
+                { layer = 1, x = 270, y = 35, image = "images/bg_building3.png" },
+                { layer = 1, x = 380, y = 75, image = "images/bg_building2.png" },
+                { layer = 0, x = 560, y = 55, image = "images/bg_building4.png" },
+                { layer = 1, x = 800, y = 65, image = "images/bg_building1.png"},
+                { layer = 0, x = 960, y = 55, image = "images/bg_building4.png" },
+            },
+
+            -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
+            dialog = {
+                image = "images/dialog_bg",
+                lines = {
+                    "Thank you, Pilot, you save our civilization.",
+                    "More stones, more enemies. We cannot live in peace yet.",
+                    "Take stones to the targets.",
+                    
+                }
+            },
+            
+            -- 地形配置（全平坦用於測試）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up15", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
+                { type = "flat", height_offset = -17 },   -- 接續上一段的結束高度
+                { type = "flat", height_offset = -17 },
+                { type = "flat", height_offset = -17 },
+                { type = "down15", height_offset = -17 }, -- 從 -17 往下降到17
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "up15", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
+                { type = "flat", height_offset = -17 },   -- 接續上一段的結束高度
+                { type = "flat", height_offset = -17 },
+                { type = "flat", height_offset = -17 },
+                { type = "down15", height_offset = -17 }, -- 從 -17 往下降到17
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
+            obstacles = {},
+
+            -- 可互動物件（石頭）
+            stones = {
+                { x = 200, y = -5, target_id = "target1", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+                { x = 720, y = -5, target_id = "target2", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+
+            },
+
+
+            
+            -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
+            enemies = {
+
+--                { type = "JUMP_ENEMY", x = 450, y = 0 },       -- 跳躍敵人
+--                { type = "SWORD_ENEMY", x = 650, y = 0 },      -- 劍敵人
+                { type = "BASIC_ENEMY", x = 380, y = 0 },
+                { type = "MINE", x = 250, y = 0 },             -- 地雷1
+                { type = "MINE", x = 550, y = 0 },             -- 地雷2
+                { type = "BASIC_ENEMY", x = 980, y = 0 },      
+            },
+            
+            -- 石頭目標物件（用於 DELIVER_STONE 目標）
+            delivery_targets = {
+                { id = "target1", x = 450, y = 0, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target2", x = 1200, y = 0, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+
+            },
+        
+        -- 任務獎勵（資源）
+        reward_steel = 30,
+        reward_copper = 10,
+        reward_rubber = 55
+    },
+
+     
+    },
+    ["M006"] = {
+        id = "M006", 
+        name = "MORE ENEMIES", 
+        category = "ELIMINATION", 
+        description = "Eliminate all enemies.",
+        prerequisite = "M004",  -- 需要完成 M004 才會顯示
+        time_limit = -1,  -- 無時間限制
+        
+        -- 關卡目標
+        objective = {
+            type = "ELIMINATE_ALL",
+            description = "Eliminate all enemies"
+        },
+        
+        -- 關卡場景設定
+        scene = {
+            width = 1200, 
+            ground_y = 220, 
+            -- 背景層設定應為純陣列，不含其他欄位
+            backgrounds = {
+                { layer = 0, x = 30, y = 65, image = "images/bg_building4.png" },
+                { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
+                { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" },
+                { layer = 0, x = 500, y = 55, image = "images/bg_building4.png" },
+                { layer = 1, x = 700, y = 65, image = "images/bg_building3.png"}
+            },
+
+            -- 測試對話（任務開始前顯示）：上方圖片 + 下方打字機文字
+            dialog = {
+                image = "images/dialog_bg",
+                lines = {
+                    "It's the final battle, Pilot.",
+                    "Evil forces are gathering to stop us.",
+                    "We will succeed, we trust in you.",
+                    
+                }
+            },
+            
+            -- 地形配置（全平坦用於測試）
+            terrain = {
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 }
+            },
+            
+            obstacles = {},
+
+            -- 可互動物件（石頭）
+
+
+            
+            -- 測試所有敵人類型（y=0 表示在地面上，負值表示地面上方）
+            enemies = {
+
+                { type = "JUMP_ENEMY", x = 250, y = 0 },       -- 跳躍敵人
+                { type = "BASIC_ENEMY", x = 320, y = 0 },
+                { type = "SWORD_ENEMY", x = 380, y = 0 },
+                { type = "BASIC_ENEMY", x = 550, y = 0 },            
+                { type = "BASIC_ENEMY", x = 750, y = 0 },
+                { type = "MINE", x = 800, y = 0 },             -- 地雷2
+                { type = "BASIC_ENEMY", x = 880, y = 0 },
+                { type = "SWORD_ENEMY", x = 1050, y = 0 },      -- 劍敵人
+            },
+            
+            -- 石頭目標物件（用於 DELIVER_STONE 目標）
+
+        
+        -- 任務獎勵（資源）
+        reward_steel = 10,
+        reward_copper = 60,
+        reward_rubber = 35
+    },
+
+     
+    },
+
+
+
 
 
 }
