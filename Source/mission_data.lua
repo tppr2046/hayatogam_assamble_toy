@@ -170,7 +170,7 @@ local missions = {
             ground_y = 220, 
             -- 背景層設定應為純陣列，不含其他欄位
             backgrounds = {
-                { layer = 0, x = 30, y = 45, image = "images/bg_building3.png" },
+                { layer = 0, x = 30, y = 65, image = "images/bg_building4.png" },
                 { layer = 0, x = 300, y = 35, image = "images/bg_building2.png" },
                 { layer = 1, x = 180, y = 75, image = "images/bg_building1.png" }
             },

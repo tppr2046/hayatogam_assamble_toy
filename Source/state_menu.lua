@@ -13,14 +13,28 @@ StateMenu = {}
 local menu_options = {"START GAME", "CREDITS"}
 local selected_index = 1
 local menu_x = 150
-local menu_y_start = 150
+local menu_y_start = 170
 local line_height = 20
+local cover_image = nil
+local setup_done = false
 
 function StateMenu.setup()
     -- 設置字體
     gfx.setFont(font)
     selected_index = 1
-    print("LOG: StateMenu initialized.")
+    print("LOG: StateMenu setup called - about to load cover image")
+    -- 載入封面圖片 - 改用不帶副檔名的路徑
+    local success, result = pcall(function()
+        return gfx.image.new("images/cover")
+    end)
+    
+    if success then
+        cover_image = result
+        print("LOG: Cover image loaded successfully:", cover_image ~= nil)
+    else
+        print("ERROR: Failed to load cover image:", result)
+    end
+    
     -- 播放標題/一般介面 BGM（循環）
     if _G.SoundManager and _G.SoundManager.playTitleBGM then
         _G.SoundManager.playTitleBGM()
@@ -76,8 +90,36 @@ function StateMenu.update()
 end
 
 function StateMenu.draw()
+    -- 首次初始化（用於 setup 沒有被呼叫的情況）
+    if not setup_done then
+        print("LOG: First draw - initializing")
+        setup_done = true
+        gfx.setFont(font)
+        
+        -- 嘗試載入封面圖片
+        local success, result = pcall(function()
+            return gfx.image.new("images/cover")
+        end)
+        
+        if success then
+            cover_image = result
+            print("LOG: Cover image loaded in draw:", cover_image ~= nil)
+        else
+            print("ERROR: Failed to load cover image in draw:", result)
+        end
+    end
+    
+    print("LOG: StateMenu.draw called")
     
     gfx.clear(gfx.kColorWhite) 
+    
+    -- 繪製封面圖片
+    if cover_image then
+        cover_image:draw(0, 0)
+        print("LOG: Cover image drawn")
+    else
+        print("LOG: Cover image is nil")
+    end
     
     gfx.setColor(gfx.kColorBlack)
     -- 確保在 draw 週期中字體仍被設定 (雖然 setup 已經設過，但保留是好習慣)

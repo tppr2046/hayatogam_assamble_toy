@@ -91,6 +91,7 @@ end
 -- ==========================================
 
 function playdate.setup()
+    print("LOG: playdate.setup() called")
     playdate.display.setRefreshRate(30)
     
     -- 初始化存檔系統
@@ -107,7 +108,10 @@ function playdate.setup()
     
     -- 初始化第一個狀態 (Menu)
     if current_state and current_state.setup then
+        print("LOG: Calling current_state.setup()")
         current_state.setup()
+    else
+        print("ERROR: current_state or current_state.setup not found")
     end
     
     print("LOG: Game setup complete. Starting in Menu.")
