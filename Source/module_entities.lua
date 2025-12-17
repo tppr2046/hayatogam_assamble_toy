@@ -744,6 +744,12 @@ function Enemy:init(x, y, type_id, ground_y)
         explode_frame_index = 1,    -- 爆炸动画帧数
         explode_frame_timer = 0,    -- 爆炸动画身時間
         explode_frame_duration = 0.1, -- 每帧阻扣時間(秒)
+        -- 敵人死亡爆炸狀態
+        is_exploding = false,       -- 敵人是否正在爆炸
+        exploding_frame_index = 0,  -- 爆炸動畫幀索引
+        exploding_frame_timer = 0,  -- 爆炸動畫幀計時器
+        exploding_image_table = nil, -- 爆炸動畫表
+        exploding_duration = 1.0,   -- 爆炸動畫總時間
         -- 移動類型和攻擊類型
         move_type = data.move_type,
         attack_type = data.attack_type
@@ -775,6 +781,17 @@ function Enemy:init(x, y, type_id, ground_y)
 end
 
 function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    -- 如果正在爆炸，更新爆炸動畫
+    if self.is_exploding then
+        self.exploding_frame_timer = self.exploding_frame_timer + dt
+        if self.exploding_frame_timer >= self.exploding_duration then
+            self.is_alive = false
+            self.is_exploding = false
+            print("LOG: Enemy explosion animation complete, marked as dead")
+        end
+        return
+    end
+    
     if not self.is_alive then return end
     
     self.move_timer = self.move_timer + dt
@@ -1030,8 +1047,46 @@ function Enemy:drawMineExplosion(screen_x)
 end
 
 function Enemy:draw(camera_x)
-    if not self.is_alive then return end
+    -- 敌人死亡爆炸动画
+    if self.is_exploding then
+        local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)
+        if not self.exploding_image_table then
+            local ok, table_img = pcall(function()
+                return playdate.graphics.imagetable.new("images/mine_explode")
+            end)
+            if ok and table_img then
+                self.exploding_image_table = table_img
+            end
+        end
+        
+        if self.exploding_image_table then
+            local frame_count = self.exploding_image_table:getLength() or 3
+            self.exploding_frame_index = math.floor((self.exploding_frame_timer / self.exploding_duration) * frame_count)
+            if self.exploding_frame_index >= frame_count then
+                self.exploding_frame_index = frame_count - 1
+            end
+            
+            local frame_img = self.exploding_image_table:getImage(self.exploding_frame_index + 1)
+            if frame_img then
+                pcall(function()
+                    frame_img:draw(screen_x, self.y)
+                end)
+            end
+        end
+        return
+    end
+    
+    if not self.is_alive and not self.is_exploded then return end
     local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)  -- 應用震動偏移
+    
+    -- 爆炸動畫播放中，只繪製爆炸效果
+    if self.attack_type == "EXPLODE" and self.is_exploded then
+        self:drawMineExplosion(screen_x)
+        return
+    end
+    
+    -- 如果已死亡且不在爆炸中，不繪製
+    if not self.is_alive then return end
     
     -- 繪製敵人圖片或方塊
     if self.image then
@@ -1083,7 +1138,7 @@ function Enemy:draw(camera_x)
             gfx.setLineWidth(1)
         end
     end
-    
+
     if self.attack_type == "EXPLODE" then
         self:drawMineExplosion(screen_x)
     end
@@ -1428,6 +1483,15 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         mech_damage_taken = mech_damage_taken + enemy.attack
                         enemy.has_hit_player = true
                     end
+                elseif enemy.attack_type == "EXPLODE" then
+                    -- 爆炸型敵人：只在爆炸時造成傷害
+                    if enemy.is_exploded and not enemy.has_applied_explode_damage then
+                        local distance = math.sqrt((mech_x - enemy.x)^2 + (mech_y - enemy.y)^2)
+                        if distance < enemy.explode_radius then
+                            mech_damage_taken = mech_damage_taken + enemy.explode_damage
+                        end
+                        enemy.has_applied_explode_damage = true
+                    end
                 else
                     -- 持續傷害
                     mech_damage_taken = mech_damage_taken + enemy.attack * dt
@@ -1491,7 +1555,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         -- 特殊處理：地雷被砲彈擊中時觸發
                         if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
                             enemy.is_triggered = true
-                            enemy.explode_timer = 0
+                            enemy.explode_timer = 0  -- 重置計時器開始計數
                             p.active = false
                             print("LOG: Mine triggered by projectile!")
                             break
@@ -1512,9 +1576,14 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         
                         print("LOG: Player projectile hit enemy! HP=" .. math.floor(enemy.hp))
                         
-                        if enemy.hp <= 0 then
-                            enemy.is_alive = false
-                            print("LOG: Enemy killed by player projectile")
+                        if enemy.hp <= 0 and not enemy.is_exploding then
+                            enemy.is_exploding = true
+                            enemy.exploding_frame_index = 0
+                            enemy.exploding_frame_timer = 0
+                            if _G.SoundManager and _G.SoundManager.playExplode then
+                                _G.SoundManager.playExplode()
+                            end
+                            print("LOG: Enemy killed by player projectile, starting explosion animation")
                         end
                         break
                     end
@@ -1538,7 +1607,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     -- 特殊處理：地雷被石頭擊中時觸發
                     if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
                         enemy.is_triggered = true
-                        enemy.explode_timer = 0
+                        enemy.explode_timer = 0  -- 重置計時器開始計數
                         print("LOG: Mine triggered by stone!")
                         break
                     end

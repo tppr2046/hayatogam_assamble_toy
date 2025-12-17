@@ -72,6 +72,15 @@ local dialog_image = nil
 local typewriter_progress = 0
 local typewriter_speed = 40 -- 每秒顯示的字符數
 
+-- 爆炸狀態相關
+local mech_exploding = false
+local mech_explode_timer = 0
+local mech_explode_duration = 1.0  -- 爆炸動畫時間
+local mech_explode_image_table = nil
+local mech_explode_frame_index = 0
+local mech_explode_frame_timer = 0
+local mech_explode_frame_duration = 0.05  -- 每幀 0.05 秒
+
 
 -- ==========================================
 -- 狀態機接口
@@ -235,6 +244,11 @@ function StateMission.setup()
     local stats = (_G and _G.GameState and _G.GameState.mech_stats) or {}
     max_hp = stats.total_hp or 100
     current_hp = max_hp
+    
+    -- 重置爆炸狀態
+    mech_exploding = false
+    mech_explode_timer = 0
+    mech_explode_duration = 1.0
 
     -- 播放任務關卡 BGM（循環）
     if _G.SoundManager and _G.SoundManager.playMissionBGM then
@@ -596,7 +610,23 @@ function StateMission.update()
     -- 6. 遊戲結束/勝利條件檢查
     if current_hp <= 0 then
         print("GAME OVER: Mech destroyed!")
-        setState(_G.StateResult, false, "Mech destroyed!") -- 失敗，顯示結果畫面
+        -- 觸發機甲爆炸動畫
+        if not mech_exploding then
+            mech_exploding = true
+            mech_explode_timer = 0
+            
+            -- 播放爆炸音效
+            if _G.SoundManager and _G.SoundManager.playExplode then
+                _G.SoundManager.playExplode()
+            end
+            print("LOG: Starting mech explosion animation")
+        end
+        
+        -- 等待爆炸動畫完成
+        mech_explode_timer = mech_explode_timer + (1/30)
+        if mech_explode_timer >= mech_explode_duration then
+            setState(_G.StateResult, false, "Mech destroyed!")
+        end
         return
     end
     
@@ -715,8 +745,29 @@ function StateMission.draw()
         entity_controller:draw(camera_x) 
     end
 
-    -- 2. 繪製機甲（使用 MechController）
-    if mech_controller then
+    -- 2. 繪製機甲（使用 MechController）或爆炸動畫
+    if mech_exploding then
+        -- 播放爆炸動畫
+        if not mech_explode_image_table then
+            local ok, table_img = pcall(function()
+                return playdate.graphics.imagetable.new("images/mine_explode")
+            end)
+            if ok and table_img then
+                mech_explode_image_table = table_img
+                mech_explode_frame_index = 0
+                mech_explode_frame_timer = 0
+                print("LOG: Loaded mech explosion animation")
+            end
+        end
+        
+        if mech_explode_image_table then
+            local frame_count = mech_explode_image_table:getLength() or 1
+            local frame = mech_explode_image_table:getImage(mech_explode_frame_index + 1) or mech_explode_image_table:getImage(1)
+            if frame then
+                pcall(function() frame:draw(mech_x - 25, mech_y - 25) end)
+            end
+        end
+    elseif mech_controller then
         mech_controller:drawMech(mech_x, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
     end
     

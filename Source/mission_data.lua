@@ -34,15 +34,15 @@ local missions = {
             terrain = {
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
+                { type = "flat", height_offset = 0 },
                 { type = "up15", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
                 { type = "flat", height_offset = -17 },   -- 接續上一段的結束高度
                 { type = "flat", height_offset = -17 },
                 { type = "down15", height_offset = -17 }, -- 從 -17 往下降到17
                 { type = "flat", height_offset = 0 },     -- 回到0
-                { type = "flat", height_offset = 0 },
-                { type = "flat", height_offset = 0 },
-                { type = "flat", height_offset = 0 },
-                { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 }
             },
@@ -67,8 +67,8 @@ local missions = {
                 },
             -- 任務敵人（y=0 表示在地面上，負值表示地面上方）
             enemies = {
-                { type = "BASIC_ENEMY", x = 300, y = -17 },
-                { type = "BASIC_ENEMY", x = 450, y = 0 },
+                { type = "BASIC_ENEMY", x = 300, y = 0 },
+                { type = "BASIC_ENEMY", x = 450, y = -17 },
             },
             
             -- 石頭目標地點（用於 DELIVER_STONE 目標）
