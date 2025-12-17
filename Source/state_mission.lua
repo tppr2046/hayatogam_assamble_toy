@@ -9,8 +9,8 @@ local StateHQ = _G.StateHQ -- 假設 StateHQ 已在 main.lua 中設定為全域
 
 local gfx = playdate.graphics
 
--- 載入 Charlie Ninja 字體，如果失敗則使用系統字體
-local custom_font = gfx.font.new('fonts/Charlie Ninja')
+-- 載入 Assemble 字體，如果失敗則使用系統字體
+local custom_font = gfx.font.new('fonts/Assemble')
 local font = custom_font or gfx.font.systemFont
 
 StateMission = {}

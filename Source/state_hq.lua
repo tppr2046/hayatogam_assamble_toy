@@ -7,7 +7,7 @@ local default_font = gfx.font.systemFont
 -- MissionData 現在從 _G.MissionData 獲取（在 main.lua 中載入）
 
 -- 確保字形載入成功
-local custom_font_path = 'fonts/Charlie Ninja' 
+local custom_font_path = 'fonts/Assemble' 
 local font = gfx.font.new(custom_font_path) 
 
 if not font then

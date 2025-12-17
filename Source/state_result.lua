@@ -3,7 +3,7 @@
 import "CoreLibs/graphics"
 
 local gfx = playdate.graphics
-local font = gfx.font.new('fonts/Charlie Ninja') or gfx.font.systemFont
+local font = gfx.font.new('fonts/Assemble') or gfx.font.systemFont
 
 StateResult = {}
 

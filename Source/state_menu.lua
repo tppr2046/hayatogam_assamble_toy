@@ -1,11 +1,11 @@
--- state_menu.lua (最終穩定版 - 使用 Charlie Ninja 字體)
+-- state_menu.lua (最終穩定版 - 使用 字體)
 
 import "CoreLibs/graphics"
 
 local gfx = playdate.graphics
 
--- 載入 Charlie Ninja 字體，如果失敗則使用系統字體
-local custom_font = gfx.font.new('fonts/Charlie Ninja')
+-- 載入 Assemble 字體，如果失敗則使用系統字體
+local custom_font = gfx.font.new('fonts/Assemble')
 local font = custom_font or gfx.font.systemFont
 
 StateMenu = {}
@@ -30,7 +30,7 @@ function StateMenu.setup()
     
     if success then
         cover_image = result
-        print("LOG: Cover image loaded successfully:", cover_image ~= nil)
+--        print("LOG: Cover image loaded successfully:", cover_image ~= nil)
     else
         print("ERROR: Failed to load cover image:", result)
     end

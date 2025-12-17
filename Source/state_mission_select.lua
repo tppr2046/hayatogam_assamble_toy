@@ -23,8 +23,8 @@ function StateMissionSelect:setup()
     print("StateMissionSelect setup called")
     
     -- 載入字體
-    FONT_SMALL = gfx.getFont("fonts/Exerion")
-    FONT_LARGE = gfx.getFont("fonts/Charlie Ninja")
+    FONT_SMALL = gfx.getFont("fonts/Assemble")
+    FONT_LARGE = gfx.getFont("fonts/Assemble")
     
     -- 使用全域 MissionData
     local MissionData = _G.MissionData or {}
@@ -123,7 +123,7 @@ function StateMissionSelect:draw()
     gfx.drawText("MISSION SELECT", 10, 10)
     
     -- 繪製任務列表
-    gfx.setFont(FONT_SMALL)
+    gfx.setFont(FONT_LARGE)
     local y = 50
     local line_height = 40
     local available_height = SCREEN_HEIGHT - y - 30
