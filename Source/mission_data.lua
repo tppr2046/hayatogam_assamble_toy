@@ -127,10 +127,10 @@ local missions = {
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
-                { type = "up15", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
-                { type = "flat", height_offset = -17 },   -- 接續上一段的結束高度
-                { type = "flat", height_offset = -17 },
-                { type = "down15", height_offset = -17 }, -- 從 -17 往下降到17
+                { type = "up30", height_offset = 0 },     -- 從 height_offset=0 往上爬到17
+                { type = "flat", height_offset = -35 },   -- 接續上一段的結束高度
+                { type = "flat", height_offset = -35 },
+                { type = "down30", height_offset = -35 }, -- 從 -17 往下降到17
                 { type = "flat", height_offset = 0 },     -- 回到0
                 { type = "flat", height_offset = 0 },
                 { type = "flat", height_offset = 0 },
@@ -147,25 +147,25 @@ local missions = {
             
             -- 場景障礙物件
             obstacles = {
-                 { x = 500, y = 0, image = "images/gun_panel.png" }  -- x, y 為位置，y=0 表示在地面上，image 為圖片路徑
+--                 { x = 500, y = 0, image = "images/obstacle" }  -- x, y 為位置，y=0 表示在地面上，image 為圖片路徑
             },
             
             -- 可互動物件（石頭）
             stones = {
-                { x = 200, y = 0, target_id = "target1", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
-                { x = 410, y = 0, target_id = "target2", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+                { x = 200, y = -5, target_id = "target1", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
+                { x = 410, y = -5, target_id = "target2", image = "images/stone.png" },  -- x, y 為初始位置，y=0 表示在地面上，target_id 指定要放到哪個目標
 
             },
             
             -- 任務敵人（y=0 表示在地面上，負值表示地面上方）
             enemies = {
-                { type = "BASIC_ENEMY", x = 300, y = 0 },
+--                { type = "BASIC_ENEMY", x = 300, y = 0 },
             },
             
             -- 石頭目標物件（用於 DELIVER_STONE 目標）
             delivery_targets = {
-                { id = "target1", x = 350, y = 0, image = "images/X.png" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
-                { id = "target2", x = 450, y = 0, image = "images/X.png" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target1", x = 350, y = 0, image = "images/target_box" },  -- id 用於匹配石頭的 target_id，image 為顯示圖片
+                { id = "target2", x = 600, y = -35, image = "images/target_box" }  -- id 用於匹配石頭的 target_id，image 為顯示圖片
 
             }
         },

@@ -1786,6 +1786,19 @@ function EntityController:draw(camera_x)
                     gfx.setColor(gfx.kColorBlack)
                     gfx.fillRect(screen_x, target.y, target.width, target.height)
                 end
+                
+                -- 在目標上方10px處繪製閃爍的"TARGET"文字
+                local text = "TARGET"
+                local text_width = gfx.getTextSize(text)
+                local text_x = screen_x + (target.width - text_width) / 2
+                local text_y = target.y - 10 - 8  -- 10px + 文字高度
+                
+                -- 實現閃爍效果（基於全局時間）
+                local blink_time = playdate.getElapsedTime and playdate.getElapsedTime() or 0
+                if math.floor(blink_time * 2) % 2 == 0 then
+                    gfx.setColor(gfx.kColorBlack)
+                    gfx.drawText(text, text_x, text_y)
+                end
             end
         end
     end
