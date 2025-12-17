@@ -137,7 +137,7 @@ function playdate.update()
     
     -- ❗ 繪製 FPS (除錯用)
     -- 修正: 檢查 playdate.drawFPS 是否存在，避免 'nil value' 錯誤。
-    if playdate.drawFPS then
-        playdate.drawFPS(0, 0)
-    end
+--    if playdate.drawFPS then
+--        playdate.drawFPS(0, 0)
+--    end
 end
