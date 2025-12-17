@@ -12,7 +12,7 @@ local parts_data = {
         slot_x = 1,
         slot_y = 1,
         -- 購買成本
-        cost_steel = 30,
+        cost_steel = 10,
         cost_copper = 10,
         cost_rubber = 5,
             color = gfx.kColorBlack,
@@ -32,14 +32,14 @@ local parts_data = {
     ["WHEEL1"] = {
         name = "WHEEL",
         part_type = "WHEEL",  -- 功能類別
-        hp = 12,
+        hp = 35,
         weight = 4,
         slot_x = 3,
         slot_y = 1,
         -- 購買成本
-        cost_steel = 20,
+        cost_steel = 10,
         cost_copper = 5,
-        cost_rubber = 30,
+        cost_rubber = 10,
             color = gfx.kColorBlack,
             image = "images/wheel.png",
             placement_row = "BOTTOM",
@@ -51,6 +51,43 @@ local parts_data = {
         move_speed = 2.0,  -- 左右移動速度
         climb_power = 1  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
+
+   ["CLAW"] = {
+        name = "CLAW",
+        part_type = "CLAW",  -- 功能類別
+        hp = 45,
+        weight = 8,
+        attack = 8,  -- 攻擊力（揮動攻擊）
+        slot_x = 2,
+        slot_y = 1,
+        -- 購買成本
+        cost_steel = 35,
+        cost_copper = 10,
+        cost_rubber = 10,
+        color = gfx.kColorBlack,
+        image = "images/claw_base.png",  -- 主圖片為底座
+        placement_row = "TOP",
+        align_image_top = false,  -- 圖片底部對齊格子底部
+        -- UI 操作介面圖片
+        ui_panel = "images/claw_panel.png",
+        operation_hint = "Crank to use Claw, up/down to use Crank",
+        -- CLAW 特有屬性
+        arm_image = "images/claw_arm.png",  -- 臂的圖片
+        upper_image = "images/claw_upper.png",  -- 上爪圖片
+        lower_image = "images/claw_lower.png",  -- 下爪圖片
+        arm_angle_min = -90,  -- 臂最小角度（度）
+        arm_angle_max = 90,  -- 臂最大角度（度）
+        arm_rotate_speed = 2.0,  -- 上下鍵每幀旋轉速度（度）
+        claw_angle_min = 0,  -- 爪子閉合角度（度）
+        claw_angle_max = 45,  -- 爪子張開角度（度）
+        crank_degrees_per_rotation = 45,  -- crank 轉 1 圈產生的爪子角度變化
+        grab_threshold = 20,  -- 抓取/投擲的角度臨界值（度）
+        throw_speed_mult = 5.0  -- 投擲物體的速度倍率
+    },
+
+
+
+
     ["WHEEL2"] = {
         name = "WHEEL",
         part_type = "WHEEL",  -- 功能類別
@@ -59,9 +96,9 @@ local parts_data = {
         slot_x = 3,
         slot_y = 1,
         -- 購買成本
-        cost_steel = 20,
-        cost_copper = 5,
-        cost_rubber = 30,
+        cost_steel = 40,
+        cost_copper = 15,
+        cost_rubber = 50,
             color = gfx.kColorBlack,
             image = "images/wheel2.png",
             placement_row = "BOTTOM",
@@ -82,9 +119,9 @@ local parts_data = {
         slot_x = 2,
         slot_y = 1,
         -- 購買成本
-        cost_steel = 50,
+        cost_steel = 60,
         cost_copper = 30,
-        cost_rubber = 10,
+        cost_rubber = 20,
             color = gfx.kColorBlack,
             image = "images/canon.png",  -- 砲管
             base_image = "images/canon_base.png",  -- 底座
@@ -143,7 +180,7 @@ local parts_data = {
         slot_x = 2,
         slot_y = 1,
         -- 購買成本
-        cost_steel = 40,
+        cost_steel = 70,
         cost_copper = 15,
         cost_rubber = 5,
             color = gfx.kColorBlack,
@@ -163,8 +200,8 @@ local parts_data = {
         slot_x = 3,
         slot_y = 1,
         -- 購買成本
-        cost_steel = 25,
-        cost_copper = 10,
+        cost_steel = 150,
+        cost_copper = 80,
         cost_rubber = 35,
             color = gfx.kColorBlack,
             image = "images/feet.png",
@@ -180,38 +217,7 @@ local parts_data = {
         animation_walk = "images/feet_walk",  -- 行走動畫 imagetable 路徑
         climb_power = 3  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
-    ["CLAW"] = {
-        name = "CLAW",
-        part_type = "CLAW",  -- 功能類別
-        hp = 15,
-        weight = 8,
-        attack = 8,  -- 攻擊力（揮動攻擊）
-        slot_x = 2,
-        slot_y = 1,
-        -- 購買成本
-        cost_steel = 35,
-        cost_copper = 25,
-        cost_rubber = 20,
-        color = gfx.kColorBlack,
-        image = "images/claw_base.png",  -- 主圖片為底座
-        placement_row = "TOP",
-        align_image_top = false,  -- 圖片底部對齊格子底部
-        -- UI 操作介面圖片
-        ui_panel = "images/claw_panel.png",
-        operation_hint = "Crank to use Claw, up/down to use Crank",
-        -- CLAW 特有屬性
-        arm_image = "images/claw_arm.png",  -- 臂的圖片
-        upper_image = "images/claw_upper.png",  -- 上爪圖片
-        lower_image = "images/claw_lower.png",  -- 下爪圖片
-        arm_angle_min = -90,  -- 臂最小角度（度）
-        arm_angle_max = 90,  -- 臂最大角度（度）
-        arm_rotate_speed = 2.0,  -- 上下鍵每幀旋轉速度（度）
-        claw_angle_min = 0,  -- 爪子閉合角度（度）
-        claw_angle_max = 45,  -- 爪子張開角度（度）
-        crank_degrees_per_rotation = 45,  -- crank 轉 1 圈產生的爪子角度變化
-        grab_threshold = 20,  -- 抓取/投擲的角度臨界值（度）
-        throw_speed_mult = 5.0  -- 投擲物體的速度倍率
-    }
+ 
 
 
 }

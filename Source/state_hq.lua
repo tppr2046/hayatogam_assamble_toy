@@ -1120,7 +1120,7 @@ function StateHQ.draw()
     end
     
     -- 4. 繪製零件清單 (左側) - 分類顯示
-    gfx.drawText("PARTS:", 5, 30)
+    gfx.drawText("PARTS:", 5, 20)
     local list_y = 50
     local line_height = 15
     

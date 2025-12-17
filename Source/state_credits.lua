@@ -8,10 +8,11 @@ local font = gfx.font.new('fonts/Assemble') or gfx.font.systemFont
 StateCredits = {}
 
 local items = {
-    "GAME DESIGN: YOU",
-    "PROGRAMMING: YOU",
-    "ART: YOU",
-    "MUSIC: YOU",
+    "GAME DESIGN: AAAAA",
+    "PROGRAMMING: COPILOT",
+    "ART: AAAAA",
+    "MUSIC: SUNO",
+    "DEDICATED TO: HAYATO",
 }
 local selected_index = 1 -- 只用於 Back 選項
 

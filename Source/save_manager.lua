@@ -59,14 +59,12 @@ function SaveManager.createNewSave(slot_id)
         completed_missions = {},  -- 空的已完成任務列表
         owned_parts = {           -- 初始給予的零件
             GUN = true,
-            SWORD = true,
             WHEEL1 = true,
-            CANON = true
         },
         resources = {             -- 初始資源
-            steel = 100,
-            copper = 100,
-            rubber = 100
+            steel = 0,
+            copper = 0,
+            rubber = 0
         },
         -- 初始化機甲格子（3×2）
         mech_grid = {
@@ -75,7 +73,7 @@ function SaveManager.createNewSave(slot_id)
             cell_size = 16
         },
         mech_stats = {
-            total_hp = 100,
+            total_hp = 0,
             total_weight = 0,
             equipped_parts = {}
         }
