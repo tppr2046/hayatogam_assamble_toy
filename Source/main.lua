@@ -28,6 +28,10 @@ _G.PartsData = pd or _G.PartsData or {}
 local md = import "mission_data"
 _G.MissionData = md or _G.MissionData or {}
 
+-- 載入實體模組 (機甲與敵人邏輯)
+local me = import "module_entities"
+_G.ModuleEntities = me or _G.ModuleEntities or {}
+
 -- 載入狀態模組 
 _G.StateMenu = import "state_menu"
 _G.StateSaveSelect = import "state_save_select"

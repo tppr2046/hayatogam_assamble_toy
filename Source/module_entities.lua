@@ -1270,7 +1270,8 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         stones = {},  -- 新增石頭列表
         delivery_target = nil,  -- 交付目標物件
         GRAVITY = 0.5, -- 將重力常數傳入
-        player_move_speed = player_move_speed or 2.0 -- 供敵人計算砲彈速度
+        player_move_speed = player_move_speed or 2.0, -- 供敵人計算砲彈速度
+        enemy_explosion_triggered = false  -- 標記是否有敵人爆炸被觸發
     }
     setmetatable(controller, { __index = EntityController })
     
@@ -1591,6 +1592,8 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                             if _G.SoundManager and _G.SoundManager.playExplode then
                                 _G.SoundManager.playExplode()
                             end
+                            -- 設置敵人爆炸標志
+                            self.enemy_explosion_triggered = true
                             print("LOG: Enemy killed by player projectile, starting explosion animation")
                         end
                         break
@@ -1638,6 +1641,10 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         enemy.exploding_frame_timer = 0
                         if _G.SoundManager and _G.SoundManager.playExplode then
                             _G.SoundManager.playExplode()
+                        end
+                        -- 設置敵人爆炸標志
+                        if self then
+                            self.enemy_explosion_triggered = true
                         end
                         print("LOG: Enemy killed by stone, starting explosion animation")
                     end

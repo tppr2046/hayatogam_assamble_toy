@@ -81,6 +81,11 @@ local mech_explode_frame_index = 0
 local mech_explode_frame_timer = 0
 local mech_explode_frame_duration = 0.05  -- 每幀 0.05 秒
 
+-- 畫面震動相關
+local camera_shake_timer = 999  -- 初始化為大於 duration 的值，避免開始時震動
+local camera_shake_duration = 0.2  -- 震動時間（秒）
+local camera_shake_intensity = 3  -- 震動幅度（像素）
+
 
 -- ==========================================
 -- 狀態機接口
@@ -249,6 +254,9 @@ function StateMission.setup()
     mech_exploding = false
     mech_explode_timer = 0
     mech_explode_duration = 1.0
+    
+    -- 重置畫面震動（初始化為大於 duration 的值）
+    camera_shake_timer = 999
 
     -- 播放任務關卡 BGM（循環）
     if _G.SoundManager and _G.SoundManager.playMissionBGM then
@@ -295,6 +303,11 @@ function StateMission.update()
             end
         end
         return -- 對話中暫停遊戲更新
+    end
+    
+    -- 更新畫面震動計時器
+    if camera_shake_timer < camera_shake_duration then
+        camera_shake_timer = camera_shake_timer + (1/30)
     end
 
     -- 0. 記錄舊的 Y 座標 (用於 EntityController 碰撞檢查)
@@ -464,6 +477,12 @@ function StateMission.update()
             SoundManager.playHit()
         end
         
+        -- 檢查敵人爆炸標志，立即觸發畫面震動（無延遲）
+        if entity_controller and entity_controller.enemy_explosion_triggered then
+            camera_shake_timer = 0  -- 立即開始震動
+            entity_controller.enemy_explosion_triggered = false  -- 重置標志
+        end
+        
         -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）
         mech_controller:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
         
@@ -624,6 +643,9 @@ function StateMission.update()
             mech_exploding = true
             mech_explode_timer = 0
             
+            -- 啟動畫面震動
+            camera_shake_timer = 0
+            
             -- 播放爆炸音效
             if _G.SoundManager and _G.SoundManager.playExplode then
                 _G.SoundManager.playExplode()
@@ -737,6 +759,13 @@ function StateMission.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
     
+    -- 計算畫面震動偏移
+    local shake_offset = 0
+    if camera_shake_timer < camera_shake_duration then
+        -- 正弦波震動：產生左右搖晃（增加頻率到20以加快震動）
+        shake_offset = math.sin(camera_shake_timer * math.pi * 20) * camera_shake_intensity
+    end
+    
     -- 若對話中，先繪製對話畫面
     if dialog_active then
         print("Drawing dialog...")
@@ -760,9 +789,9 @@ function StateMission.draw()
         return
     end
 
-    -- 1. 繪製實體 (地面、障礙物、敵人)
+    -- 1. 繪製實體 (地面、障礙物、敵人) - 應用震動偏移
     if entity_controller then
-        entity_controller:draw(camera_x) 
+        entity_controller:draw(camera_x + shake_offset) 
     end
 
     -- 2. 繪製機甲（使用 MechController）或爆炸動畫
@@ -784,11 +813,11 @@ function StateMission.draw()
             local frame_count = mech_explode_image_table:getLength() or 1
             local frame = mech_explode_image_table:getImage(mech_explode_frame_index + 1) or mech_explode_image_table:getImage(1)
             if frame then
-                pcall(function() frame:draw(mech_x - 25, mech_y - 25) end)
+                pcall(function() frame:draw(mech_x - 25 + shake_offset, mech_y - 25) end)
             end
         end
     elseif mech_controller then
-        mech_controller:drawMech(mech_x, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
+        mech_controller:drawMech(mech_x + shake_offset, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
     end
     
     -- 3. 繪製 HUD (HP 條)
@@ -869,6 +898,11 @@ function StateMission.draw()
     
     -- 5. 繪製調試信息
 --    gfx.drawText("Mech X: " .. math.floor(mech_x), 10, SCREEN_HEIGHT - 15)
+end
+
+-- 立即觸發畫面震動（用於敵人爆炸）
+function StateMission.triggerScreenShake()
+    camera_shake_timer = 0
 end
 
 return StateMission
