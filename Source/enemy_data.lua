@@ -70,5 +70,48 @@ return {
         explode_damage = 20,      -- 爆炸傷害
         -- 敵人圖片
         image = "images/mine"
+    },
+
+    ["SHIELD_ROBOT"] = {
+        name = "SHIELD ROBOT", hp = 10, attack = 8,
+        move_type = "SHIELD_MOVEMENT", attack_type = "SHIELD_FIRE",
+        -- 盾牌參數
+        shield_up_duration = 3.0,     -- 盾牌舉起時間（秒）
+        shield_down_duration = 2.0,   -- 盾牌收起時間（秒）
+        shield_raised = true,         -- 初始盾牌狀態（true=舉起）
+        shield_width = 16,            -- 盾牌寬度（像素）
+        shield_height = 20,           -- 盾牌高度（像素）
+        shield_offset_x = -20,        -- 盾牌相對於敵人的 X 偏移（向左）
+        shield_offset_y = 6,          -- 盾牌相對於敵人的 Y 偏移（向下）
+        -- 移動參數（盾牌收起時）
+        move_speed = 25,
+        move_range = 80,
+        -- 砲彈屬性（盾牌收起時發射）
+        projectile_speed_mult = 25,
+        projectile_grav_mult = 15,
+        fire_cooldown = 1.5,
+        -- 敵人圖片
+        image = "images/enemy1",
+        bullet_offset_x = 4,
+        bullet_offset_y = 6
+    },
+
+    ["DRONE"] = {
+        name = "DRONE", hp = 10, attack = 6,
+        move_type = "AERIAL", attack_type = "FIRE BULLET",
+        -- 飛行參數
+        flight_height_min = 40,       -- 最小飛行高度（像素，相對於地面向上）
+        flight_height_max = 80,       -- 最大飛行高度（像素）
+        flight_speed = 30,            -- 飛行速度（像素/秒）
+        vertical_oscillation = 20,    -- 上下振幅（像素）
+        vertical_speed = 1.5,         -- 上下運動速度（1 = 1 個單位/秒）
+        -- 砲彈屬性
+        projectile_speed_mult = 35,   -- 直射速度倍率
+        projectile_grav_mult = 0.1,   -- 低重力（直射）
+        fire_cooldown = 1.2,
+        -- 敵人圖片
+        image = "images/enemy1",
+        bullet_offset_x = 4,
+        bullet_offset_y = 6
     }
 }

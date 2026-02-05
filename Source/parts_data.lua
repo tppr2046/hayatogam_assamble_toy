@@ -27,7 +27,9 @@ local parts_data = {
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
         projectile_damage = 5,  -- 砲彈傷害
         projectile_speed_mult = 40,  -- 速度倍率（相對於基準速度）
-        projectile_grav_mult = 0.2  -- 重力倍率（相對於世界重力 0.5）
+        projectile_grav_mult = 0.2,  -- 重力倍率（相對於世界重力 0.5）
+        -- GUN 會阻擋右方的發射
+        block_directions = {"RIGHT"}
     },
     ["WHEEL1"] = {
         name = "WHEEL",
@@ -138,7 +140,9 @@ local parts_data = {
         -- CANON 轉動控制
         angle_min = 0,  -- 最小角度（度）
         angle_max = 90,  -- 最大角度（度）
-        crank_degrees_per_rotation = 15  -- crank 轉 1 圈（360度）產生的 canon 角度變化
+        crank_degrees_per_rotation = 15,  -- crank 轉 1 圈（360度）產生的 canon 角度變化
+        -- CANON 會阻擋右上方的發射方向
+        block_directions = {"RIGHT_UP"}
     },
   ["CANON2"] = {
         name = "CANON2",
@@ -167,7 +171,9 @@ local parts_data = {
         -- CANON 轉動控制
         angle_min = 0,  -- 最小角度（度）
         angle_max = 90,  -- 最大角度（度）
-        crank_degrees_per_rotation = 15  -- crank 轉 1 圈（360度）產生的 canon 角度變化
+        crank_degrees_per_rotation = 15,  -- crank 轉 1 圈（360度）產生的 canon 角度變化
+        -- CANON 會阻擋右上方的發射方向
+        block_directions = {"RIGHT_UP"}
     },
 
 

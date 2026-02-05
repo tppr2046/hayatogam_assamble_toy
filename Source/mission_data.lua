@@ -67,8 +67,8 @@ local missions = {
                 },
             -- 任務敵人（y=0 表示在地面上，負值表示地面上方）
             enemies = {
-                { type = "BASIC_ENEMY", x = 300, y = 0 },
-                { type = "BASIC_ENEMY", x = 450, y = -17 },
+                { type = "DRONE", x = 300, y = 0 },
+                { type = "SHIELD_ROBOT", x = 450, y = -17 },
             },
             
             -- 石頭目標地點（用於 DELIVER_STONE 目標）

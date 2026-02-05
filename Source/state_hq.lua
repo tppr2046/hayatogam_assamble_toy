@@ -103,39 +103,7 @@ local function checkIfFits(part_data, start_col, start_row)
         end
     end
 
-    -- 檢查上半部（row=2）和下半部（row=1）是否已有零件
-    local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
-    if eq then
-        -- 檢查這個零件會佔用哪些行
-        local occupies_top = false    -- 是否佔用上半部（row=2）
-        local occupies_bottom = false -- 是否佔用下半部（row=1）
-        
-        for r = start_row, start_row + h - 1 do
-            if r == 2 then occupies_top = true end
-            if r == 1 then occupies_bottom = true end
-        end
-        
-        -- 檢查已裝備的零件
-        for _, item in ipairs(eq) do
-            local item_occupies_top = false
-            local item_occupies_bottom = false
-            
-            for r = item.row, item.row + (item.h or 1) - 1 do
-                if r == 2 then item_occupies_top = true end
-                if r == 1 then item_occupies_bottom = true end
-            end
-            
-            -- 如果要放的零件會佔用上半部，而已有零件也佔用上半部，則不允許
-            if occupies_top and item_occupies_top then
-                return false, "TOP row already has a part"
-            end
-            
-            -- 如果要放的零件會佔用下半部，而已有零件也佔用下半部，則不允許
-            if occupies_bottom and item_occupies_bottom then
-                return false, "BOTTOM row already has a part"
-            end
-        end
-    end
+
 
     -- 檢查是否與已佔用格子重疊
     for r = start_row, start_row + h - 1 do

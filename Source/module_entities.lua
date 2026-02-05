@@ -229,6 +229,32 @@ function MechController:getActivePartType()
     return pdata and pdata.part_type
 end
 
+-- 檢查發射方向是否被已安裝的零件阻擋（不包括當前發射的零件）
+function MechController:isFiringDirectionBlocked(firing_direction, active_part_id)
+    local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
+    if not eq then return false end
+    
+    for _, item in ipairs(eq) do
+        -- 跳過當前發射的零件（不要自己擋自己）
+        if active_part_id and item.id == active_part_id then
+            goto skip_part
+        end
+        
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        if pdata and pdata.block_directions then
+            for _, blocked_dir in ipairs(pdata.block_directions) do
+                if blocked_dir == firing_direction then
+                    return true  -- 發射方向被阻擋
+                end
+            end
+        end
+        
+        ::skip_part::
+    end
+    
+    return false  -- 發射方向未被阻擋
+end
+
 -- 處理零件操作（返回移動增量）
 function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
     local dx = 0
@@ -304,32 +330,37 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         if playdate.buttonJustPressed(playdate.kButtonA) then
             self.canon_button_pressed = true
             if pdata and self.canon_fire_timer >= (pdata.fire_cooldown or 0.5) then
-                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                for _, item in ipairs(eq) do
-                    local ipdata = _G.PartsData and _G.PartsData[item.id]
-                    if ipdata and ipdata.part_type == "CANON" and item.id == self.active_part_id then
-                        local cell_size = mech_grid.cell_size
-                        local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
-                        local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
-                        
-                        -- 使用與敵人相同的計算方式
-                        local base_speed = entity_controller.player_move_speed or 2.0
-                        local speed_mult = pdata.projectile_speed_mult or 1.0
-                        local speed = base_speed * speed_mult
-                        
-                        local angle_rad = math.rad(self.canon_angle)
-                        local vx = math.cos(angle_rad) * speed
-                        local vy = -math.sin(angle_rad) * speed
-                        local dmg = pdata.projectile_damage or 10
-                        local grav_mult = pdata.projectile_grav_mult or 1.0
-                        
-                        entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult)
-                        self.canon_fire_timer = 0
-                        -- 播放砲台發射音效
-                        if _G.SoundManager and _G.SoundManager.playCanonFire then
-                            _G.SoundManager.playCanonFire()
+                -- 檢查右上方發射方向是否被阻擋（不包括CANON本身）
+                if self:isFiringDirectionBlocked("RIGHT_UP", self.active_part_id) then
+                    -- 發射方向被阻擋，不發射
+                else
+                    local eq = _G.GameState.mech_stats.equipped_parts or {}
+                    for _, item in ipairs(eq) do
+                        local ipdata = _G.PartsData and _G.PartsData[item.id]
+                        if ipdata and ipdata.part_type == "CANON" and item.id == self.active_part_id then
+                            local cell_size = mech_grid.cell_size
+                            local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                            local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+                            
+                            -- 使用與敵人相同的計算方式
+                            local base_speed = entity_controller.player_move_speed or 2.0
+                            local speed_mult = pdata.projectile_speed_mult or 1.0
+                            local speed = base_speed * speed_mult
+                            
+                            local angle_rad = math.rad(self.canon_angle)
+                            local vx = math.cos(angle_rad) * speed
+                            local vy = -math.sin(angle_rad) * speed
+                            local dmg = pdata.projectile_damage or 10
+                            local grav_mult = pdata.projectile_grav_mult or 1.0
+                            
+                            entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult)
+                            self.canon_fire_timer = 0
+                            -- 播放砲台發射音效
+                            if _G.SoundManager and _G.SoundManager.playCanonFire then
+                                _G.SoundManager.playCanonFire()
+                            end
+                            break
                         end
-                        break
                     end
                 end
             end
@@ -493,6 +524,12 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
         local pdata = _G.PartsData and _G.PartsData[item.id]
         if item.id == "GUN" and pdata and pdata.fire_cooldown then
             if self.gun_fire_timer >= pdata.fire_cooldown then
+                -- 檢查右方發射方向是否被阻擋（不包括GUN本身）
+                if self:isFiringDirectionBlocked("RIGHT", "GUN") then
+                    -- 發射方向被阻擋，不發射
+                    break
+                end
+                
                 local cell_size = mech_grid.cell_size
                 local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
                 local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
@@ -752,7 +789,24 @@ function Enemy:init(x, y, type_id, ground_y)
         exploding_duration = 1.0,   -- 爆炸動畫總時間
         -- 移動類型和攻擊類型
         move_type = data.move_type,
-        attack_type = data.attack_type
+        attack_type = data.attack_type,
+        -- 盾牌機器人參數
+        shield_raised = data.shield_raised ~= false,  -- 默認舉起
+        shield_timer = 0,
+        shield_up_duration = data.shield_up_duration or 3.0,
+        shield_down_duration = data.shield_down_duration or 2.0,
+        shield_width = data.shield_width or 16,
+        shield_height = data.shield_height or 20,
+        shield_offset_x = data.shield_offset_x or 20,
+        shield_offset_y = data.shield_offset_y or 6,
+        -- 無人機參數
+        flight_height_min = data.flight_height_min or 40,
+        flight_height_max = data.flight_height_max or 80,
+        flight_speed = data.flight_speed or 30,
+        vertical_oscillation = data.vertical_oscillation or 20,
+        vertical_speed = data.vertical_speed or 1.5,
+        drone_vertical_offset = 0,  -- 無人機當前垂直位置（相對於中心高度）
+        drone_vertical_time = 0     -- 無人機振動計時器
     }
     -- 處理敵人高度：y 參數表示相對於地面的偏移（負值=上方，0=地面）
     -- 如果 y <= 0，設置為地面上方；如果 y > 0，表示絕對位置
@@ -762,6 +816,13 @@ function Enemy:init(x, y, type_id, ground_y)
     else
         -- y > 0 時，確保在地面上或以上
         e.y = math.min(y, ground_y - e.height)
+    end
+    
+    -- 特殊處理：無人機應該在空中飛行
+    if data and data.move_type == "AERIAL" then
+        -- 無人機初始位置在飛行高度的中心
+        local flight_height_center = (data.flight_height_min + data.flight_height_max) / 2
+        e.y = ground_y - e.height - flight_height_center
     end
     setmetatable(e, { __index = Enemy })
     print("LOG: Created Enemy " .. type_id .. " at " .. x .. " (" .. img_width .. "x" .. img_height .. ")")
@@ -895,6 +956,53 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         
     elseif self.move_type == "IMMOBILE" then
         -- 不移動的敵人
+    
+    elseif self.move_type == "SHIELD_MOVEMENT" then
+        -- 盾牌機器人：盾牌舉起時不移動，收起時移動
+        self.shield_timer = self.shield_timer + dt
+        
+        -- 切換盾牌狀態
+        if self.shield_raised and self.shield_timer >= self.shield_up_duration then
+            self.shield_raised = false
+            self.shield_timer = 0
+        elseif not self.shield_raised and self.shield_timer >= self.shield_down_duration then
+            self.shield_raised = true
+            self.shield_timer = 0
+        end
+        
+        -- 盾牌收起時移動
+        if not self.shield_raised then
+            self.move_timer = self.move_timer + dt
+            if self.move_timer > 2.0 then
+                self.move_timer = 0
+                self.move_dir = self.move_dir * -1
+            end
+            
+            local new_x = self.x + self.move_dir * self.move_speed * dt
+            if math.abs(new_x - self.origin_x) <= self.move_range then
+                self.x = new_x
+            end
+        end
+    
+    elseif self.move_type == "AERIAL" then
+        -- 無人機：前後飛行 + 上下振動
+        self.move_timer = self.move_timer + dt
+        self.drone_vertical_time = self.drone_vertical_time + dt
+        
+        -- 定期改變方向
+        if self.move_timer > 3.0 then
+            self.move_timer = 0
+            self.move_dir = self.move_dir * -1
+        end
+        
+        -- 前後飛行
+        local new_x = self.x + self.move_dir * self.flight_speed * dt
+        if math.abs(new_x - self.origin_x) <= self.move_range then
+            self.x = new_x
+        end
+        
+        -- 上下振動（正弦波）
+        self.drone_vertical_offset = math.sin(self.drone_vertical_time * self.vertical_speed) * self.vertical_oscillation
     end
 
     -- 根據 attack_type 處理攻擊
@@ -930,7 +1038,15 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     elseif self.attack_type == "CONTACT" then
         -- 接觸傷害（跳躍敵人）
         -- 碰撞檢測由 EntityController:updateAll 處理
-        
+    
+    elseif self.attack_type == "SHIELD_FIRE" then
+        -- 盾牌機器人：盾牌收起時才發射
+        if not self.shield_raised then
+            if self.fire_timer >= self.fire_cooldown then
+                self:fire(mech_x, controller)
+                self.fire_timer = 0
+            end
+        end
     elseif self.attack_type == "EXPLODE" then
         -- 地雷逻辑
         if not self.is_triggered then
@@ -1096,19 +1212,35 @@ function Enemy:draw(camera_x)
     -- 如果已死亡且不在爆炸中，不繪製
     if not self.is_alive then return end
     
+    -- 無人機：應用垂直振幅偏移
+    local draw_y = self.y
+    if self.move_type == "AERIAL" then
+        draw_y = self.y + self.drone_vertical_offset
+    end
+    
     -- 繪製敵人圖片或方塊
     if self.image then
-        pcall(function() self.image:draw(screen_x, self.y) end)
+        pcall(function() self.image:draw(screen_x, draw_y) end)
     else
         gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(screen_x, self.y, self.width, self.height)
+        gfx.fillRect(screen_x, draw_y, self.width, self.height)
+    end
+    
+    -- 繪製盾牌（盾牌機器人）
+    if self.type_id == "SHIELD_ROBOT" and self.shield_raised then
+        local shield_x = screen_x + self.shield_offset_x
+        local shield_y = draw_y + self.shield_offset_y
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(shield_x, shield_y, self.shield_width, self.shield_height)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawRect(shield_x, shield_y, self.shield_width, self.shield_height)
     end
     
     -- 繪製 HP 條
     local hp_max = EnemyData[self.type_id].hp
     local hp_percent = self.hp / hp_max
     gfx.setColor(gfx.kColorBlack)
-    gfx.fillRect(screen_x, self.y - 5, self.width * hp_percent, 3) 
+    gfx.fillRect(screen_x, draw_y - 5, self.width * hp_percent, 3) 
     
     -- 繪製劍（SWORD_ENEMY）
     if self.attack_type == "SWING SWORD" then
@@ -1118,7 +1250,7 @@ function Enemy:draw(camera_x)
         
         -- 世界座標下的旋轉軸心
         local pivot_x = screen_x + self.width / 2 + pivot_offset_x
-        local pivot_y = self.y + self.height / 2 + pivot_offset_y
+        local pivot_y = draw_y + self.height / 2 + pivot_offset_y
         local angle_rad = math.rad(self.sword_angle)
         
         if self.sword_image then
@@ -1570,31 +1702,57 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                             break
                         end
                         
-                        -- 擊中敵人
-                        enemy.hp = enemy.hp - p.damage
-                        p.active = false -- 砲彈銷毀
-                        
-                        -- 播放擊中音效
-                        if _G.SoundManager and _G.SoundManager.playHit then
-                            _G.SoundManager.playHit()
+                        -- 盾牌機器人的特殊邏輯
+                        local shield_blocked = false
+                        if enemy.type_id == "SHIELD_ROBOT" and enemy.shield_raised then
+                            -- 盾牌在敵人左邊，阻擋從左邊來的子彈
+                            local shield_x = enemy.x + enemy.shield_offset_x
+                            local shield_right = shield_x + enemy.shield_width
+                            local shield_top = enemy.y + enemy.shield_offset_y
+                            local shield_bottom = shield_top + enemy.shield_height
+                            
+                            -- 判斷子彈是否在盾牌範圍內
+                            if p.x >= shield_x and p.x <= shield_right and
+                               p.y >= shield_top and p.y <= shield_bottom then
+                                -- 子彈在盾牌範圍內，檢查擊中位置
+                                -- 從左邊擊中時被擋（子彈向右移動 vx > 0）
+                                if p.vx > 0 then
+                                    p.active = false  -- 盾牌吸收子彈，不造成傷害
+                                    shield_blocked = true
+                                    print("LOG: Shield blocks projectile from left!")
+                                end
+                                -- 從其他方向（右邊、上方、下方）擊中時造成傷害，繼續進行
+                            end
                         end
                         
-                        -- 敵人受擊震動
-                        enemy.hit_shake_timer = 0.3
-                        enemy.hit_shake_offset_x = 0
-                        
-                        print("LOG: Player projectile hit enemy! HP=" .. math.floor(enemy.hp))
-                        
-                        if enemy.hp <= 0 and not enemy.is_exploding then
-                            enemy.is_exploding = true
-                            enemy.exploding_frame_index = 0
-                            enemy.exploding_frame_timer = 0
-                            if _G.SoundManager and _G.SoundManager.playExplode then
-                                _G.SoundManager.playExplode()
+                        -- 若盾牌未阻擋，則造成傷害
+                        if not shield_blocked then
+                            -- 擊中敵人
+                            enemy.hp = enemy.hp - p.damage
+                            p.active = false -- 砲彈銷毀
+                            
+                            -- 播放擊中音效
+                            if _G.SoundManager and _G.SoundManager.playHit then
+                                _G.SoundManager.playHit()
                             end
-                            -- 設置敵人爆炸標志
-                            self.enemy_explosion_triggered = true
-                            print("LOG: Enemy killed by player projectile, starting explosion animation")
+                            
+                            -- 敵人受擊震動
+                            enemy.hit_shake_timer = 0.3
+                            enemy.hit_shake_offset_x = 0
+                            
+                            print("LOG: Player projectile hit enemy! HP=" .. math.floor(enemy.hp))
+                            
+                            if enemy.hp <= 0 and not enemy.is_exploding then
+                                enemy.is_exploding = true
+                                enemy.exploding_frame_index = 0
+                                enemy.exploding_frame_timer = 0
+                                if _G.SoundManager and _G.SoundManager.playExplode then
+                                    _G.SoundManager.playExplode()
+                                end
+                                -- 設置敵人爆炸標志
+                                self.enemy_explosion_triggered = true
+                                print("LOG: Enemy killed by player projectile, starting explosion animation")
+                            end
                         end
                         break
                     end
