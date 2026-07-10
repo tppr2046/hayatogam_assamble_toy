@@ -356,13 +356,15 @@ function StateMission.update()
     
     -- 2. 應用物理和碰撞檢測
     
-    -- 如果 FEET 激活且有跳躍速度，使用 FEET 的跳躍物理
-    if mech_controller.active_part_id == "FEET" and mech_controller.velocity_y ~= 0 then
+    -- [[ P4 跳躍物理統一（決策 #2）]]
+    -- 跳躍初速一次性交給 mech_vy，之後不論焦點在誰身上一律走一般重力。
+    -- （舊制在 FEET 焦點與否之間切換兩套物理：半空切走會變軌、
+    --   切回來還會因殘留的 velocity_y 在空中再彈一次）
+    if mech_controller.velocity_y ~= 0 then
         mech_vy = mech_controller.velocity_y
-    else
-        -- 否則應用一般重力
-        mech_vy = mech_vy + GRAVITY
+        mech_controller.velocity_y = 0
     end
+    mech_vy = mech_vy + GRAVITY
     
     -- 計算新的位置
     local new_x = mech_x + dx

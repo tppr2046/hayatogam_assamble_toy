@@ -8,6 +8,9 @@ local EnemyData = import "enemy_data" -- 確保載入敵人數據
 EntityController = {}
 MechController = {}  -- 新增：機甲控制器
 
+-- [[ P4 滑行 ]] 無輸入時移動速度的每幀衰減係數（0~1，越小停得越快；A2 可調）
+MechController.COAST_FRICTION = 0.85
+
 -- [[ ========================================== ]]
 -- [[  MechController 類別 (機甲零件控制) ]]
 -- [[ ========================================== ]]
@@ -40,6 +43,11 @@ function MechController:init()
         
         -- WHEEL 相關
         wheel_stick_offset = 0,  -- wheel_stick 的左右位移
+
+        -- [[ P4 滑行 ]] 水平移動速度（含滑行）。有輸入時=目標速度；
+        -- 無輸入或焦點切走時按 COAST_FRICTION 逐幀衰減，模擬慣性滑行
+        move_velocity = 0,
+        move_input_active = false,  -- 本幀是否有移動輸入
         
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
@@ -246,23 +254,23 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     local dx = 0
     local MOVE_SPEED = 2.0
     
+    -- [[ P4 ]] 不再於無焦點時提前 return——滑行衰減（函式尾）任何情況都要執行
     local part_type = self:getActivePartType()
-    if not part_type then
-        return dx
-    end
-    
+
     if part_type == "WHEEL" then
         -- WHEEL：左右移動
         -- WHEEL 是 3x1 格，寬度 = 3*32 + 2*5 = 106 像素
         -- wheel_stick 可以從最左移動到最右，範圍大約是 panel 寬度的一半，減去 stick 寬度的一半
         -- 假設 panel 總寬 106，stick 寬 10，則最大偏移 = (106/2) - (10/2) = 48
         local max_stick_offset = 40
-        
+
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
-            dx = dx - MOVE_SPEED
+            self.move_velocity = -MOVE_SPEED  -- [[ P4 ]] 改寫入速度，滑行統一在函式尾處理
+            self.move_input_active = true
             self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 5)
         elseif playdate.buttonIsPressed(playdate.kButtonRight) then
-            dx = dx + MOVE_SPEED
+            self.move_velocity = MOVE_SPEED
+            self.move_input_active = true
             self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 5)
         else
             -- 放開後回到預設位置（加快回復速度）
@@ -363,15 +371,17 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         
         local moving = false
         local direction = 0
-        
+
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
-            dx = dx - move_speed
+            self.move_velocity = -move_speed  -- [[ P4 ]] 改寫入速度，滑行統一在函式尾處理
+            self.move_input_active = true
             moving = true
             direction = -1
             self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 5)
         end
         if playdate.buttonIsPressed(playdate.kButtonRight) then
-            dx = dx + move_speed
+            self.move_velocity = move_speed
+            self.move_input_active = true
             moving = true
             direction = 1
             self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 5)
@@ -469,7 +479,19 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         -- 更新上一幀的臂角度
         self.claw_arm_angle_prev = self.claw_arm_angle
     end
-    
+
+    -- [[ P4 滑行（決策 #1）]] 無移動輸入（含焦點不在移動零件）時，
+    -- 速度按 COAST_FRICTION 逐幀衰減——切走焦點後機體滑行減速，而非急停
+    if not self.move_input_active then
+        self.move_velocity = self.move_velocity * MechController.COAST_FRICTION
+        if math.abs(self.move_velocity) < 0.05 then
+            self.move_velocity = 0
+            self.feet_is_moving = false  -- 滑行結束才停走路動畫
+        end
+    end
+    self.move_input_active = false
+    dx = dx + self.move_velocity
+
     return dx
 end
 
@@ -518,12 +540,8 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
         self.hit_shake_offset = 0
     end
     
-    -- 更新 FEET 跳躍物理（重力）
-    local part_type_for_gravity = self:getActivePartType()
-    if part_type_for_gravity == "FEET" and not self.is_grounded then
-        local gravity = (entity_controller and entity_controller.GRAVITY) or 0.5
-        self.velocity_y = self.velocity_y + gravity
-    end
+    -- [[ P4 ]] FEET 專屬重力已移除：跳躍初速由 state_mission 一次性取走
+    -- （velocity_y 歸零），之後統一由任務物理施加重力，與焦點無關
 end
 
 -- 更新跳躍的地面狀態（由 state_mission 調用）
