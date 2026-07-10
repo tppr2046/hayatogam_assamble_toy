@@ -2188,6 +2188,11 @@ EntityController.checkCollision = checkCollision
 -- [[  MechRenderer (機甲繪製) ]]
 -- [[ ========================================== ]]
 
+-- [[ P2s SPIKE 開關 ]] 斜坡上是否用「離屏 image 整體傾斜」畫機體。
+-- true = 新方案（整台當剛體繞底部中心旋轉）；false = 原本逐零件旋轉的畫法。
+-- 方便 A/B 對照;spike 驗證通過後再併入正式 P2。
+MechController.SLOPE_OFFSCREEN_TILT = true
+
 function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state, feet_imagetable, feet_current_frame, entity_controller)
     local gfx = playdate.graphics
     local draw_x = mech_x - camera_x + self.hit_shake_offset
@@ -2218,7 +2223,13 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     end
     
     local body_draw_y = mech_y
-    
+
+    -- [[ P2s SPIKE ]] 斜坡上改走「離屏 image 整體傾斜」路徑，讓整台機體像剛體一起轉
+    if MechController.SLOPE_OFFSCREEN_TILT and terrain_angle ~= 0 then
+        self:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_extra_height, terrain_angle, feet_imagetable, feet_current_frame)
+        return
+    end
+
     -- 如果有地形角度，設置旋轉
     if terrain_angle ~= 0 then
         gfx.pushContext()
@@ -2274,6 +2285,71 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     if terrain_angle ~= 0 then
         gfx.popContext()
     end
+end
+
+-- [[ P2s SPIKE ]] 離屏 image 整體傾斜：把整台機體先畫到一張離屏圖，
+-- 再繞「機體底部中心」旋轉 terrain_angle 一次畫到畫面。
+-- 效果：機體是一個整體，斜坡上底座/砲塔/所有零件一起傾斜；
+-- crank 瞄準角照常畫進離屏圖，再由整張圖的旋轉自然疊加地形角。
+function MechController:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_extra_height, terrain_angle, feet_imagetable, feet_current_frame)
+    local gfx = playdate.graphics
+    local cell = (mech_grid and mech_grid.cell_size) or 16
+    local mech_width = cell * 3
+    local mech_height = cell * 2 + (feet_extra_height or 0)
+
+    -- 加 padding，避免砲管/爪臂等超出格子的部分被離屏圖邊緣裁掉
+    local pad = cell * 2
+    local img_w = mech_width + pad * 2
+    local img_h = mech_height + pad * 2
+
+    local mech_img = gfx.image.new(img_w, img_h)  -- 預設透明底
+    if not mech_img then return end
+
+    -- 在離屏圖上以本地座標（位移 pad）畫出整台機體；rotation_angle 一律傳 0（不逐零件轉）
+    gfx.pushContext(mech_img)
+        local lx, ly = pad, pad
+
+        -- 下排（row = 1）
+        for _, item in ipairs(eq) do
+            local pdata = _G.PartsData and _G.PartsData[item.id]
+            local pt = pdata and pdata.part_type
+            local special = (pt == "SWORD" or pt == "CANON" or pt == "FEET" or pt == "CLAW")
+            if not (special and item.id == self.active_part_id) and item.row == 1 then
+                self:drawPart(item, lx, ly, mech_grid, feet_imagetable, feet_current_frame, 0)
+            end
+        end
+
+        -- 上排（row = 2）
+        for _, item in ipairs(eq) do
+            local pdata = _G.PartsData and _G.PartsData[item.id]
+            local pt = pdata and pdata.part_type
+            local special = (pt == "SWORD" or pt == "CANON" or pt == "FEET" or pt == "CLAW")
+            if not (special and item.id == self.active_part_id) and item.row == 2 then
+                self:drawPart(item, lx, ly, mech_grid, feet_imagetable, feet_current_frame, 0)
+            end
+        end
+
+        -- 作用中零件（crank 角照常，terrain 交給整張圖旋轉，故傳 0）
+        if self.active_part_id then
+            for _, item in ipairs(eq) do
+                if item.id == self.active_part_id then
+                    self:drawActivePart(item, lx, ly, mech_grid, feet_imagetable, feet_current_frame, 0)
+                    break
+                end
+            end
+        end
+    gfx.popContext()
+
+    -- 繞「機體底部中心」把整張圖旋轉 terrain_angle 畫到畫面
+    -- drawRotated 以影像中心為軸；影像中心相對底部中心位移 (0, -mech_height/2)，隨影像一起轉
+    local pivot_x = draw_x + mech_width / 2
+    local pivot_y = body_draw_y + mech_height
+    local rad = math.rad(terrain_angle)
+    local cos_a, sin_a = math.cos(rad), math.sin(rad)
+    local off_x, off_y = 0, -mech_height / 2
+    local center_x = pivot_x + (off_x * cos_a - off_y * sin_a)
+    local center_y = pivot_y + (off_x * sin_a + off_y * cos_a)
+    mech_img:drawRotated(center_x, center_y, terrain_angle)
 end
 
 function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imagetable, feet_current_frame, rotation_angle)
