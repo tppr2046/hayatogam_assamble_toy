@@ -2337,14 +2337,13 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
 end
 
--- [[ A3/G1 ]] 機體上的焦點回饋：切到某零件的瞬間，該零件的外框
--- 閃爍一下（focus_flash_timer 8 幀內兩閃）然後消失——平時畫面乾淨，
--- 切換當下明確看到「換到誰」。外框四角套用機體傾斜（斜坡上跟著零件）。
+-- [[ A3/G1 ]] 機體上的焦點回饋：切到某零件的瞬間，該零件外框以
+-- 「與面板高亮框相同的效果」顯示——白 5px＋黑 3px 雙層框、放大彈回
+-- （expand 隨 focus_flash_timer 8→0 收攏），8 幀後消失。
+-- 外框四角套用機體傾斜（斜坡上跟著零件）。
 function MechController:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
     local timer = self.focus_flash_timer or 0
     if timer <= 0 or not self.active_part_id then return end
-    -- 閃爍節奏：8→0 幀之間亮兩次（亮2幀、滅2幀交替）
-    if math.floor(timer / 2) % 2 == 0 then return end
 
     local gfx = playdate.graphics
     local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
@@ -2352,11 +2351,13 @@ function MechController:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, 
         if item.id == self.active_part_id then
             local cell = (mech_grid and mech_grid.cell_size) or 16
             local slot_w = item.w or 1
-            -- 零件格範圍四角（世界座標）
-            local x1 = mech_x + (item.col - 1) * cell
-            local y1 = mech_y + (((mech_grid and mech_grid.rows) or 2) - item.row) * cell
-            local x2 = x1 + slot_w * cell
-            local y2 = y1 + cell
+            -- 與面板高亮框相同的放大彈回
+            local expand = math.floor(timer / 2)
+            -- 零件格範圍四角（世界座標，含 expand）
+            local x1 = mech_x + (item.col - 1) * cell - expand
+            local y1 = mech_y + (((mech_grid and mech_grid.rows) or 2) - item.row) * cell - expand
+            local x2 = x1 + slot_w * cell + expand * 2
+            local y2 = y1 + cell + expand * 2
             local corners = { {x1, y1}, {x2, y1}, {x2, y2}, {x1, y2} }
             -- 套用機體傾斜 → 螢幕座標
             local sx = {}
@@ -2366,15 +2367,15 @@ function MechController:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, 
                 sx[i] = wx + (draw_x - mech_x)
                 sy[i] = wy
             end
-            -- 白粗線打底、黑線在上（任何背景都清楚）
+            -- 與面板高亮框相同：白 5px 外框打底、黑 3px 內框在上
             gfx.setColor(gfx.kColorWhite)
-            gfx.setLineWidth(4)
+            gfx.setLineWidth(5)
             for i = 1, 4 do
                 local j = (i % 4) + 1
                 gfx.drawLine(sx[i], sy[i], sx[j], sy[j])
             end
             gfx.setColor(gfx.kColorBlack)
-            gfx.setLineWidth(2)
+            gfx.setLineWidth(3)
             for i = 1, 4 do
                 local j = (i % 4) + 1
                 gfx.drawLine(sx[i], sy[i], sx[j], sy[j])
