@@ -94,8 +94,10 @@ end
 -- 5. 核心函式：初始化 (只執行一次)
 -- ==========================================
 
-function playdate.setup()
-    print("LOG: playdate.setup() called")
+-- ❗ 注意：Playdate SDK 不會自動呼叫 playdate.setup()（它不是官方 callback）。
+-- 這裡改為一般的本地函式 initGame()，並在檔案最底部手動呼叫一次。
+local function initGame()
+    print("LOG: initGame() called")
     playdate.display.setRefreshRate(30)
     
     -- 初始化存檔系統
@@ -126,7 +128,7 @@ end
 -- ==========================================
 
 function playdate.update()
-    
+
     playdate.timer.updateTimers()
     
     -- 讓目前狀態處理遊戲邏輯
@@ -145,3 +147,10 @@ function playdate.update()
 --        playdate.drawFPS(0, 0)
 --    end
 end
+
+-- ==========================================
+-- 7. 啟動：在頂層手動觸發一次初始化
+-- （Playdate 載入 main.lua 後只會每幀呼叫 playdate.update()，
+--   不會自動呼叫任何 setup，所以初始化必須在此主動執行一次。）
+-- ==========================================
+initGame()
