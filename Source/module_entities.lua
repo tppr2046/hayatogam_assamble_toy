@@ -48,6 +48,9 @@ function MechController:init()
         -- 無輸入或焦點切走時按 COAST_FRICTION 逐幀衰減，模擬慣性滑行
         move_velocity = 0,
         move_input_active = false,  -- 本幀是否有移動輸入
+
+        -- [[ A3 ]] 焦點切換視覺回饋
+        focus_flash_timer = 0,  -- 切換當幀設為 8，逐幀遞減；期間高亮框放大/箭頭彈跳
         
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
@@ -183,9 +186,16 @@ end
 function MechController:setFocus(item)
     self.active_part_id = item.id
     self.selected_part_slot = {col = item.col, row = item.row}
+    -- [[ A3 ]] 切換瞬間的視覺回饋：高亮框/焦點箭頭彈跳數幀
+    self.focus_flash_timer = 8
 end
 
 function MechController:handleSelection(mech_stats)
+    -- [[ A3 ]] 切換視覺回饋倒數（每幀一次）
+    if self.focus_flash_timer and self.focus_flash_timer > 0 then
+        self.focus_flash_timer = self.focus_flash_timer - 1
+    end
+
     local order = self:getFocusOrder(mech_stats)
     if #order == 0 then return end
 
@@ -2252,6 +2262,7 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     -- [[ P2s SPIKE ]] 斜坡上改走「離屏 image 整體傾斜」路徑，讓整台機體像剛體一起轉
     if MechController.SLOPE_OFFSCREEN_TILT and terrain_angle ~= 0 then
         self:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_extra_height, terrain_angle, feet_imagetable, feet_current_frame)
+        self:drawFocusIndicator(mech_x, mech_y, draw_x, mech_grid, entity_controller)
         return
     end
 
@@ -2309,6 +2320,39 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     -- 恢復旋轉
     if terrain_angle ~= 0 then
         gfx.popContext()
+    end
+
+    self:drawFocusIndicator(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+end
+
+-- [[ A3/G1 ]] 機體上的焦點箭頭：焦點零件正上方的向下小三角。
+-- 位置套用機體傾斜（applyMechTilt，斜坡上跟著零件走）；
+-- 切換焦點的瞬間（focus_flash_timer > 0）箭頭向上彈跳，強化「一按就換」的回饋。
+function MechController:drawFocusIndicator(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+    if not self.active_part_id then return end
+    local gfx = playdate.graphics
+    local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
+    for _, item in ipairs(eq) do
+        if item.id == self.active_part_id then
+            local cell = (mech_grid and mech_grid.cell_size) or 16
+            local slot_w = item.w or 1
+            -- 錨點：零件頂邊中央（世界座標），套用機體傾斜
+            local ax = mech_x + (item.col - 1 + slot_w / 2) * cell
+            local ay = mech_y + (((mech_grid and mech_grid.rows) or 2) - item.row) * cell
+            ax, ay = self:applyMechTilt(ax, ay, nil, nil, mech_x, mech_y, mech_grid, entity_controller)
+            -- 世界 → 螢幕（沿用 drawMech 的水平位移，含 camera 與受擊震動）
+            local sx = ax + (draw_x - mech_x)
+            local sy = ay
+            -- 切換瞬間向上彈跳
+            local bounce = self.focus_flash_timer or 0
+            local tip_y = sy - 4 - bounce
+            -- 白底黑箭頭（雙層三角形，任何背景上都清楚）
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillTriangle(sx - 6, tip_y - 9, sx + 6, tip_y - 9, sx, tip_y)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillTriangle(sx - 4, tip_y - 7, sx + 4, tip_y - 7, sx, tip_y - 2)
+            break
+        end
     end
 end
 
@@ -2641,17 +2685,19 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         for _, item in ipairs(eq) do
             if item.id == selected_part_id_for_highlight then
                 local slot_w = item.w or 1
-                local fx = ui_start_x + (item.col - 1) * ui_cell_size
+                -- [[ A3 ]] 切換瞬間高亮框放大彈回（focus_flash_timer 8→0）
+                local expand = math.floor((self.focus_flash_timer or 0) / 2)
+                local fx = ui_start_x + (item.col - 1) * ui_cell_size - expand
                 -- 根據零件的 row 決定 y 座標：row=2 在上方，row=1 在下方
-                local fy = ui_start_y + (ui_grid_rows - item.row) * ui_cell_size
-                local fw = slot_w * ui_cell_size
-                local fh = ui_cell_size
-                
+                local fy = ui_start_y + (ui_grid_rows - item.row) * ui_cell_size - expand
+                local fw = slot_w * ui_cell_size + expand * 2
+                local fh = ui_cell_size + expand * 2
+
                 -- 繪製白色外框（確保在任何背景上都可見）
                 gfx.setColor(gfx.kColorWhite)
                 gfx.setLineWidth(5)
                 gfx.drawRect(fx, fy, fw, fh)
-                
+
                 -- 繪製黑色內框
                 gfx.setColor(gfx.kColorBlack)
                 gfx.setLineWidth(3)
@@ -2672,9 +2718,8 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         elseif part_type_for_info == "CANON" then
             gfx.drawText("Angle: " .. math.floor(self.canon_angle), info_x, ui_start_y + 15)
         end
-    else
-        gfx.drawText("Select part (A)", info_x, ui_start_y)
     end
+    -- [[ A3 ]] 舊「Select part (A)」提示已移除：直接切換制下焦點永遠存在
 end
 
 -- 繪製零件介面圖（根據零件類型）
@@ -2733,22 +2778,12 @@ function MechController:drawPartUI(part_id, x, y, size)
             -- 檢查是否為當前激活的零件
             local is_active = (self.active_part_id == part_id)
             
-            -- 繪製 claw_control_v（左邊控制器，根據上下鍵狀態顯示不同 frame）
+            -- 繪製 claw_control_v（左邊控制器）
+            -- [[ A3 ]] 舊制此圖回應上下鍵（當時上下鍵控臂）；新制上下鍵=切換焦點、
+            -- crank 控臂，故固定顯示預設 frame，避免誤導
             local control_v_table = ui.claw_control_v
             if control_v_table then
-                local frame_index = 1  -- 預設 frame 0 (1-based indexing)
-                if is_active then
-                    -- 只有在激活狀態才檢查按鍵狀態
-                    local up_pressed = playdate.buttonIsPressed(playdate.kButtonUp)
-                    local down_pressed = playdate.buttonIsPressed(playdate.kButtonDown)
-                    if up_pressed then
-                        frame_index = 2  -- frame 1 (上鍵按下)
-                    elseif down_pressed then
-                        frame_index = 3  -- frame 2 (下鍵按下)
-                    end
-                end
-                
-                local control_img = control_v_table:getImage(frame_index)
+                local control_img = control_v_table:getImage(1)
                 if control_img then
                     -- 左對齊繪製
                     pcall(function() control_img:draw(x, y) end)
