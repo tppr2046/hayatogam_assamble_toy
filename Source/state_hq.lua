@@ -41,18 +41,18 @@ local UI_START_Y = GAME_HEIGHT + 5
 local GRID_MAP = {}       
 local cursor_col = 1      
 local cursor_row = 1      
-local cursor_on_ready = false  -- 游標是否在 READY 選項上
-local cursor_on_shop = false   -- 游標是否在 SHOP 選項上
-local cursor_on_back = false   -- 遊標是否在 BACK 選項上
-local is_unequip_mode = false  -- 是否在解除裝備模式
+-- [[ P5 重整 ]] 動線規則：左側縱向主選單（上下移動）、START 固定右下、
+-- A=進入/確認、B=一律返回上一層（主選單按 B 回任務選擇）、右鍵=跳至 START
+local MAIN_MENU = { "TOP PARTS", "BOTTOM PARTS", "REMOVE PART" }  -- SHOP 原型隱藏
+local main_menu_index = 1       -- 主選單游標（1..#MAIN_MENU）
+local cursor_on_start = false   -- 游標是否在右下角固定 START 鈕上
+local is_unequip_mode = false  -- 是否在解除裝備模式（由主選單 REMOVE PART 進入）
 local unequip_selected_col = 1  -- 解除模式選中的格子列
 local unequip_selected_row = 1  -- 解除模式選中的格子排
-local selected_category = nil   -- nil = 選擇分類, "TOP" or "BOTTOM" = 已選分類
-local selected_part_index = 1   
-local hq_mode = "EQUIP"         -- EQUIP (組裝模式), UNEQUIP (拆卸模式), READY_MENU (READY選單)
-local menu_option_index = 1     
+local selected_category = nil   -- nil = 主選單層, "TOP" or "BOTTOM" = 零件清單層
+local selected_part_index = 1
+local hq_mode = "EQUIP"         -- 固定 EQUIP（舊 UNEQUIP 分支為死碼，已移除）
 local is_placing_part = false
-local show_ready_menu = false   -- 是否顯示 READY 選單 
 
 -- 放置失敗視覺/音效反饋
 local FLASH_DURATION = 12 -- 幀數
@@ -67,11 +67,7 @@ function StateHQ.setupBGM()
 end
 local flash_row = nil
 
--- 底部菜單選項清單
-local MENU_OPTIONS = {
-    {name = "Start Mission", action = "MISSION_SELECT"}, 
-    {name = "Continue Assembly", action = "CONTINUE"},
-}
+-- [[ P5 ]] READY 彈窗已移除：游標在 START 按 A 直接開始任務
 
 -- ==========================================
 -- 輔助函式 (佔位符)
@@ -278,10 +274,8 @@ function StateHQ.setup()
     
     hq_mode = "EQUIP" -- 確保從組裝模式開始
     selected_category = nil  -- 重置分類選擇
-    cursor_on_ready = false
-    cursor_on_shop = false
-    cursor_on_back = false
-    show_ready_menu = false
+    main_menu_index = 1
+    cursor_on_start = false
 
     -- 初始化 GRID_MAP（row-major），nil 表示空
     GRID_MAP = {}
@@ -388,12 +382,8 @@ function StateHQ.update()
         local eq = _G.GameState.mech_stats.equipped_parts or {}
         
         if playdate.buttonJustPressed(playdate.kButtonLeft) then
-            -- 在最左邊格子按左鍵回到零件清單
-            if unequip_selected_col == 1 then
-                is_unequip_mode = false
-            else
-                unequip_selected_col = math.max(1, unequip_selected_col - 1)
-            end
+            -- [[ P5 ]] 左鍵只移動游標；離開拆卸一律按 B（返回鍵語義統一）
+            unequip_selected_col = math.max(1, unequip_selected_col - 1)
             -- 播放游標移動音效
             if _G.SoundManager and _G.SoundManager.playCursorMove then
                 _G.SoundManager.playCursorMove()
@@ -625,9 +615,9 @@ function StateHQ.update()
                                 end
                             end
                             
-                            -- 如果所有零件都已裝備，則移動到 READY
+                            -- [[ P5 ]] 如果所有零件都已裝備，游標跳到 START
                             if not found_next then
-                                cursor_on_ready = true
+                                cursor_on_start = true
                                 last_part_index = selected_part_index
                             end
                         end
@@ -640,136 +630,71 @@ function StateHQ.update()
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
                 is_placing_part = false
             end
-        elseif cursor_on_back then
-            -- 游標在 BACK 上
-            if playdate.buttonJustPressed(playdate.kButtonUp) then
-                cursor_on_back = false
-                cursor_on_ready = true
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 返回任務選擇畫面
-                -- 播放選擇音效
+        elseif cursor_on_start then
+            -- [[ P5 ]] 游標在右下角固定 START 鈕：A 直接開始任務（READY 彈窗已移除），
+            -- 左鍵/B 回主選單
+            if playdate.buttonJustPressed(playdate.kButtonA) then
                 if _G.SoundManager and _G.SoundManager.playSelect then
                     _G.SoundManager.playSelect()
                 end
-                setState(_G.StateMissionSelect)
-            end
-        elseif cursor_on_ready then
-            -- 游標在 READY 上
-            if show_ready_menu then
-                -- READY 選單打開
-                if playdate.buttonJustPressed(playdate.kButtonDown) then
-                    menu_option_index = math.min(2, menu_option_index + 1)
-                    -- 播放游標移動音效
-                    if _G.SoundManager and _G.SoundManager.playCursorMove then
-                        _G.SoundManager.playCursorMove()
-                    end
-                elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-                    menu_option_index = math.max(1, menu_option_index - 1)
-                    -- 播放游標移動音效
-                    if _G.SoundManager and _G.SoundManager.playCursorMove then
-                        _G.SoundManager.playCursorMove()
-                    end
-                elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                    -- 播放選擇音效
-                    if _G.SoundManager and _G.SoundManager.playSelect then
-                        _G.SoundManager.playSelect()
-                    end
-                    if menu_option_index == 1 then
-                        -- Start Mission
-                        -- 使用從任務選擇畫面設置的任務 ID
-                        _G.GameState = _G.GameState or {}
-                        -- 確保有 current_mission，否則使用預設值
-                        if not _G.GameState.current_mission then
-                            _G.GameState.current_mission = "M001"
-                            print("WARNING: No current_mission set, using M001 as fallback")
-                        end
-                        print("Starting mission:", _G.GameState.current_mission)
-                        setState(_G.StateMission)
-                    else
-                        -- Continue Assembly
-                        show_ready_menu = false
-                        cursor_on_ready = false
-                    end
-                elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                    show_ready_menu = false
+                _G.GameState = _G.GameState or {}
+                if not _G.GameState.current_mission then
+                    _G.GameState.current_mission = "M001"
+                    print("WARNING: No current_mission set, using M001 as fallback")
                 end
-            else
-                -- 選單未打開
-                if playdate.buttonJustPressed(playdate.kButtonUp) then
-                    cursor_on_ready = false
-                    cursor_on_shop = true  -- 回到 SHOP
-                    -- 播放游標移動音效
-                    if _G.SoundManager and _G.SoundManager.playCursorMove then
-                        _G.SoundManager.playCursorMove()
-                    end
-                elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                    -- 從 READY 移動到 BACK
-                    cursor_on_ready = false
-                    cursor_on_back = true
-                    -- 播放游標移動音效
-                    if _G.SoundManager and _G.SoundManager.playCursorMove then
-                        _G.SoundManager.playCursorMove()
-                    end
-                elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                    show_ready_menu = true
-                    menu_option_index = 1
-                    -- 播放選擇音效
-                    if _G.SoundManager and _G.SoundManager.playSelect then
-                        _G.SoundManager.playSelect()
-                    end
+                print("Starting mission:", _G.GameState.current_mission)
+                setState(_G.StateMission)
+            elseif playdate.buttonJustPressed(playdate.kButtonLeft) or playdate.buttonJustPressed(playdate.kButtonB) then
+                cursor_on_start = false
+                selected_category = nil
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
                 end
             end
         elseif not selected_category then
-            -- 選擇分類或導航到 SHOP/READY
+            -- [[ P5 ]] 主選單層：上下移動、A 進入、右鍵跳 START、B 回任務選擇
+            -- （SHOP 原型隱藏；拆卸改為明示選項 REMOVE PART）
             if playdate.buttonJustPressed(playdate.kButtonUp) then
-                if cursor_on_shop then
-                    cursor_on_shop = false
-                    selected_part_index = last_part_index or 2  -- 回到 BOTTOM PARTS
-                elseif cursor_on_ready then
-                    cursor_on_ready = false
-                    cursor_on_shop = true  -- 從 READY 向上到 SHOP
-                else
-                    selected_part_index = (selected_part_index == 1) and 2 or 1
-                end
+                main_menu_index = math.max(1, main_menu_index - 1)
                 -- 播放游標移動音效
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                if selected_part_index == 2 then
-                    cursor_on_shop = true
-                    selected_part_index = 0  -- 清除零件選取狀態
-                    last_part_index = 2  -- 記住最後位置
-                elseif cursor_on_shop then
-                    cursor_on_shop = false
-                    cursor_on_ready = true  -- 從 SHOP 向下到 READY
-                else
-                    selected_part_index = 2
+                main_menu_index = math.min(#MAIN_MENU, main_menu_index + 1)
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
                 end
+            elseif playdate.buttonJustPressed(playdate.kButtonRight) then
+                cursor_on_start = true
                 -- 播放游標移動音效
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                if cursor_on_shop then
-                    -- 進入商店狀態
-                    -- 播放選擇音效
-                    if _G.SoundManager and _G.SoundManager.playSelect then
-                        _G.SoundManager.playSelect()
-                    end
-                    setState(_G.StateShop)
-                elseif not cursor_on_ready then
-                    selected_category = (selected_part_index == 1) and "TOP" or "BOTTOM"
+                -- 播放選擇音效
+                if _G.SoundManager and _G.SoundManager.playSelect then
+                    _G.SoundManager.playSelect()
+                end
+                if main_menu_index == 1 then
+                    selected_category = "TOP"
                     selected_part_index = 1
-                    -- 播放選擇音效
-                    if _G.SoundManager and _G.SoundManager.playSelect then
-                        _G.SoundManager.playSelect()
+                elseif main_menu_index == 2 then
+                    selected_category = "BOTTOM"
+                    selected_part_index = 1
+                else
+                    -- REMOVE PART：進入拆卸模式
+                    is_unequip_mode = true
+                    local eq = _G.GameState.mech_stats.equipped_parts or {}
+                    if #eq > 0 then
+                        unequip_selected_col = eq[1].col
+                        unequip_selected_row = eq[1].row
                     end
                 end
+            elseif playdate.buttonJustPressed(playdate.kButtonB) then
+                -- B=返回上一層：主選單層返回任務選擇畫面（取代舊 BACK 選項）
+                setState(_G.StateMissionSelect)
             end
         else
             -- 已選分類，選擇零件或移動到 READY
@@ -818,9 +743,9 @@ function StateHQ.update()
                     end
                     new_index = new_index + 1
                 end
-                -- 如果沒有找到未安裝的零件，移動到 READY
+                -- [[ P5 ]] 清單底部再往下：游標跳到 START
                 if new_index > parts_count then
-                    cursor_on_ready = true
+                    cursor_on_start = true
                     last_part_index = selected_part_index
                 end
                 -- 播放游標移動音效
@@ -828,13 +753,11 @@ function StateHQ.update()
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-                -- 按右鍵進入解除裝備模式
-                is_unequip_mode = true
-                -- 初始化選中第一個已安裝的零件
-                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                if #eq > 0 then
-                    unequip_selected_col = eq[1].col
-                    unequip_selected_row = eq[1].row
+                -- [[ P5 ]] 右鍵跳到 START（拆卸入口移至主選單 REMOVE PART）
+                cursor_on_start = true
+                -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 選中零件，檢查是否已安裝
@@ -876,45 +799,8 @@ function StateHQ.update()
             end
         end
     
-    elseif hq_mode == "UNEQUIP" then
-        -- 拆卸模式
-        if playdate.buttonJustPressed(playdate.kButtonLeft) then
-            cursor_col = math.max(1, cursor_col - 1)
-            -- 播放游標移動音效
-            if _G.SoundManager and _G.SoundManager.playCursorMove then
-                _G.SoundManager.playCursorMove()
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-            cursor_col = math.min(GRID_COLS, cursor_col + 1)
-            -- 播放游標移動音效
-            if _G.SoundManager and _G.SoundManager.playCursorMove then
-                _G.SoundManager.playCursorMove()
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-            cursor_row = math.min(GRID_ROWS, cursor_row + 1)
-            -- 播放游標移動音效
-            if _G.SoundManager and _G.SoundManager.playCursorMove then
-                _G.SoundManager.playCursorMove()
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            cursor_row = math.max(1, cursor_row - 1)
-            -- 播放游標移動音效
-            if _G.SoundManager and _G.SoundManager.playCursorMove then
-                _G.SoundManager.playCursorMove()
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonA) then
-            local idx, item = findEquippedPartAt(cursor_col, cursor_row)
-            if idx and item then
-                removeEquippedPart(idx)
-                -- 播放選擇音效
-                if _G.SoundManager and _G.SoundManager.playSelect then
-                    _G.SoundManager.playSelect()
-                end
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonB) then
-            hq_mode = "EQUIP"
-        end
     end
+    -- [[ P5 ]] 舊 hq_mode == "UNEQUIP" 分支為死碼（實際拆卸走 is_unequip_mode），已刪除
     
     -- 更新 flash 計時器
     if flash_timer and flash_timer > 0 then
@@ -953,7 +839,7 @@ function StateHQ.draw()
     -- Grid and parts rendering handled below (draw grid lines, then draw each equipped part once)
     
     -- 3. 繪製零件預覽 (選中零件後，即使沒進入放置模式也顯示預覽；解除模式時不顯示)
-    if hq_mode == "EQUIP" and selected_category and selected_part_index and not cursor_on_ready and not is_unequip_mode then
+    if hq_mode == "EQUIP" and selected_category and selected_part_index and not cursor_on_start and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
@@ -1092,12 +978,11 @@ function StateHQ.draw()
     local list_y = 50
     local line_height = 15
     
-    if not selected_category then
-        -- 顯示分類選擇
-        local categories = {"TOP PARTS", "BOTTOM PARTS"}
-        for i = 1, 2 do
-            local text = categories[i]
-            if i == selected_part_index then
+    if not selected_category and not is_unequip_mode then
+        -- [[ P5 ]] 主選單：TOP PARTS / BOTTOM PARTS / REMOVE PART（SHOP 原型隱藏）
+        for i = 1, #MAIN_MENU do
+            local text = MAIN_MENU[i]
+            if i == main_menu_index and not cursor_on_start then
                 if blink_on then
                     text = "> " .. text .. " <"
                 else
@@ -1106,17 +991,7 @@ function StateHQ.draw()
             end
             gfx.drawText(text, 10, list_y + (i - 1) * line_height)
         end
-        
-        -- 繪製 SHOP 選項
-        local shop_y = list_y + 2 * line_height
-        local shop_text
-        if cursor_on_shop then
-            shop_text = blink_on and "> SHOP <" or "  SHOP  "
-        else
-            shop_text = "  SHOP"
-        end
-        gfx.drawText(shop_text, 10, shop_y)
-    else
+    elseif selected_category then
         -- 顯示選中分類的零件
             gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
             local parts_list = _G.GameState.parts_by_category[selected_category]
@@ -1132,7 +1007,7 @@ function StateHQ.draw()
                 end
                 
                 local text = part_id
-                if i == selected_part_index and not cursor_on_ready and not is_unequip_mode then
+                if i == selected_part_index and not cursor_on_start and not is_unequip_mode then
                     if blink_on then
                         text = "> " .. text .. " <"
                     else
@@ -1168,7 +1043,7 @@ function StateHQ.draw()
     end
     
     -- 預覽模式：在組裝格子上顯示 dither.png（解除模式時不顯示預覽）
-    if selected_category and selected_part_index and not cursor_on_ready and not is_placing_part and not is_unequip_mode then
+    if selected_category and selected_part_index and not cursor_on_start and not is_placing_part and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = _G.PartsData and _G.PartsData[part_id]
@@ -1422,58 +1297,55 @@ function StateHQ.draw()
     gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y + 20)
     gfx.drawText("Weight: " .. stats.total_weight, detail_x, detail_y + 40)
     
-    -- 7. 繪製 READY 選項（置中在組裝格下方）
-    local ready_y = GRID_START_Y + GRID_ROWS * GRID_CELL_SIZE + 30
-    local ready_text = "READY"
-    if cursor_on_ready then
-        ready_text = "> " .. ready_text .. " <"
-    end
-    local ready_text_width = gfx.getTextSize(ready_text)
-    local ready_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - ready_text_width) / 2
-    gfx.drawText(ready_text, ready_x, ready_y)
-    
-    -- 繪製 BACK 選項（在 READY 下方）
-    local back_y = ready_y + 15
-    local back_text = "BACK"
-    if cursor_on_back then
-        back_text = blink_on and "> " .. back_text .. " <" or "    " .. back_text .. "    "
-    end
-    local back_text_width = gfx.getTextSize(back_text)
-    local back_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - back_text_width) / 2
-    gfx.drawText(back_text, back_x, back_y)
-    
-    -- 如果顯示 READY 選單（以彈出視窗方式顯示，蓋住下方文字）
-    if show_ready_menu then
-        local dialog_w = 200
-        local dialog_h = 60
-        local dialog_x = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE - dialog_w) / 2
-        local dialog_y = ready_y - 10
-
-        -- 覆蓋背景並繪製對話框框體
-        gfx.setColor(gfx.kColorWhite)
-        gfx.fillRect(dialog_x, dialog_y, dialog_w, dialog_h)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawRect(dialog_x, dialog_y, dialog_w, dialog_h)
-
-        local options = {"Start Mission", "Back to equip"}
-        for i = 1, 2 do
-            local text = options[i]
-            if i == menu_option_index then
-                if blink_on then
-                    text = "> " .. text .. " <"
-                else
-                    text = "  " .. text .. "  "
-                end
-            else
-                text = "  " .. text .. "  "
+    -- [[ P5 ]] 7. 固定右下角 START 鈕（取代 READY/BACK 選項與 READY 彈窗）
+    do
+        local start_text = "START"
+        local tw, th = gfx.getTextSize(start_text)
+        local pad_x, pad_y = 8, 4
+        local box_w = tw + pad_x * 2
+        local box_h = th + pad_y * 2
+        local box_x = SCREEN_WIDTH - box_w - 8
+        local box_y = GAME_HEIGHT - box_h - 22
+        if cursor_on_start then
+            -- 選中：黑底白字 + 閃爍粗框
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(box_x, box_y, box_w, box_h)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+            if blink_on then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(2)
+                gfx.drawRect(box_x - 3, box_y - 3, box_w + 6, box_h + 6)
+                gfx.setLineWidth(1)
             end
-            local text_width = gfx.getTextSize(text)
-            local menu_x = dialog_x + (dialog_w - text_width) / 2
-            local menu_y = dialog_y + 15 + (i - 1) * 16
-            gfx.drawText(text, menu_x, menu_y)
+        else
+            -- 未選中：白底黑字黑框
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(box_x, box_y, box_w, box_h)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawRect(box_x, box_y, box_w, box_h)
+            gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
         end
     end
-    
+
+    -- [[ P5 ]] 每層操作提示列（遊戲區底部一行，明示下一步）
+    do
+        local hint
+        if is_unequip_mode then
+            hint = "A:REMOVE  B:BACK"
+        elseif is_placing_part then
+            hint = "A:PLACE  B:CANCEL"
+        elseif cursor_on_start then
+            hint = "A:START MISSION  <(B):BACK"
+        elseif selected_category then
+            hint = "A:PICK  B:BACK  >:START"
+        else
+            hint = "A:OK  B:MISSION LIST  >:START"
+        end
+        gfx.drawText(hint, 5, GAME_HEIGHT - 16)
+    end
+
     -- 8. 繪製控制介面 UI（下半部）
     -- 繪製 3x2 控制格子
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
@@ -1481,7 +1353,7 @@ function StateHQ.draw()
     -- 找出選中格子對應的零件ID（用於高亮所有佔用格子）
     local selected_part_id_for_highlight = nil
     local preview_part_data = nil
-    if selected_category and selected_part_index and not cursor_on_ready then
+    if selected_category and selected_part_index and not cursor_on_start then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         selected_part_id_for_highlight = part_id
@@ -1550,7 +1422,7 @@ function StateHQ.draw()
     
     -- 顯示當前選中的零件資訊
 --    local info_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
---    if selected_category and selected_part_index and not cursor_on_ready then
+--    if selected_category and selected_part_index and not cursor_on_start then
 --        local parts_list = _G.GameState.parts_by_category[selected_category]
 --        local part_id = parts_list and parts_list[selected_part_index]
 --        if part_id then
