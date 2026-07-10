@@ -346,7 +346,10 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                             local vy = -math.sin(angle_rad) * speed
                             local dmg = pdata.projectile_damage or 10
                             local grav_mult = pdata.projectile_grav_mult or 1.0
-                            
+
+                            -- [[ 斜坡跟隨 ]] 砲口位置與發射方向套用機體傾斜
+                            canon_x, canon_y, vx, vy = self:applyMechTilt(canon_x, canon_y, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+
                             entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult)
                             self.canon_fire_timer = 0
                             -- 播放砲台發射音效
@@ -495,6 +498,48 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     return dx
 end
 
+-- [[ 斜坡跟隨 ]] 與 drawMechTilted 完全一致的機體傾斜變換：
+-- 繞「機體底部中心」旋轉 terrain_angle。發射點、爪尖等「邏輯座標」
+-- 必須套用同一變換，才會與畫面上傾斜後的零件位置/朝向一致。
+-- 傳入 vx, vy 時連速度向量一起旋轉（發射方向跟著機體傾斜）。
+function MechController:applyMechTilt(x, y, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+    local cell = (mech_grid and mech_grid.cell_size) or 16
+    local terrain_angle = entity_controller and entity_controller:getTerrainAngle(mech_x + cell * 1.5) or 0
+    if terrain_angle == 0 then
+        return x, y, vx, vy
+    end
+
+    -- 底部中心（含 FEET 超出格子的高度，與 drawMech 的計算一致）
+    local feet_extra = 0
+    local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
+    for _, item in ipairs(eq) do
+        if item.id == "FEET" then
+            local fd = _G.PartsData and _G.PartsData["FEET"]
+            if fd and fd._img then
+                local ok, _, ih = pcall(function() return fd._img:getSize() end)
+                if ok and ih then
+                    feet_extra = math.max(0, ih - cell)
+                end
+            end
+            break
+        end
+    end
+    local pivot_x = mech_x + ((mech_grid and mech_grid.cols) or 3) * cell / 2
+    local pivot_y = mech_y + ((mech_grid and mech_grid.rows) or 2) * cell + feet_extra
+
+    local rad = math.rad(terrain_angle)
+    local c, s = math.cos(rad), math.sin(rad)
+    local rx, ry = x - pivot_x, y - pivot_y
+    local nx = pivot_x + (rx * c - ry * s)
+    local ny = pivot_y + (rx * s + ry * c)
+    local nvx, nvy = vx, vy
+    if vx and vy then
+        nvx = vx * c - vy * s
+        nvy = vx * s + vy * c
+    end
+    return nx, ny, nvx, nvy
+end
+
 -- 更新零件計時器和自動功能
 function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
     -- 更新 CANON 冷卻
@@ -524,7 +569,10 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
                 local vy = 0  -- GUN 直射，垂直速度為 0
                 local dmg = pdata.projectile_damage or 5
                 local grav_mult = pdata.projectile_grav_mult or 1.0
-                
+
+                -- [[ 斜坡跟隨 ]] 槍口位置與發射方向套用機體傾斜
+                gun_x, gun_y, vx, vy = self:applyMechTilt(gun_x, gun_y, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+
                 entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg, grav_mult)
                 self.gun_fire_timer = 0
                 break

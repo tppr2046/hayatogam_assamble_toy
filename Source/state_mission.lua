@@ -511,7 +511,23 @@ function StateMission.update()
                         local sin_a = math.sin(angle_rad)
                         local claw_tip_x = pivot_x + arm_w * cos_a
                         local claw_tip_y = pivot_y + arm_w * sin_a
-                        
+
+                        -- [[ 斜坡跟隨 ]] 繪製端（drawMechTilted）把整台機體繞
+                        -- 「底部中心」旋轉 terrain_angle；爪尖的邏輯座標必須做
+                        -- 同一個旋轉，否則斜坡上石頭不會跟著爪子走
+                        local terrain_angle = entity_controller and entity_controller:getTerrainAngle(mech_x + cell_size * 1.5) or 0
+                        if terrain_angle ~= 0 then
+                            local tilt_pivot_x = mech_x + body_w / 2
+                            local tilt_pivot_y = mech_y + total_h
+                            local t_rad = math.rad(terrain_angle)
+                            local t_cos = math.cos(t_rad)
+                            local t_sin = math.sin(t_rad)
+                            local rel_x = claw_tip_x - tilt_pivot_x
+                            local rel_y = claw_tip_y - tilt_pivot_y
+                            claw_tip_x = tilt_pivot_x + (rel_x * t_cos - rel_y * t_sin)
+                            claw_tip_y = tilt_pivot_y + (rel_x * t_sin + rel_y * t_cos)
+                        end
+
                         -- 如果有抓住石頭，更新石頭位置（不論是否激活 CLAW）
                         mech_controller:updateGrabbedStone(claw_tip_x, claw_tip_y)
                         
