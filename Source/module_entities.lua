@@ -11,6 +11,9 @@ MechController = {}  -- 新增：機甲控制器
 -- [[ P4 滑行 ]] 無輸入時移動速度的每幀衰減係數（0~1，越小停得越快；A2 可調）
 MechController.COAST_FRICTION = 0.85
 
+-- [[ A3 ]] 切換焦點後的冷卻幀數（期間上/下鍵不再切換，避免連按視覺混亂；A2 可調）
+MechController.FOCUS_SWITCH_COOLDOWN = 8
+
 -- [[ ========================================== ]]
 -- [[  MechController 類別 (機甲零件控制) ]]
 -- [[ ========================================== ]]
@@ -48,6 +51,10 @@ function MechController:init()
         -- 無輸入或焦點切走時按 COAST_FRICTION 逐幀衰減，模擬慣性滑行
         move_velocity = 0,
         move_input_active = false,  -- 本幀是否有移動輸入
+
+        -- [[ A3 ]] 焦點切換視覺回饋
+        focus_flash_timer = 0,  -- 切換當幀設為 8，逐幀遞減；期間面板高亮框放大、機體零件外框閃爍
+        focus_switch_cooldown = 0,  -- 切換後冷卻，>0 時上/下鍵不再切換
         
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
@@ -183,9 +190,18 @@ end
 function MechController:setFocus(item)
     self.active_part_id = item.id
     self.selected_part_slot = {col = item.col, row = item.row}
+    -- [[ A3 ]] 切換瞬間的視覺回饋：面板高亮框彈跳、機體零件外框閃爍
+    self.focus_flash_timer = 8
+    -- [[ A3 ]] 切換冷卻：一小段時間內不能再切，避免連按視覺混亂
+    self.focus_switch_cooldown = MechController.FOCUS_SWITCH_COOLDOWN
 end
 
 function MechController:handleSelection(mech_stats)
+    -- [[ A3 ]] 切換視覺回饋倒數（每幀一次）
+    if self.focus_flash_timer and self.focus_flash_timer > 0 then
+        self.focus_flash_timer = self.focus_flash_timer - 1
+    end
+
     local order = self:getFocusOrder(mech_stats)
     if #order == 0 then return end
 
@@ -201,6 +217,12 @@ function MechController:handleSelection(mech_stats)
     -- 開場（或焦點失效）：預設焦點 = 第一個下排零件（移動類），立即可操作
     if not idx then
         self:setFocus(order[1])
+        return
+    end
+
+    -- [[ A3 ]] 切換冷卻中：不接受再切換
+    if self.focus_switch_cooldown and self.focus_switch_cooldown > 0 then
+        self.focus_switch_cooldown = self.focus_switch_cooldown - 1
         return
     end
 
@@ -2252,6 +2274,7 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     -- [[ P2s SPIKE ]] 斜坡上改走「離屏 image 整體傾斜」路徑，讓整台機體像剛體一起轉
     if MechController.SLOPE_OFFSCREEN_TILT and terrain_angle ~= 0 then
         self:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_extra_height, terrain_angle, feet_imagetable, feet_current_frame)
+        self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
         return
     end
 
@@ -2309,6 +2332,57 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     -- 恢復旋轉
     if terrain_angle ~= 0 then
         gfx.popContext()
+    end
+
+    self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+end
+
+-- [[ A3/G1 ]] 機體上的焦點回饋：切到某零件的瞬間，該零件外框以
+-- 「與面板高亮框相同的效果」顯示——白 5px＋黑 3px 雙層框、放大彈回
+-- （expand 隨 focus_flash_timer 8→0 收攏），8 幀後消失。
+-- 外框四角套用機體傾斜（斜坡上跟著零件）。
+function MechController:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+    local timer = self.focus_flash_timer or 0
+    if timer <= 0 or not self.active_part_id then return end
+
+    local gfx = playdate.graphics
+    local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
+    for _, item in ipairs(eq) do
+        if item.id == self.active_part_id then
+            local cell = (mech_grid and mech_grid.cell_size) or 16
+            local slot_w = item.w or 1
+            -- 與面板高亮框相同的放大彈回
+            local expand = math.floor(timer / 2)
+            -- 零件格範圍四角（世界座標，含 expand）
+            local x1 = mech_x + (item.col - 1) * cell - expand
+            local y1 = mech_y + (((mech_grid and mech_grid.rows) or 2) - item.row) * cell - expand
+            local x2 = x1 + slot_w * cell + expand * 2
+            local y2 = y1 + cell + expand * 2
+            local corners = { {x1, y1}, {x2, y1}, {x2, y2}, {x1, y2} }
+            -- 套用機體傾斜 → 螢幕座標
+            local sx = {}
+            local sy = {}
+            for i, c in ipairs(corners) do
+                local wx, wy = self:applyMechTilt(c[1], c[2], nil, nil, mech_x, mech_y, mech_grid, entity_controller)
+                sx[i] = wx + (draw_x - mech_x)
+                sy[i] = wy
+            end
+            -- 與面板高亮框相同：白 5px 外框打底、黑 3px 內框在上
+            gfx.setColor(gfx.kColorWhite)
+            gfx.setLineWidth(5)
+            for i = 1, 4 do
+                local j = (i % 4) + 1
+                gfx.drawLine(sx[i], sy[i], sx[j], sy[j])
+            end
+            gfx.setColor(gfx.kColorBlack)
+            gfx.setLineWidth(3)
+            for i = 1, 4 do
+                local j = (i % 4) + 1
+                gfx.drawLine(sx[i], sy[i], sx[j], sy[j])
+            end
+            gfx.setLineWidth(1)
+            break
+        end
     end
 end
 
@@ -2641,17 +2715,19 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         for _, item in ipairs(eq) do
             if item.id == selected_part_id_for_highlight then
                 local slot_w = item.w or 1
-                local fx = ui_start_x + (item.col - 1) * ui_cell_size
+                -- [[ A3 ]] 切換瞬間高亮框放大彈回（focus_flash_timer 8→0）
+                local expand = math.floor((self.focus_flash_timer or 0) / 2)
+                local fx = ui_start_x + (item.col - 1) * ui_cell_size - expand
                 -- 根據零件的 row 決定 y 座標：row=2 在上方，row=1 在下方
-                local fy = ui_start_y + (ui_grid_rows - item.row) * ui_cell_size
-                local fw = slot_w * ui_cell_size
-                local fh = ui_cell_size
-                
+                local fy = ui_start_y + (ui_grid_rows - item.row) * ui_cell_size - expand
+                local fw = slot_w * ui_cell_size + expand * 2
+                local fh = ui_cell_size + expand * 2
+
                 -- 繪製白色外框（確保在任何背景上都可見）
                 gfx.setColor(gfx.kColorWhite)
                 gfx.setLineWidth(5)
                 gfx.drawRect(fx, fy, fw, fh)
-                
+
                 -- 繪製黑色內框
                 gfx.setColor(gfx.kColorBlack)
                 gfx.setLineWidth(3)
@@ -2672,9 +2748,8 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         elseif part_type_for_info == "CANON" then
             gfx.drawText("Angle: " .. math.floor(self.canon_angle), info_x, ui_start_y + 15)
         end
-    else
-        gfx.drawText("Select part (A)", info_x, ui_start_y)
     end
+    -- [[ A3 ]] 舊「Select part (A)」提示已移除：直接切換制下焦點永遠存在
 end
 
 -- 繪製零件介面圖（根據零件類型）
@@ -2733,22 +2808,12 @@ function MechController:drawPartUI(part_id, x, y, size)
             -- 檢查是否為當前激活的零件
             local is_active = (self.active_part_id == part_id)
             
-            -- 繪製 claw_control_v（左邊控制器，根據上下鍵狀態顯示不同 frame）
+            -- 繪製 claw_control_v（左邊控制器）
+            -- [[ A3 ]] 舊制此圖回應上下鍵（當時上下鍵控臂）；新制上下鍵=切換焦點、
+            -- crank 控臂，故固定顯示預設 frame，避免誤導
             local control_v_table = ui.claw_control_v
             if control_v_table then
-                local frame_index = 1  -- 預設 frame 0 (1-based indexing)
-                if is_active then
-                    -- 只有在激活狀態才檢查按鍵狀態
-                    local up_pressed = playdate.buttonIsPressed(playdate.kButtonUp)
-                    local down_pressed = playdate.buttonIsPressed(playdate.kButtonDown)
-                    if up_pressed then
-                        frame_index = 2  -- frame 1 (上鍵按下)
-                    elseif down_pressed then
-                        frame_index = 3  -- frame 2 (下鍵按下)
-                    end
-                end
-                
-                local control_img = control_v_table:getImage(frame_index)
+                local control_img = control_v_table:getImage(1)
                 if control_img then
                     -- 左對齊繪製
                     pcall(function() control_img:draw(x, y) end)
