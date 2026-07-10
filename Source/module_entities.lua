@@ -47,6 +47,7 @@ function MechController:init()
         claw_grip_angle = 0,  -- 爪子的開合角度（0=閉合，max=張開）
         claw_grip_angle_prev = 0,  -- 上一幀的爪子角度（用於檢測開合狀態變化）
         claw_grabbed_stone = nil,  -- 當前抓住的石頭
+        claw_is_closed = false,  -- 爪子開合狀態（A 鍵隨時切換，與是否抓到東西無關）
         claw_is_attacking = false,  -- 爪子是否在攻擊狀態
         claw_last_attack_angle = 0,  -- 上次攻擊時的角度
         
@@ -431,27 +432,33 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             self.claw_is_attacking = false
         end
 
-        -- A 鍵：抓/放切換（當幀執行）
+        -- A 鍵：隨時切換爪子開合（不依賴附近有無石頭，空揮也有回饋）
+        -- 閉合時若範圍內有石頭 → 順便抓住；張開時若抓著 → 放開/投擲
         if playdate.buttonJustPressed(playdate.kButtonA) then
-            if self.claw_grabbed_stone then
-                -- 放開/投擲（沿用原投擲計算：臂的角速度轉為切線速度）
-                local stone = self.claw_grabbed_stone
-                local arm_length = 30  -- 臂長約 30 像素
-                local arm_angular_velocity_rad = math.rad(arm_angular_velocity)
-                local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 4.0
-                local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult
-                local vy = 0  -- 初始 y 速度為 0，僅受重力影響
-                stone:launch(vx, vy)
-                self.claw_grabbed_stone = nil
-                print("LOG: Released stone with vx=" .. math.floor(vx) .. " (arm angular vel=" .. math.floor(arm_angular_velocity) .. ")")
+            if self.claw_is_closed then
+                -- 張開
+                self.claw_is_closed = false
+                if self.claw_grabbed_stone then
+                    -- 放開/投擲（沿用原投擲計算：臂的角速度轉為切線速度）
+                    local stone = self.claw_grabbed_stone
+                    local arm_length = 30  -- 臂長約 30 像素
+                    local arm_angular_velocity_rad = math.rad(arm_angular_velocity)
+                    local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 4.0
+                    local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult
+                    local vy = 0  -- 初始 y 速度為 0，僅受重力影響
+                    stone:launch(vx, vy)
+                    self.claw_grabbed_stone = nil
+                    print("LOG: Released stone with vx=" .. math.floor(vx) .. " (arm angular vel=" .. math.floor(arm_angular_velocity) .. ")")
+                end
             else
-                -- 嘗試抓取（由 state_mission 檢查爪尖範圍並執行 tryGrabStone）
+                -- 閉合；嘗試抓取（由 state_mission 檢查爪尖範圍並執行 tryGrabStone）
+                self.claw_is_closed = true
                 self.try_grab = true
             end
         end
 
-        -- 爪子開合：隨抓/放狀態自動演出（抓著=閉合，空手=張開）
-        local grip_target = self.claw_grabbed_stone and claw_angle_min or claw_angle_max
+        -- 爪子開合：隨開合狀態自動演出（閉合/張開由 A 鍵決定，與是否抓到無關）
+        local grip_target = self.claw_is_closed and claw_angle_min or claw_angle_max
         if self.claw_grip_angle < grip_target then
             self.claw_grip_angle = math.min(grip_target, self.claw_grip_angle + grip_anim_speed)
         elseif self.claw_grip_angle > grip_target then
