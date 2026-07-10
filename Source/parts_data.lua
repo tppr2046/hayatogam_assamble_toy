@@ -72,18 +72,17 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部
         -- UI 操作介面圖片
         ui_panel = "images/claw_panel.png",
-        operation_hint = "Crank to use Claw, up/down to use Crank",
-        -- CLAW 特有屬性
+        operation_hint = "Crank: Arm / A: Grab-Release",
+        -- CLAW 特有屬性（P3 改制：crank 控臂、A 抓/放、開合自動演出）
         arm_image = "images/claw_arm.png",  -- 臂的圖片
         upper_image = "images/claw_upper.png",  -- 上爪圖片
         lower_image = "images/claw_lower.png",  -- 下爪圖片
         arm_angle_min = -90,  -- 臂最小角度（度）
         arm_angle_max = 90,  -- 臂最大角度（度）
-        arm_rotate_speed = 2.0,  -- 上下鍵每幀旋轉速度（度）
         claw_angle_min = 0,  -- 爪子閉合角度（度）
         claw_angle_max = 45,  -- 爪子張開角度（度）
-        crank_degrees_per_rotation = 45,  -- crank 轉 1 圈產生的爪子角度變化
-        grab_threshold = 20,  -- 抓取/投擲的角度臨界值（度）
+        crank_degrees_per_rotation = 180,  -- crank 轉 1 圈產生的「臂」角度變化（A2 可調）
+        grip_anim_speed = 5,  -- 爪子開合自動演出速度（度/幀）
         throw_speed_mult = 5.0  -- 投擲物體的速度倍率
     },
 

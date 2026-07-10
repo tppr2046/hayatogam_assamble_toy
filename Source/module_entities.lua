@@ -8,6 +8,9 @@ local EnemyData = import "enemy_data" -- 確保載入敵人數據
 EntityController = {}
 MechController = {}  -- 新增：機甲控制器
 
+-- [[ P4 滑行 ]] 無輸入時移動速度的每幀衰減係數（0~1，越小停得越快；A2 可調）
+MechController.COAST_FRICTION = 0.85
+
 -- [[ ========================================== ]]
 -- [[  MechController 類別 (機甲零件控制) ]]
 -- [[ ========================================== ]]
@@ -40,6 +43,11 @@ function MechController:init()
         
         -- WHEEL 相關
         wheel_stick_offset = 0,  -- wheel_stick 的左右位移
+
+        -- [[ P4 滑行 ]] 水平移動速度（含滑行）。有輸入時=目標速度；
+        -- 無輸入或焦點切走時按 COAST_FRICTION 逐幀衰減，模擬慣性滑行
+        move_velocity = 0,
+        move_input_active = false,  -- 本幀是否有移動輸入
         
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
@@ -47,6 +55,7 @@ function MechController:init()
         claw_grip_angle = 0,  -- 爪子的開合角度（0=閉合，max=張開）
         claw_grip_angle_prev = 0,  -- 上一幀的爪子角度（用於檢測開合狀態變化）
         claw_grabbed_stone = nil,  -- 當前抓住的石頭
+        claw_is_closed = false,  -- 爪子開合狀態（A 鍵隨時切換，與是否抓到東西無關）
         claw_is_attacking = false,  -- 爪子是否在攻擊狀態
         claw_last_attack_angle = 0,  -- 上次攻擊時的角度
         
@@ -151,72 +160,57 @@ function MechController:init()
 end
 
 -- 處理零件選擇和激活
+-- [[ P3 切換模型重構（InputSpec 定稿 D1） ]]
+-- 廢除「方向鍵選格 → A 激活 → B 退出」三段式模態，
+-- 改為：上/下鍵直接切換焦點（循環所有已裝零件，當幀生效，無確認步驟）。
+-- 焦點 = active_part_id（永遠有值）；左右鍵/crank/A 由焦點零件使用。
+
+-- 取得固定順序的焦點循環清單：下排由左到右 → 上排由左到右
+function MechController:getFocusOrder(mech_stats)
+    local eq = (mech_stats and mech_stats.equipped_parts) or {}
+    local order = {}
+    for _, item in ipairs(eq) do
+        order[#order + 1] = item
+    end
+    table.sort(order, function(a, b)
+        if a.row ~= b.row then return a.row < b.row end  -- row 1（下排）優先
+        return a.col < b.col
+    end)
+    return order
+end
+
+-- 設定焦點（當幀生效）
+function MechController:setFocus(item)
+    self.active_part_id = item.id
+    self.selected_part_slot = {col = item.col, row = item.row}
+end
+
 function MechController:handleSelection(mech_stats)
-    local UI_GRID_COLS = 3
-    local UI_GRID_ROWS = 2
-    
-    if not self.active_part_id then
-        -- 未激活：方向鍵選擇
-        if playdate.buttonJustPressed(playdate.kButtonUp) then
-            -- 按上：從下排跳到上排的零件
-            local eq = mech_stats.equipped_parts or {}
-            for _, item in ipairs(eq) do
-                if item.row == 2 then  -- 找到上排的零件
-                    self.selected_part_slot = {col = item.col, row = item.row}
-                    break
-                end
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-            -- 按下：從上排跳到下排的零件
-            local eq = mech_stats.equipped_parts or {}
-            for _, item in ipairs(eq) do
-                if item.row == 1 then  -- 找到下排的零件
-                    self.selected_part_slot = {col = item.col, row = item.row}
-                    break
-                end
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
-            if not self.selected_part_slot then
-                -- 初始化：選中第一個零件
-                local eq = mech_stats.equipped_parts or {}
-                if #eq > 0 then
-                    self.selected_part_slot = {col = eq[1].col, row = eq[1].row}
-                end
-            else
-                self.selected_part_slot.col = math.max(1, self.selected_part_slot.col - 1)
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-            if not self.selected_part_slot then
-                -- 初始化：選中第一個零件
-                local eq = mech_stats.equipped_parts or {}
-                if #eq > 0 then
-                    self.selected_part_slot = {col = eq[1].col, row = eq[1].row}
-                end
-            else
-                self.selected_part_slot.col = math.min(UI_GRID_COLS, self.selected_part_slot.col + 1)
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonA) then
-            -- 激活選中的零件
-            if self.selected_part_slot and mech_stats then
-                local eq = mech_stats.equipped_parts or {}
-                for _, item in ipairs(eq) do
-                    local slot_w = item.w or 1
-                    local slot_h = item.h or 1
-                    if self.selected_part_slot.col >= item.col and self.selected_part_slot.col < item.col + slot_w and
-                       self.selected_part_slot.row >= item.row and self.selected_part_slot.row < item.row + slot_h then
-                        self.active_part_id = item.id
-                        break
-                    end
-                end
-            end
-        elseif playdate.buttonJustPressed(playdate.kButtonB) then
-            self.selected_part_slot = nil
+    local order = self:getFocusOrder(mech_stats)
+    if #order == 0 then return end
+
+    -- 找出目前焦點在循環中的位置
+    local idx = nil
+    for i, item in ipairs(order) do
+        if item.id == self.active_part_id then
+            idx = i
+            break
         end
-    else
-        -- 已激活：按 B 取消
-        if playdate.buttonJustPressed(playdate.kButtonB) then
-            self.active_part_id = nil
-        end
+    end
+
+    -- 開場（或焦點失效）：預設焦點 = 第一個下排零件（移動類），立即可操作
+    if not idx then
+        self:setFocus(order[1])
+        return
+    end
+
+    -- 上/下鍵直接切換（循環）
+    if playdate.buttonJustPressed(playdate.kButtonUp) then
+        idx = idx % #order + 1
+        self:setFocus(order[idx])
+    elseif playdate.buttonJustPressed(playdate.kButtonDown) then
+        idx = (idx - 2) % #order + 1
+        self:setFocus(order[idx])
     end
 end
 
@@ -260,23 +254,23 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     local dx = 0
     local MOVE_SPEED = 2.0
     
+    -- [[ P4 ]] 不再於無焦點時提前 return——滑行衰減（函式尾）任何情況都要執行
     local part_type = self:getActivePartType()
-    if not part_type then
-        return dx
-    end
-    
+
     if part_type == "WHEEL" then
         -- WHEEL：左右移動
         -- WHEEL 是 3x1 格，寬度 = 3*32 + 2*5 = 106 像素
         -- wheel_stick 可以從最左移動到最右，範圍大約是 panel 寬度的一半，減去 stick 寬度的一半
         -- 假設 panel 總寬 106，stick 寬 10，則最大偏移 = (106/2) - (10/2) = 48
         local max_stick_offset = 40
-        
+
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
-            dx = dx - MOVE_SPEED
+            self.move_velocity = -MOVE_SPEED  -- [[ P4 ]] 改寫入速度，滑行統一在函式尾處理
+            self.move_input_active = true
             self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 5)
         elseif playdate.buttonIsPressed(playdate.kButtonRight) then
-            dx = dx + MOVE_SPEED
+            self.move_velocity = MOVE_SPEED
+            self.move_input_active = true
             self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 5)
         else
             -- 放開後回到預設位置（加快回復速度）
@@ -377,15 +371,17 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         
         local moving = false
         local direction = 0
-        
+
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
-            dx = dx - move_speed
+            self.move_velocity = -move_speed  -- [[ P4 ]] 改寫入速度，滑行統一在函式尾處理
+            self.move_input_active = true
             moving = true
             direction = -1
             self.wheel_stick_offset = math.max(-max_stick_offset, self.wheel_stick_offset - 5)
         end
         if playdate.buttonIsPressed(playdate.kButtonRight) then
-            dx = dx + move_speed
+            self.move_velocity = move_speed
+            self.move_input_active = true
             moving = true
             direction = 1
             self.wheel_stick_offset = math.min(max_stick_offset, self.wheel_stick_offset + 5)
@@ -411,29 +407,29 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         end
         
     elseif part_type == "CLAW" then
-        -- CLAW：上下鍵控制臂旋轉 + crank 控制爪子開合
+        -- [[ P3 CLAW 改制（InputSpec 定稿 D4） ]]
+        -- crank = 臂上下轉動；A = 抓/放切換（當幀執行）；爪子開合隨抓/放自動演出
         local pdata = _G.PartsData and _G.PartsData["CLAW"]
         local arm_angle_min = pdata and pdata.arm_angle_min or -90
         local arm_angle_max = pdata and pdata.arm_angle_max or 90
-        local arm_rotate_speed = pdata and pdata.arm_rotate_speed or 2.0
         local claw_angle_min = pdata and pdata.claw_angle_min or 0
         local claw_angle_max = pdata and pdata.claw_angle_max or 45
-        local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 30
-        
-        -- 上下鍵控制臂的旋轉
-        if playdate.buttonIsPressed(playdate.kButtonUp) then
-            self.claw_arm_angle = self.claw_arm_angle + arm_rotate_speed
+        local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 180  -- crank 1 圈 = 臂轉幾度（A2 可調）
+        local grip_anim_speed = pdata and pdata.grip_anim_speed or 5  -- 開合自動演出速度（度/幀）
+
+        -- crank 控制臂的旋轉
+        local crankChange = playdate.getCrankChange()
+        if crankChange and math.abs(crankChange) > 0 then
+            local arm_delta = (crankChange / 360.0) * crank_ratio
+            self.claw_arm_angle = self.claw_arm_angle + arm_delta
             if self.claw_arm_angle > arm_angle_max then
                 self.claw_arm_angle = arm_angle_max
-            end
-        elseif playdate.buttonIsPressed(playdate.kButtonDown) then
-            self.claw_arm_angle = self.claw_arm_angle - arm_rotate_speed
-            if self.claw_arm_angle < arm_angle_min then
+            elseif self.claw_arm_angle < arm_angle_min then
                 self.claw_arm_angle = arm_angle_min
             end
         end
-        
-        -- 檢測爪臂快速轉動以觸發攻擊
+
+        -- 檢測爪臂快速轉動以觸發攻擊（沿用：crank 甩臂即攻擊）
         local arm_angular_velocity = self.claw_arm_angle - self.claw_arm_angle_prev
         if math.abs(arm_angular_velocity) >= 2 then  -- 轉動速度達到 2 度/幀即可攻擊
             if not self.claw_last_attack_angle or math.abs(self.claw_arm_angle - self.claw_last_attack_angle) >= 20 then
@@ -445,70 +441,57 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         else
             self.claw_is_attacking = false
         end
-        
-        -- Crank 控制爪子開合
-        local crankChange = playdate.getCrankChange()
-        if crankChange and math.abs(crankChange) > 0 then
-            local claw_delta = (crankChange / 360.0) * crank_ratio
-            self.claw_grip_angle = self.claw_grip_angle + claw_delta
-            
-            -- 限制爪子開合角度
-            if self.claw_grip_angle > claw_angle_max then
-                self.claw_grip_angle = claw_angle_max
-            elseif self.claw_grip_angle < claw_angle_min then
-                self.claw_grip_angle = claw_angle_min
-            end
-        end
-        
-        -- 自動抓取/投擲邏輯（基於爪子角度）
-        if entity_controller then
-            local grip_threshold = pdata and pdata.grab_threshold or 10  -- 從 parts_data 讀取抓取臨界值
-            
-            -- 檢測爪子從開啟變為關閉（抓取）
-            if self.claw_grip_angle_prev >= grip_threshold and self.claw_grip_angle < grip_threshold then
-                if not self.claw_grabbed_stone then
-                    -- 嘗試抓取
-                    self.try_grab = true
-                end
-            end
-            
-            -- 檢測爪子從關閉變為開啟（投擲）
-            if self.claw_grip_angle_prev < grip_threshold and self.claw_grip_angle >= grip_threshold then
+
+        -- A 鍵：隨時切換爪子開合（不依賴附近有無石頭，空揮也有回饋）
+        -- 閉合時若範圍內有石頭 → 順便抓住；張開時若抓著 → 放開/投擲
+        if playdate.buttonJustPressed(playdate.kButtonA) then
+            if self.claw_is_closed then
+                -- 張開
+                self.claw_is_closed = false
                 if self.claw_grabbed_stone then
-                    -- 投擲石頭
+                    -- 放開/投擲（沿用原投擲計算：臂的角速度轉為切線速度）
                     local stone = self.claw_grabbed_stone
-                    
-                    -- 計算臂旋轉產生的速度（角速度轉線速度）
                     local arm_length = 30  -- 臂長約 30 像素
-                    local arm_angular_velocity = self.claw_arm_angle - self.claw_arm_angle_prev  -- 度/幀
-                    local arm_angular_velocity_rad = math.rad(arm_angular_velocity)  -- 弧度/幀
-                    
-                    -- 從 parts_data 讀取投擲速度倍率
+                    local arm_angular_velocity_rad = math.rad(arm_angular_velocity)
                     local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 4.0
-                    
-                    -- 根據爪臂角度計算切線方向
-                    -- 爪臂角度為正時向前（右），為負時向後（左）
-                    local angle_rad = math.rad(self.claw_arm_angle)
-                    
-                    -- 切線速度 = 角速度 × 半徑 × 速度倍率，方向垂直於臂
-                    -- 如果角速度為正（逆時針），石頭向左飛；為負（順時針），石頭向右飛
-                    local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult  -- 加上速度倍率
+                    local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult
                     local vy = 0  -- 初始 y 速度為 0，僅受重力影響
-                    
                     stone:launch(vx, vy)
                     self.claw_grabbed_stone = nil
-                    print("LOG: Released stone with vx=" .. math.floor(vx) .. ", vy=" .. math.floor(vy) .. " (arm angular vel=" .. math.floor(arm_angular_velocity) .. "°)")
+                    print("LOG: Released stone with vx=" .. math.floor(vx) .. " (arm angular vel=" .. math.floor(arm_angular_velocity) .. ")")
                 end
+            else
+                -- 閉合；嘗試抓取（由 state_mission 檢查爪尖範圍並執行 tryGrabStone）
+                self.claw_is_closed = true
+                self.try_grab = true
             end
-            
-            -- 更新上一幀的爪子角度
-            self.claw_grip_angle_prev = self.claw_grip_angle
         end
-        
+
+        -- 爪子開合：隨開合狀態自動演出（閉合/張開由 A 鍵決定，與是否抓到無關）
+        local grip_target = self.claw_is_closed and claw_angle_min or claw_angle_max
+        if self.claw_grip_angle < grip_target then
+            self.claw_grip_angle = math.min(grip_target, self.claw_grip_angle + grip_anim_speed)
+        elseif self.claw_grip_angle > grip_target then
+            self.claw_grip_angle = math.max(grip_target, self.claw_grip_angle - grip_anim_speed)
+        end
+        self.claw_grip_angle_prev = self.claw_grip_angle
+
         -- 更新上一幀的臂角度
         self.claw_arm_angle_prev = self.claw_arm_angle
     end
-    
+
+    -- [[ P4 滑行（決策 #1）]] 無移動輸入（含焦點不在移動零件）時，
+    -- 速度按 COAST_FRICTION 逐幀衰減——切走焦點後機體滑行減速，而非急停
+    if not self.move_input_active then
+        self.move_velocity = self.move_velocity * MechController.COAST_FRICTION
+        if math.abs(self.move_velocity) < 0.05 then
+            self.move_velocity = 0
+            self.feet_is_moving = false  -- 滑行結束才停走路動畫
+        end
+    end
+    self.move_input_active = false
+    dx = dx + self.move_velocity
+
     return dx
 end
 
@@ -557,12 +540,8 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
         self.hit_shake_offset = 0
     end
     
-    -- 更新 FEET 跳躍物理（重力）
-    local part_type_for_gravity = self:getActivePartType()
-    if part_type_for_gravity == "FEET" and not self.is_grounded then
-        local gravity = (entity_controller and entity_controller.GRAVITY) or 0.5
-        self.velocity_y = self.velocity_y + gravity
-    end
+    -- [[ P4 ]] FEET 專屬重力已移除：跳躍初速由 state_mission 一次性取走
+    -- （velocity_y 歸零），之後統一由任務物理施加重力，與焦點無關
 end
 
 -- 更新跳躍的地面狀態（由 state_mission 調用）
@@ -588,22 +567,20 @@ function MechController:updateGrabbedStone(claw_tip_x, claw_tip_y)
 end
 
 -- 嘗試抓取石頭
+-- [[ P3 CLAW 改制 ]] 舊制要求「爪子閉合才能抓」（開合由玩家 crank 控制）；
+-- 新制 A 鍵當幀抓取，只看範圍——爪子閉合是抓到後的自動演出，不是前置條件。
 function MechController:tryGrabStone(claw_tip_x, claw_tip_y, stones, grab_range)
     grab_range = grab_range or 20
-    
-    -- 從 parts_data 獲取抓取臨界值
-    local pdata = _G.PartsData and _G.PartsData["CLAW"]
-    local grip_threshold = pdata and pdata.grab_threshold or 10
-    
+
     for _, stone in ipairs(stones or {}) do
         if not stone.is_grabbed and not stone.is_placed then
             local dx = (stone.x + stone.width/2) - claw_tip_x
             local dy = (stone.y + stone.height/2) - claw_tip_y
             local distance = math.sqrt(dx*dx + dy*dy)
-            if distance < grab_range and self.claw_grip_angle < grip_threshold then  -- 爪子必須閉合才能抓
+            if distance < grab_range then
                 stone.is_grabbed = true
                 self.claw_grabbed_stone = stone
-                print("LOG: Grabbed stone at distance=" .. math.floor(distance) .. ", grip_angle=" .. math.floor(self.claw_grip_angle))
+                print("LOG: Grabbed stone at distance=" .. math.floor(distance))
                 return true
             end
         end
