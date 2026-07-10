@@ -11,6 +11,9 @@ MechController = {}  -- 新增：機甲控制器
 -- [[ P4 滑行 ]] 無輸入時移動速度的每幀衰減係數（0~1，越小停得越快；A2 可調）
 MechController.COAST_FRICTION = 0.85
 
+-- [[ A3 ]] 切換焦點後的冷卻幀數（期間上/下鍵不再切換，避免連按視覺混亂；A2 可調）
+MechController.FOCUS_SWITCH_COOLDOWN = 8
+
 -- [[ ========================================== ]]
 -- [[  MechController 類別 (機甲零件控制) ]]
 -- [[ ========================================== ]]
@@ -50,7 +53,8 @@ function MechController:init()
         move_input_active = false,  -- 本幀是否有移動輸入
 
         -- [[ A3 ]] 焦點切換視覺回饋
-        focus_flash_timer = 0,  -- 切換當幀設為 8，逐幀遞減；期間高亮框放大/箭頭彈跳
+        focus_flash_timer = 0,  -- 切換當幀設為 8，逐幀遞減；期間面板高亮框放大、機體零件外框閃爍
+        focus_switch_cooldown = 0,  -- 切換後冷卻，>0 時上/下鍵不再切換
         
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
@@ -186,8 +190,10 @@ end
 function MechController:setFocus(item)
     self.active_part_id = item.id
     self.selected_part_slot = {col = item.col, row = item.row}
-    -- [[ A3 ]] 切換瞬間的視覺回饋：高亮框/焦點箭頭彈跳數幀
+    -- [[ A3 ]] 切換瞬間的視覺回饋：面板高亮框彈跳、機體零件外框閃爍
     self.focus_flash_timer = 8
+    -- [[ A3 ]] 切換冷卻：一小段時間內不能再切，避免連按視覺混亂
+    self.focus_switch_cooldown = MechController.FOCUS_SWITCH_COOLDOWN
 end
 
 function MechController:handleSelection(mech_stats)
@@ -211,6 +217,12 @@ function MechController:handleSelection(mech_stats)
     -- 開場（或焦點失效）：預設焦點 = 第一個下排零件（移動類），立即可操作
     if not idx then
         self:setFocus(order[1])
+        return
+    end
+
+    -- [[ A3 ]] 切換冷卻中：不接受再切換
+    if self.focus_switch_cooldown and self.focus_switch_cooldown > 0 then
+        self.focus_switch_cooldown = self.focus_switch_cooldown - 1
         return
     end
 
@@ -2262,7 +2274,7 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     -- [[ P2s SPIKE ]] 斜坡上改走「離屏 image 整體傾斜」路徑，讓整台機體像剛體一起轉
     if MechController.SLOPE_OFFSCREEN_TILT and terrain_angle ~= 0 then
         self:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_extra_height, terrain_angle, feet_imagetable, feet_current_frame)
-        self:drawFocusIndicator(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+        self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
         return
     end
 
@@ -2322,35 +2334,52 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
         gfx.popContext()
     end
 
-    self:drawFocusIndicator(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+    self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
 end
 
--- [[ A3/G1 ]] 機體上的焦點箭頭：焦點零件正上方的向下小三角。
--- 位置套用機體傾斜（applyMechTilt，斜坡上跟著零件走）；
--- 切換焦點的瞬間（focus_flash_timer > 0）箭頭向上彈跳，強化「一按就換」的回饋。
-function MechController:drawFocusIndicator(mech_x, mech_y, draw_x, mech_grid, entity_controller)
-    if not self.active_part_id then return end
+-- [[ A3/G1 ]] 機體上的焦點回饋：切到某零件的瞬間，該零件的外框
+-- 閃爍一下（focus_flash_timer 8 幀內兩閃）然後消失——平時畫面乾淨，
+-- 切換當下明確看到「換到誰」。外框四角套用機體傾斜（斜坡上跟著零件）。
+function MechController:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+    local timer = self.focus_flash_timer or 0
+    if timer <= 0 or not self.active_part_id then return end
+    -- 閃爍節奏：8→0 幀之間亮兩次（亮2幀、滅2幀交替）
+    if math.floor(timer / 2) % 2 == 0 then return end
+
     local gfx = playdate.graphics
     local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
     for _, item in ipairs(eq) do
         if item.id == self.active_part_id then
             local cell = (mech_grid and mech_grid.cell_size) or 16
             local slot_w = item.w or 1
-            -- 錨點：零件頂邊中央（世界座標），套用機體傾斜
-            local ax = mech_x + (item.col - 1 + slot_w / 2) * cell
-            local ay = mech_y + (((mech_grid and mech_grid.rows) or 2) - item.row) * cell
-            ax, ay = self:applyMechTilt(ax, ay, nil, nil, mech_x, mech_y, mech_grid, entity_controller)
-            -- 世界 → 螢幕（沿用 drawMech 的水平位移，含 camera 與受擊震動）
-            local sx = ax + (draw_x - mech_x)
-            local sy = ay
-            -- 切換瞬間向上彈跳
-            local bounce = self.focus_flash_timer or 0
-            local tip_y = sy - 4 - bounce
-            -- 白底黑箭頭（雙層三角形，任何背景上都清楚）
+            -- 零件格範圍四角（世界座標）
+            local x1 = mech_x + (item.col - 1) * cell
+            local y1 = mech_y + (((mech_grid and mech_grid.rows) or 2) - item.row) * cell
+            local x2 = x1 + slot_w * cell
+            local y2 = y1 + cell
+            local corners = { {x1, y1}, {x2, y1}, {x2, y2}, {x1, y2} }
+            -- 套用機體傾斜 → 螢幕座標
+            local sx = {}
+            local sy = {}
+            for i, c in ipairs(corners) do
+                local wx, wy = self:applyMechTilt(c[1], c[2], nil, nil, mech_x, mech_y, mech_grid, entity_controller)
+                sx[i] = wx + (draw_x - mech_x)
+                sy[i] = wy
+            end
+            -- 白粗線打底、黑線在上（任何背景都清楚）
             gfx.setColor(gfx.kColorWhite)
-            gfx.fillTriangle(sx - 6, tip_y - 9, sx + 6, tip_y - 9, sx, tip_y)
+            gfx.setLineWidth(4)
+            for i = 1, 4 do
+                local j = (i % 4) + 1
+                gfx.drawLine(sx[i], sy[i], sx[j], sy[j])
+            end
             gfx.setColor(gfx.kColorBlack)
-            gfx.fillTriangle(sx - 4, tip_y - 7, sx + 4, tip_y - 7, sx, tip_y - 2)
+            gfx.setLineWidth(2)
+            for i = 1, 4 do
+                local j = (i % 4) + 1
+                gfx.drawLine(sx[i], sy[i], sx[j], sy[j])
+            end
+            gfx.setLineWidth(1)
             break
         end
     end
