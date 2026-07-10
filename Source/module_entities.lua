@@ -2298,7 +2298,8 @@ function MechController:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_
     local mech_height = cell * 2 + (feet_extra_height or 0)
 
     -- 加 padding，避免砲管/爪臂等超出格子的部分被離屏圖邊緣裁掉
-    local pad = cell * 2
+    -- 最長伸距：爪臂 48px + 爪 16px = 64px（canon 砲管 64px 同級），再加 cell 餘裕
+    local pad = cell + 64
     local img_w = mech_width + pad * 2
     local img_h = mech_height + pad * 2
 
