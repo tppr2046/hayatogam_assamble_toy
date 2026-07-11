@@ -22,7 +22,7 @@
 
 | ID | 工作項目 | 交付物 | 依賴 | 規模 | 風險 | 備註 |
 |----|----------|--------|------|------|------|------|
-| P1 | `module_entities.lua` 拆解重構 | 依類別拆成 entity_mech / enemy / stone / projectile / controller 五檔,編譯+開機 log 通過 | — | M | 中 | 115KB 巨檔,是 P2 的前置整備;每拆一檔即編譯驗證 |
+| ~~P1~~ | ✅ **已完成(2026-07-11)** `module_entities.lua` 拆解 | 2904 行拆為六檔+聚合器:mech 邏輯/mech 繪製/enemy/stone/projectile/controller;呼叫端零修改([PR #10](https://github.com/tppr2046/hayatogam_assamble_toy/pull/10),實測無行為變化) | — | M | — | mech 邏輯=A2 主戰場、mech 繪製=G2 主戰場 |
 | ~~P2s~~ | ✅ **已完成(2026-07-10)** 斜坡重構方案 spike | 離屏 image 整體傾斜方案驗證通過:整體感/傾斜方向正確、爪臂裁切已修、無錯誤([PR #3](https://github.com/tppr2046/hayatogam_assamble_toy/pull/3) 已 merge) | — | S | — | **M0 達成**;開關 `MechController.SLOPE_OFFSCREEN_TILT` |
 | P2 | 斜坡繪製收尾(原 L 下修) | 清理舊逐零件旋轉路徑(或保留開關)、斜坡上離屏繪製的效能確認(穩定 30fps)、邊角案例(SWORD 作用中、FEET 動畫) | P2s✅、P1 | **S~M**(原 L) | 中(原高) | spike 已直接修好視覺,剩收尾;風險大幅下降 |
 | ~~P3~~ | ✅ **已完成(2026-07-10)** 切換模型重構 | 上/下鍵直接切焦點(廢模態)、開場即可操作、CLAW 改制(crank 控臂、A 隨時開合抓放)([PR #4](https://github.com/tppr2046/hayatogam_assamble_toy/pull/4) 已 merge,實測通過:「整體卡卡有改善」) | — | M | — | 順手修掉 tryGrabStone 舊制殘留 bug |
