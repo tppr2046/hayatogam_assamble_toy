@@ -435,11 +435,15 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
                     -- When all frames have been played, mark mine as dead
                     if self.explode_frame_index >= frame_count then
                         self.is_alive = false
+                        -- [[ FIX ]] 自爆的地雷 hp 仍為初始值，ELIMINATE 勝利判定
+                        -- 看 hp>0 會永遠不過關——自爆完成視同被消滅，hp 歸零
+                        self.hp = 0
                     end
                 end
             else
                 -- No animation table, mark as dead (animation timeout)
                 self.is_alive = false
+                self.hp = 0
             end
         end
     end

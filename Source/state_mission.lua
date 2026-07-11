@@ -691,7 +691,9 @@ function StateMission.update()
                 if entity_controller and entity_controller.enemies then
                     local all_defeated = true
                     for _, enemy in ipairs(entity_controller.enemies) do
-                        if enemy.hp and enemy.hp > 0 then
+                        -- 仍存活、或爆炸動畫還在播（is_exploding），都不算完成——
+                        -- 讓最後一個敵人的爆炸特效播完（約 1 秒）再進結算畫面
+                        if (enemy.hp and enemy.hp > 0) or enemy.is_exploding then
                             all_defeated = false
                             break
                         end
