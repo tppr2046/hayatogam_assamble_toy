@@ -54,10 +54,9 @@ local selected_part_index = 1
 local hq_mode = "EQUIP"         -- 固定 EQUIP（舊 UNEQUIP 分支為死碼，已移除）
 local is_placing_part = false
 
--- 放置失敗視覺/音效反饋
-local FLASH_DURATION = 12 -- 幀數
-local flash_timer = 0
-local flash_col = nil
+-- [[ P5 ]] 放置回饋：不可放的格子在放置模式中以 X.png 靜態標示
+-- （取代舊「按下才紅閃」——且舊紅閃的 y 映射用 (row-1)，實際畫錯排）
+local x_marker_img = nil  -- images/X.png，於 setup 載入
 local cursor_blink_tick = 0  -- 控制粗邊框的閃爍
 -- 播放標題/一般介面 BGM（循環）
 function StateHQ.setupBGM()
@@ -65,7 +64,6 @@ function StateHQ.setupBGM()
         _G.SoundManager.playTitleBGM()
     end
 end
-local flash_row = nil
 
 -- [[ P5 ]] READY 彈窗已移除：游標在 START 按 A 直接開始任務
 
@@ -363,6 +361,14 @@ function StateHQ.setup()
 
     -- 保存網格設定到全域，供任務關卡使用（用於合成機體影像）
     _G.GameState.mech_grid = { cell_size = GRID_CELL_SIZE, cols = GRID_COLS, rows = GRID_ROWS }
+
+    -- [[ P5 ]] 載入「不可放置」標示圖（16x16，放置模式蓋在不可放的格子上）
+    if not x_marker_img then
+        x_marker_img = gfx.image.new("images/X")
+        if not x_marker_img then
+            print("WARNING: failed to load images/X.png, fallback to text X")
+        end
+    end
 
     -- Preload part images into parts data (store as _img)
     if _G and _G.PartsData then
@@ -697,9 +703,10 @@ function StateHQ.update()
                             end
                         end
                     else
-                        flash_timer = FLASH_DURATION
-                        flash_col = cursor_col
-                        flash_row = cursor_row
+                        -- [[ P5 ]] 放置失敗不再紅閃：不可放的格子已在放置模式中以 X 靜態標示
+                        if _G.SoundManager and _G.SoundManager.playCancel then
+                            _G.SoundManager.playCancel()
+                        end
                     end
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
@@ -877,16 +884,6 @@ function StateHQ.update()
     end
     -- [[ P5 ]] 舊 hq_mode == "UNEQUIP" 分支為死碼（實際拆卸走 is_unequip_mode），已刪除
     
-    -- 更新 flash 計時器
-    if flash_timer and flash_timer > 0 then
-        flash_timer = flash_timer - 1
-        if flash_timer <= 0 then
-            flash_col = nil
-            flash_row = nil
-            flash_timer = 0
-        end
-    end
-
     -- 更新粗邊框閃爍計時
     cursor_blink_tick = (cursor_blink_tick + 1) % 20
 end
@@ -1031,21 +1028,27 @@ function StateHQ.draw()
         gfx.setLineWidth(1)
     end
     
-    -- 繪製閃爍（放置失敗）覆蓋層
-    if flash_timer and flash_timer > 0 and flash_col and flash_row then
-        local fx = GRID_START_X + (flash_col - 1) * GRID_CELL_SIZE
-        local fy = GRID_START_Y + (flash_row - 1) * GRID_CELL_SIZE
-        -- 閃爍效果：交替黑白填充
-        if (flash_timer % 4) < 2 then
-            gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(fx, fy, GRID_CELL_SIZE, GRID_CELL_SIZE)
-            gfx.setColor(gfx.kColorWhite)
-        else
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(fx, fy, GRID_CELL_SIZE, GRID_CELL_SIZE)
-            gfx.setColor(gfx.kColorBlack)
+    -- [[ P5 ]] 放置模式：不可作為放置位置的格子以 X 靜態標示（取代舊紅閃）。
+    -- 排限制 / 已佔用 / 槍口淨空全部走同一個 checkIfFits 判定，事前可見。
+    if is_placing_part and selected_category and selected_part_index then
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        local part_id = parts_list and parts_list[selected_part_index]
+        local pdata = _G.PartsData and _G.PartsData[part_id]
+        if pdata then
+            for r = 1, GRID_ROWS do
+                for c = 1, GRID_COLS do
+                    if not checkIfFits(pdata, c, r) then
+                        local cx = GRID_START_X + (c - 1) * GRID_CELL_SIZE
+                        local cy = GRID_START_Y + (GRID_ROWS - r) * GRID_CELL_SIZE
+                        if x_marker_img then
+                            pcall(function() x_marker_img:draw(cx, cy) end)
+                        else
+                            gfx.drawText("X", cx + math.floor(GRID_CELL_SIZE/2) - 3, cy + math.floor(GRID_CELL_SIZE/2) - 6)
+                        end
+                    end
+                end
+            end
         end
-        gfx.drawText("X", fx + math.floor(GRID_CELL_SIZE/2) - 3, fy + math.floor(GRID_CELL_SIZE/2) - 6)
     end
     
     -- 4. 繪製零件清單 (左側) - 分類顯示
