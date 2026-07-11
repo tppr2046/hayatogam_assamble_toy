@@ -83,7 +83,7 @@ local parts_data = {
         arm_angle_max = 90,  -- 臂最大角度（度）
         claw_angle_min = 0,  -- 爪子閉合角度（度）
         claw_angle_max = 45,  -- 爪子張開角度（度）
-        crank_degrees_per_rotation = 180,  -- crank 轉 1 圈產生的「臂」角度變化（A2 可調）
+        crank_degrees_per_rotation = 90,  -- crank 轉 1 圈產生的「臂」角度變化（A2 調校 180→90：全範圍 ±90° 需轉兩圈，強化手忙腳亂感）
         grip_anim_speed = 5,  -- 爪子開合自動演出速度（度/幀）
         throw_speed_mult = 5.0  -- 投擲物體的速度倍率
     },
