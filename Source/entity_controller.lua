@@ -466,7 +466,7 @@ function EntityController:checkWeaponCollision(weapon_parts)
         end
         
         for i, enemy in ipairs(self.enemies) do
-            if enemy.is_alive then
+            if enemy.is_alive and not enemy.is_exploding then
                 -- AABB 碰撞檢查
                 local collision = weapon.x < enemy.x + enemy.width and
                                  weapon.x + weapon.w > enemy.x and
@@ -491,9 +491,18 @@ function EntityController:checkWeaponCollision(weapon_parts)
                     enemy.hit_shake_timer = 0.3  -- 0.3 秒震動（增加持續時間）
                     enemy.hit_shake_offset_x = 0
                     
-                    if enemy.hp <= 0 then
-                        enemy.is_alive = false
-                        print("LOG: Enemy killed at x=" .. math.floor(enemy.x))
+                    if enemy.hp <= 0 and not enemy.is_exploding then
+                        -- [[ FIX ]] 近戰擊殺也要走爆炸狀態機（與砲彈擊殺一致），
+                        -- 而非立即 is_alive=false——否則沒有爆炸特效，
+                        -- 且最後一敵被近戰擊殺時會瞬間跳結算
+                        enemy.is_exploding = true
+                        enemy.exploding_frame_index = 0
+                        enemy.exploding_frame_timer = 0
+                        if _G.SoundManager and _G.SoundManager.playExplode then
+                            _G.SoundManager.playExplode()
+                        end
+                        self.enemy_explosion_triggered = true
+                        print("LOG: Enemy killed by melee weapon, starting explosion animation")
                     end
                 end
             end
