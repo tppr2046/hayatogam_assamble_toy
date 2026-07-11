@@ -111,6 +111,25 @@ local function checkIfFits(part_data, start_col, start_row)
         end
     end
 
+    -- [[ 槍口淨空 ]] 直射零件（requires_clear_right，如 GUN）的右側不可有零件，
+    -- 否則子彈會視覺上穿過自己的零件。雙向檢查：
+    -- 1) 放的是直射零件 → 其右側（同排）不可已有零件
+    if part_data.requires_clear_right then
+        for c = start_col + w, GRID_COLS do
+            if GRID_MAP[start_row] and GRID_MAP[start_row][c] then
+                return false, "Muzzle blocked"
+            end
+        end
+    end
+    -- 2) 放的是一般零件 → 不可落在已裝直射零件的右側（同排）
+    local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
+    for _, item in ipairs(eq) do
+        local ipdata = _G.PartsData and _G.PartsData[item.id]
+        if ipdata and ipdata.requires_clear_right and item.row == start_row and start_col > item.col then
+            return false, "Muzzle blocked"
+        end
+    end
+
     return true, ""
 end
 
