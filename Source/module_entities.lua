@@ -54,7 +54,8 @@ function MechController:init()
 
         -- [[ A3 ]] 焦點切換視覺回饋
         focus_flash_timer = 0,  -- 切換當幀設為 8，逐幀遞減；期間面板高亮框放大、機體零件外框閃爍
-        focus_switch_cooldown = 0,  -- 切換後冷卻，>0 時上/下鍵不再切換
+        focus_switch_cooldown = 0,  -- 切換後冷卻，>0 時切換鍵不再觸發
+        last_top_index = 1,  -- [[ 空間對應切換 ]] 上排最後使用的零件位置（回上排時還原）
         
         -- CLAW 相關
         claw_arm_angle = 0,  -- 臂的旋轉角度
@@ -172,18 +173,25 @@ end
 -- 改為：上/下鍵直接切換焦點（循環所有已裝零件，當幀生效，無確認步驟）。
 -- 焦點 = active_part_id（永遠有值）；左右鍵/crank/A 由焦點零件使用。
 
--- 取得固定順序的焦點循環清單：下排由左到右 → 上排由左到右
-function MechController:getFocusOrder(mech_stats)
+-- [[ 空間對應切換 ]] 取得「可操作」零件，分排、各自左→右排序。
+-- operable == false（如 GUN 全自動）的零件不進入切換循環。
+function MechController:getOperableParts(mech_stats)
     local eq = (mech_stats and mech_stats.equipped_parts) or {}
-    local order = {}
+    local bottom = {}
+    local top = {}
     for _, item in ipairs(eq) do
-        order[#order + 1] = item
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        if not (pdata and pdata.operable == false) then
+            if item.row == 1 then
+                bottom[#bottom + 1] = item
+            else
+                top[#top + 1] = item
+            end
+        end
     end
-    table.sort(order, function(a, b)
-        if a.row ~= b.row then return a.row < b.row end  -- row 1（下排）優先
-        return a.col < b.col
-    end)
-    return order
+    table.sort(bottom, function(a, b) return a.col < b.col end)
+    table.sort(top, function(a, b) return a.col < b.col end)
+    return bottom, top
 end
 
 -- 設定焦點（當幀生效）
@@ -196,29 +204,36 @@ function MechController:setFocus(item)
     self.focus_switch_cooldown = MechController.FOCUS_SWITCH_COOLDOWN
 end
 
+-- [[ 空間對應切換（2026-07-11 定案）]]
+-- 上/下鍵 = 換排（上=去上排、下=回下排；回上排時記住上次用的零件）；
+-- 左/右鍵 = 焦點在「上排」時於上排零件間橫移（方向與畫面排列一致）；
+--           焦點在下排時左右鍵歸移動零件使用（handlePartOperation），此處不碰。
+-- 無操作零件（operable=false，如 GUN）不可選中。
 function MechController:handleSelection(mech_stats)
     -- [[ A3 ]] 切換視覺回饋倒數（每幀一次）
     if self.focus_flash_timer and self.focus_flash_timer > 0 then
         self.focus_flash_timer = self.focus_flash_timer - 1
     end
 
-    local order = self:getFocusOrder(mech_stats)
-    if #order == 0 then return end
+    local bottom, top = self:getOperableParts(mech_stats)
+    if #bottom == 0 and #top == 0 then return end
 
-    -- 找出目前焦點在循環中的位置
-    local idx = nil
-    for i, item in ipairs(order) do
-        if item.id == self.active_part_id then
-            idx = i
-            break
+    -- 找出目前焦點的排與位置
+    local cur_row = nil
+    local cur_idx = nil
+    for i, item in ipairs(bottom) do
+        if item.id == self.active_part_id then cur_row = 1; cur_idx = i; break end
+    end
+    if not cur_row then
+        for i, item in ipairs(top) do
+            if item.id == self.active_part_id then cur_row = 2; cur_idx = i; break end
         end
     end
 
-    -- 開場（或焦點失效）：預設焦點 = 第一個下排零件（移動類），立即可操作
-    if not idx then
-        self:setFocus(order[1])
-        -- 開場自動鎖定不算「切換」：清掉 setFocus 附帶的冷卻，
-        -- 否則玩家開場第一下上/下鍵會落在冷卻窗內被吞掉（需按第二次才生效）
+    -- 開場（或焦點失效）：預設焦點 = 下排移動零件（沒有則上排第一個）
+    if not cur_row then
+        self:setFocus(bottom[1] or top[1])
+        -- 開場自動鎖定不算「切換」，不吃冷卻
         self.focus_switch_cooldown = 0
         return
     end
@@ -229,13 +244,31 @@ function MechController:handleSelection(mech_stats)
         return
     end
 
-    -- 上/下鍵直接切換（循環）
     if playdate.buttonJustPressed(playdate.kButtonUp) then
-        idx = idx % #order + 1
-        self:setFocus(order[idx])
+        -- 上：去上排（記住上次用的上排零件）
+        if cur_row == 1 and #top > 0 then
+            local ti = math.min(self.last_top_index or 1, #top)
+            self.last_top_index = ti
+            self:setFocus(top[ti])
+        end
     elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-        idx = (idx - 2) % #order + 1
-        self:setFocus(order[idx])
+        -- 下：回下排
+        if cur_row == 2 and #bottom > 0 then
+            self.last_top_index = cur_idx
+            self:setFocus(bottom[1])
+        end
+    elseif cur_row == 2 and playdate.buttonJustPressed(playdate.kButtonLeft) then
+        -- 左：上排內向左橫移
+        if cur_idx > 1 then
+            self.last_top_index = cur_idx - 1
+            self:setFocus(top[cur_idx - 1])
+        end
+    elseif cur_row == 2 and playdate.buttonJustPressed(playdate.kButtonRight) then
+        -- 右：上排內向右橫移
+        if cur_idx < #top then
+            self.last_top_index = cur_idx + 1
+            self:setFocus(top[cur_idx + 1])
+        end
     end
 end
 

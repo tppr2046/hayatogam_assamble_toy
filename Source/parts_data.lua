@@ -23,6 +23,7 @@ local parts_data = {
         -- UI 操作介面圖片
         ui_panel = "images/gun_panel.png",
         operation_hint = "Auto Fire",
+        operable = false,  -- 全自動、無操作 → 不進入焦點切換循環（無法選中）
         -- GUN 特有屬性：砲彈發射
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
         projectile_damage = 5,  -- 砲彈傷害
