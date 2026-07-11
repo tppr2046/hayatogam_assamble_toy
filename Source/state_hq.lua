@@ -286,6 +286,62 @@ function StateHQ.setup()
         end
     end
 
+    -- [[ BUGFIX ]] 把「已裝備零件」填回 GRID_MAP。
+    -- 舊版漏了這步：帶裝備回到 HQ 時格子看似全空，checkIfFits 放行，
+    -- 導致可以把第二顆輪子疊裝在同一排（實測出現 WHEEL1+WHEEL2 重疊）。
+    -- 同時自動清理既有存檔中已重疊的零件：後裝的移除、歸還零件清單、扣回數值。
+    do
+        local eq = _G.GameState.mech_stats.equipped_parts or {}
+        local removed_any = false
+        local i = 1
+        while i <= #eq do
+            local item = eq[i]
+            local w = item.w or 1
+            local h = item.h or 1
+            local overlap = false
+            for r = item.row, item.row + h - 1 do
+                for c = item.col, item.col + w - 1 do
+                    if GRID_MAP[r] and GRID_MAP[r][c] then overlap = true end
+                end
+            end
+            if overlap then
+                -- 移除重疊零件、扣回數值、歸還到零件清單
+                local pdata = _G.PartsData and _G.PartsData[item.id]
+                if pdata then
+                    if pdata.hp then
+                        _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) - pdata.hp
+                    end
+                    if pdata.weight then
+                        _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) - pdata.weight
+                    end
+                    local category = (pdata.placement_row == "TOP") and "TOP" or "BOTTOM"
+                    local list = _G.GameState.parts_by_category and _G.GameState.parts_by_category[category]
+                    if list then
+                        local in_list = false
+                        for _, pid in ipairs(list) do
+                            if pid == item.id then in_list = true break end
+                        end
+                        if not in_list then table.insert(list, item.id) end
+                    end
+                end
+                print("WARNING: removed overlapping equipped part: " .. tostring(item.id))
+                table.remove(eq, i)
+                removed_any = true
+            else
+                for r = item.row, item.row + h - 1 do
+                    for c = item.col, item.col + w - 1 do
+                        if GRID_MAP[r] then GRID_MAP[r][c] = item.id end
+                    end
+                end
+                i = i + 1
+            end
+        end
+        -- 清理過就存檔，修復既有存檔資料
+        if removed_any and _G.SaveManager and _G.SaveManager.saveCurrent then
+            _G.SaveManager.saveCurrent()
+        end
+    end
+
     -- 保存網格設定到全域，供任務關卡使用（用於合成機體影像）
     _G.GameState.mech_grid = { cell_size = GRID_CELL_SIZE, cols = GRID_COLS, rows = GRID_ROWS }
 
