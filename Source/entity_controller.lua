@@ -232,6 +232,13 @@ end
 function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height, mech_stats)
     local mech_damage_taken = 0
 
+    -- [[ 放置成功特效 ]] 倒數計時（特效由 draw 繪製，播完才允許過關）
+    for _, target in ipairs(self.delivery_targets or {}) do
+        if target.success_effect_timer and target.success_effect_timer > 0 then
+            target.success_effect_timer = target.success_effect_timer - dt
+        end
+    end
+
     -- 1. 更新敵人 (讓敵人移動和射擊)
     for i, enemy in ipairs(self.enemies) do
         if enemy.is_alive then
@@ -590,6 +597,23 @@ function EntityController:draw(camera_x)
     
     -- 繪製目標物件
     for _, target in ipairs(self.delivery_targets) do
+        -- [[ 放置成功特效 ]] 石頭成功放上目標：從目標中心向外擴散的雙圓環（約 0.8 秒）
+        if target.success_effect_timer and target.success_effect_timer > 0 then
+            local duration = target.success_effect_duration or 0.8
+            local p = 1 - (target.success_effect_timer / duration)  -- 0→1 進度
+            local cx = target.x - camera_x + target.width / 2
+            local cy = target.y + target.height / 2
+            if cx >= -40 and cx <= 440 then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(2)
+                gfx.drawCircleAtPoint(cx, cy, 6 + p * 24)
+                if p > 0.3 then
+                    gfx.drawCircleAtPoint(cx, cy, (p - 0.3) * 24)
+                end
+                gfx.setLineWidth(1)
+            end
+        end
+
         if not target.is_completed then  -- 只繪製未完成的目標
             local screen_x = target.x - camera_x
             if screen_x >= -target.width and screen_x <= 400 then

@@ -734,6 +734,11 @@ function StateMission.update()
                                             if _G.SoundManager and _G.SoundManager.playTarget then
                                                 _G.SoundManager.playTarget()
                                             end
+
+                                            -- [[ 放置成功特效 ]] 觸發擴散圓環特效（繪製在 entity_controller:draw；
+                                            -- 特效播完才允許過關，見下方勝利判定）
+                                            target.success_effect_duration = 0.8
+                                            target.success_effect_timer = target.success_effect_duration
                                             
                                             -- 釋放爪子的引用
                                             if mech_controller and mech_controller.claw_grabbed_stone == stone then
@@ -762,8 +767,17 @@ function StateMission.update()
                             break
                         end
                     end
-                    
-                    if all_placed and #entity_controller.stones > 0 then
+
+                    -- [[ 放置成功特效 ]] 特效還在播就先不過關（與敵人爆炸同一模式）
+                    local effect_playing = false
+                    for _, target in ipairs(entity_controller.delivery_targets or {}) do
+                        if target.success_effect_timer and target.success_effect_timer > 0 then
+                            effect_playing = true
+                            break
+                        end
+                    end
+
+                    if all_placed and not effect_playing and #entity_controller.stones > 0 then
                         print("MISSION SUCCESS: All stones delivered to targets!")
                         setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
                         return
