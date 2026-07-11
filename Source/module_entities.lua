@@ -217,6 +217,9 @@ function MechController:handleSelection(mech_stats)
     -- 開場（或焦點失效）：預設焦點 = 第一個下排零件（移動類），立即可操作
     if not idx then
         self:setFocus(order[1])
+        -- 開場自動鎖定不算「切換」：清掉 setFocus 附帶的冷卻，
+        -- 否則玩家開場第一下上/下鍵會落在冷卻窗內被吞掉（需按第二次才生效）
+        self.focus_switch_cooldown = 0
         return
     end
 
