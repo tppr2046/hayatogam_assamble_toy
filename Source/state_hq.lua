@@ -35,25 +35,33 @@ local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
 --   單位：像素，畫面 400x240。box = {x, y, w, h}。
 -- ============================================================
 local HQ_LAYOUT = {
-    mission = { x = 4,   y = 2,   w = 392, h = 40 },   -- 頂部：任務面板（標題列＋目標）
-    data    = { x = 6,   y = 86,  w = 104, h = 52 },   -- 左上：DATA（HP / WEIGHT）
-    panel   = { x = 6,   y = 150, w = 104, h = 78 },   -- 左下：PANEL（操作面板預覽）
-    mech_x  = 216,   -- 機體組裝格左上 x（畫面中右）
-    mech_y  = 92,    -- 機體組裝格左上 y
-    menu_x  = 176,   -- 底部：零件選單 / 零件清單 x
-    menu_y  = 168,   -- 底部：零件選單 / 零件清單 y
-    start_y = 210,   -- START 鈕 y（底部；x 依文字寬右對齊）
+    mission  = { x = 4,   y = 2,   w = 392, h = 40 },   -- 頂部：任務面板（標題列＋目標）
+    data     = { x = 6,   y = 48,  w = 104, h = 46 },   -- 左上：DATA（HP / WEIGHT）
+    panel    = { x = 6,   y = 100, w = 108, h = 92 },   -- 左下：PANEL（放大以容納 3x2 操作面板）
+    -- 機體：以離屏圖 2 倍放大置中顯示（見 draw 的機甲區）
+    mech_scale = 2,      -- 機體放大倍率
+    mech_cx  = 250,      -- 放大後機體「組裝格中心」落點 x（畫面中右）
+    mech_cy  = 96,       -- 放大後機體「組裝格中心」落點 y
+    menu_x   = 176,      -- 底部：零件選單 / 零件清單 x
+    menu_y   = 170,      -- 底部：零件選單 / 零件清單 y
+    start_size = 46,     -- START 正方形邊長
+    start_x  = 344,      -- START 鈕左上 x
+    start_y  = 176,      -- START 鈕左上 y
 }
 
-local GRID_START_X = HQ_LAYOUT.mech_x
-local GRID_START_Y = HQ_LAYOUT.mech_y
+-- [[ G2 ]] 機甲離屏畫布：機甲先以原生像素畫進此畫布，再 drawScaled 放大置中。
+-- GRID_START_X/Y 改為「畫布內的組裝格原點」（四周留邊給砲管/腳/預覽溢出）。
+local MECH_CANVAS_W = 170
+local MECH_CANVAS_H = 110
+local GRID_START_X = 40
+local GRID_START_Y = 52
 
 -- UI 控制介面相關（操作面板繪於 PANEL 盒內）
 local UI_GRID_COLS = 3
 local UI_GRID_ROWS = 2
 local UI_CELL_SIZE = 32
-local UI_START_X = HQ_LAYOUT.panel.x + 4
-local UI_START_Y = HQ_LAYOUT.panel.y + 14
+local UI_START_X = HQ_LAYOUT.panel.x + 6
+local UI_START_Y = HQ_LAYOUT.panel.y + 16
 
 -- [[ G2 ]] 反白選取：選中＝黑底白字（穩定不閃爍），未選中＝純黑字。
 -- 取代舊的「> text <」＋閃爍樣式。
@@ -982,6 +990,14 @@ function StateHQ.draw()
         drawTitledBox(HQ_LAYOUT.panel, "PANEL")
     end
 
+    -- [[ G2 機甲 2 倍放大 ]] 機甲（格線／零件／爪臂／游標）先以原生像素畫進離屏
+    -- 畫布，本區段結束後再 drawScaled 置中放大。期間座標皆為畫布內座標。
+    local mech_canvas = gfx.image.new(MECH_CANVAS_W, MECH_CANVAS_H)
+    gfx.pushContext(mech_canvas)
+    gfx.clear(gfx.kColorClear)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.setFont(font)
+
     -- 1. 繪製組裝網格背景
 
     -- 2. 繪製機甲網格邊框 (作為機甲本體的佔位符)
@@ -1136,50 +1152,8 @@ function StateHQ.draw()
         end
     end
     
-    -- 4. [[ G2 ]] 零件選單 / 零件清單（底部中央）
-    local list_x = HQ_LAYOUT.menu_x
-    local list_y = HQ_LAYOUT.menu_y
-    local line_height = 15
+    -- （4. 零件選單／清單已移至機甲離屏區之後，避免被畫進畫布）
 
-    if not selected_category and not is_unequip_mode then
-        -- [[ P5 ]] 主選單：TOP PARTS / BOTTOM PARTS / REMOVE PART（SHOP 原型隱藏）
-        -- [[ G2 ]] 選中＝反白（黑底白字），不再用「> <」＋閃爍
-        for i = 1, #MAIN_MENU do
-            local selected = (i == main_menu_index and not cursor_on_start)
-            drawSelectableText(MAIN_MENU[i], list_x, list_y + (i - 1) * line_height, selected)
-        end
-    elseif selected_category then
-        -- 顯示選中分類的零件
-            gfx.drawText(selected_category .. " PARTS:", list_x, list_y - 15)
-            local parts_list = _G.GameState.parts_by_category[selected_category]
-            for i, part_id in ipairs(parts_list) do
-                -- 檢查是否已安裝
-                local is_equipped = false
-                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                for _, item in ipairs(eq) do
-                    if item.id == part_id then
-                        is_equipped = true
-                        break
-                    end
-                end
-                
-                local text = part_id
-                local selected = (i == selected_part_index and not cursor_on_start and not is_unequip_mode)
-                local text_x = list_x
-                local text_y = list_y + (i - 1) * line_height
-                -- [[ G2 ]] 選中＝反白（黑底白字）
-                drawSelectableText(text, text_x, text_y, selected)
-
-                -- 如果已安裝，繪製刪除線（反白時用白線，否則黑線）
-                if is_equipped then
-                    local text_width = gfx.getTextSize(text)
-                    gfx.setColor(selected and gfx.kColorWhite or gfx.kColorBlack)
-                    gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
-                    gfx.setColor(gfx.kColorBlack)
-                end
-            end
-    end
-    
     -- 5. [[ G2 ]] DATA 盒內容座標（HP / WEIGHT），盒本身於畫面開頭已鋪
     local detail_x = HQ_LAYOUT.data.x + 5
     local detail_y = HQ_LAYOUT.data.y + 15
@@ -1443,21 +1417,67 @@ function StateHQ.draw()
         end
     end
     
+    -- [[ G2 機甲 2 倍放大 ]] 關閉離屏、放大置中畫到畫面。
+    -- 定位：讓「組裝格中心」（畫布內座標）放大後落在 HQ_LAYOUT.mech_cx/cy。
+    gfx.popContext()
+    do
+        local scale = HQ_LAYOUT.mech_scale or 2
+        local grid_cx_local = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE) / 2
+        local grid_cy_local = GRID_START_Y + (GRID_ROWS * GRID_CELL_SIZE) / 2
+        local draw_x = HQ_LAYOUT.mech_cx - grid_cx_local * scale
+        local draw_y = HQ_LAYOUT.mech_cy - grid_cy_local * scale
+        pcall(function() mech_canvas:drawScaled(draw_x, draw_y, scale) end)
+    end
+
+    -- 4. [[ G2 ]] 零件選單 / 零件清單（底部中央；移至機甲離屏區之後繪製）
+    local list_x = HQ_LAYOUT.menu_x
+    local list_y = HQ_LAYOUT.menu_y
+    local line_height = 15
+    if not selected_category and not is_unequip_mode then
+        -- 主選單：反白選取
+        for i = 1, #MAIN_MENU do
+            local selected = (i == main_menu_index and not cursor_on_start)
+            drawSelectableText(MAIN_MENU[i], list_x, list_y + (i - 1) * line_height, selected)
+        end
+    elseif selected_category then
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText(selected_category .. " PARTS:", list_x, list_y - 15)
+        local parts_list = _G.GameState.parts_by_category[selected_category]
+        for i, part_id in ipairs(parts_list) do
+            local is_equipped = false
+            local eq3 = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq3) do
+                if item.id == part_id then is_equipped = true break end
+            end
+            local selected = (i == selected_part_index and not cursor_on_start and not is_unequip_mode)
+            local text_x = list_x
+            local text_y = list_y + (i - 1) * line_height
+            drawSelectableText(part_id, text_x, text_y, selected)
+            if is_equipped then
+                local text_width = gfx.getTextSize(part_id)
+                gfx.setColor(selected and gfx.kColorWhite or gfx.kColorBlack)
+                gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
+                gfx.setColor(gfx.kColorBlack)
+            end
+        end
+    end
+
     -- 6. [[ G2 ]] 機甲狀態（DATA 盒內；標題由 drawTitledBox 畫）
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
     gfx.setColor(gfx.kColorBlack)
     gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y)
     gfx.drawText("WEIGHT: " .. stats.total_weight, detail_x, detail_y + 16)
     
-    -- [[ P5 ]] 7. 固定右下角 START 鈕（取代 READY/BACK 選項與 READY 彈窗）
+    -- [[ P5/G2 ]] 7. START 正方形鈕（依 mockup；位置/邊長由 HQ_LAYOUT 控制）
     do
         local start_text = "START"
         local tw, th = gfx.getTextSize(start_text)
-        local pad_x, pad_y = 8, 4
-        local box_w = tw + pad_x * 2
-        local box_h = th + pad_y * 2
-        local box_x = SCREEN_WIDTH - box_w - 8
-        local box_y = HQ_LAYOUT.start_y  -- [[ G2 ]] 底部（版型表控制）
+        local box_w = HQ_LAYOUT.start_size
+        local box_h = HQ_LAYOUT.start_size
+        local box_x = HQ_LAYOUT.start_x
+        local box_y = HQ_LAYOUT.start_y
+        local text_x = box_x + math.floor((box_w - tw) / 2)  -- 文字置中
+        local text_y = box_y + math.floor((box_h - th) / 2)
 
         -- [[ 零件限制 ]] 缺必要零件：START 上方顯示 NEED 提示，按下會被擋
         local missing = getMissingRequiredParts()
@@ -1465,7 +1485,7 @@ function StateHQ.draw()
             local need_text = "NEED: " .. table.concat(missing, ",")
             local ntw = gfx.getTextSize(need_text)
             gfx.setColor(gfx.kColorBlack)
-            gfx.drawText(need_text, SCREEN_WIDTH - ntw - 8, box_y - 16)
+            gfx.drawText(need_text, box_x + box_w - ntw, box_y - 14)
         end
 
         if cursor_on_start then
@@ -1473,7 +1493,7 @@ function StateHQ.draw()
             gfx.setColor(gfx.kColorBlack)
             gfx.fillRect(box_x, box_y, box_w, box_h)
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-            gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
+            gfx.drawText(start_text, text_x, text_y)
             gfx.setImageDrawMode(gfx.kDrawModeCopy)
         else
             -- 未選中：白底黑字黑框
@@ -1481,7 +1501,7 @@ function StateHQ.draw()
             gfx.fillRect(box_x, box_y, box_w, box_h)
             gfx.setColor(gfx.kColorBlack)
             gfx.drawRect(box_x, box_y, box_w, box_h)
-            gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
+            gfx.drawText(start_text, text_x, text_y)
         end
     end
 
