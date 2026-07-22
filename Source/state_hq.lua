@@ -55,6 +55,22 @@ local UI_CELL_SIZE = 32
 local UI_START_X = HQ_LAYOUT.panel.x + 4
 local UI_START_Y = HQ_LAYOUT.panel.y + 14
 
+-- [[ G2 ]] 反白選取：選中＝黑底白字（穩定不閃爍），未選中＝純黑字。
+-- 取代舊的「> text <」＋閃爍樣式。
+local function drawSelectableText(text, x, y, selected)
+    if selected then
+        local tw, th = gfx.getTextSize(text)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(x - 2, y - 1, tw + 4, th + 2)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(text, x, y)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    else
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText(text, x, y)
+    end
+end
+
 -- [[ G2 ]] 繪製「帶黑底標題列的白底框線盒」（DATA / PANEL / MISSION 共用）
 local function drawTitledBox(box, title)
     gfx.setColor(gfx.kColorWhite)
@@ -1127,16 +1143,10 @@ function StateHQ.draw()
 
     if not selected_category and not is_unequip_mode then
         -- [[ P5 ]] 主選單：TOP PARTS / BOTTOM PARTS / REMOVE PART（SHOP 原型隱藏）
+        -- [[ G2 ]] 選中＝反白（黑底白字），不再用「> <」＋閃爍
         for i = 1, #MAIN_MENU do
-            local text = MAIN_MENU[i]
-            if i == main_menu_index and not cursor_on_start then
-                if blink_on then
-                    text = "> " .. text .. " <"
-                else
-                    text = "  " .. text .. "  "
-                end
-            end
-            gfx.drawText(text, list_x, list_y + (i - 1) * line_height)
+            local selected = (i == main_menu_index and not cursor_on_start)
+            drawSelectableText(MAIN_MENU[i], list_x, list_y + (i - 1) * line_height, selected)
         end
     elseif selected_category then
         -- 顯示選中分類的零件
@@ -1154,23 +1164,18 @@ function StateHQ.draw()
                 end
                 
                 local text = part_id
-                if i == selected_part_index and not cursor_on_start and not is_unequip_mode then
-                    if blink_on then
-                        text = "> " .. text .. " <"
-                    else
-                        text = "  " .. text .. "  "
-                    end
-                end
-                
+                local selected = (i == selected_part_index and not cursor_on_start and not is_unequip_mode)
                 local text_x = list_x
                 local text_y = list_y + (i - 1) * line_height
-                gfx.drawText(text, text_x, text_y)
-                
-                -- 如果已安裝，繪製刪除線
+                -- [[ G2 ]] 選中＝反白（黑底白字）
+                drawSelectableText(text, text_x, text_y, selected)
+
+                -- 如果已安裝，繪製刪除線（反白時用白線，否則黑線）
                 if is_equipped then
                     local text_width = gfx.getTextSize(text)
-                    gfx.setColor(gfx.kColorBlack)
+                    gfx.setColor(selected and gfx.kColorWhite or gfx.kColorBlack)
                     gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
+                    gfx.setColor(gfx.kColorBlack)
                 end
             end
     end
@@ -1464,18 +1469,12 @@ function StateHQ.draw()
         end
 
         if cursor_on_start then
-            -- 選中：黑底白字 + 閃爍粗框
+            -- [[ G2 ]] 選中：反白（黑底白字，穩定不閃爍）
             gfx.setColor(gfx.kColorBlack)
             gfx.fillRect(box_x, box_y, box_w, box_h)
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
             gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
             gfx.setImageDrawMode(gfx.kDrawModeCopy)
-            if blink_on then
-                gfx.setColor(gfx.kColorBlack)
-                gfx.setLineWidth(2)
-                gfx.drawRect(box_x - 3, box_y - 3, box_w + 6, box_h + 6)
-                gfx.setLineWidth(1)
-            end
         else
             -- 未選中：白底黑字黑框
             gfx.setColor(gfx.kColorWhite)
