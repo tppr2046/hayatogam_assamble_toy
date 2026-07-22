@@ -28,15 +28,44 @@ local GRID_COLS = 3
 local GRID_ROWS = 2       
 local GRID_CELL_SIZE = 16 
 local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
-local GRID_START_X = (SCREEN_WIDTH - GRID_WIDTH) / 2  -- 置中
-local GRID_START_Y = 60  -- 往下移動，為預覽留出空間
 
--- UI 控制介面相關
+-- ============================================================
+-- [[ G2 版型 ]] 組裝介面版型（依使用者 mockup：帶標題列的框線盒）。
+-- 要移動任何區塊，只改這張表的座標即可，重新編譯就生效。
+--   單位：像素，畫面 400x240。box = {x, y, w, h}。
+-- ============================================================
+local HQ_LAYOUT = {
+    mission = { x = 4,   y = 2,   w = 392, h = 40 },   -- 頂部：任務面板（標題列＋目標）
+    data    = { x = 6,   y = 86,  w = 104, h = 52 },   -- 左上：DATA（HP / WEIGHT）
+    panel   = { x = 6,   y = 150, w = 104, h = 78 },   -- 左下：PANEL（操作面板預覽）
+    mech_x  = 216,   -- 機體組裝格左上 x（畫面中右）
+    mech_y  = 92,    -- 機體組裝格左上 y
+    menu_x  = 176,   -- 底部：零件選單 / 零件清單 x
+    menu_y  = 168,   -- 底部：零件選單 / 零件清單 y
+    start_y = 210,   -- START 鈕 y（底部；x 依文字寬右對齊）
+}
+
+local GRID_START_X = HQ_LAYOUT.mech_x
+local GRID_START_Y = HQ_LAYOUT.mech_y
+
+-- UI 控制介面相關（操作面板繪於 PANEL 盒內）
 local UI_GRID_COLS = 3
 local UI_GRID_ROWS = 2
 local UI_CELL_SIZE = 32
-local UI_START_X = 10
-local UI_START_Y = GAME_HEIGHT + 5   
+local UI_START_X = HQ_LAYOUT.panel.x + 4
+local UI_START_Y = HQ_LAYOUT.panel.y + 14
+
+-- [[ G2 ]] 繪製「帶黑底標題列的白底框線盒」（DATA / PANEL / MISSION 共用）
+local function drawTitledBox(box, title)
+    gfx.setColor(gfx.kColorWhite)
+    gfx.fillRect(box.x, box.y, box.w, box.h)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawRect(box.x, box.y, box.w, box.h)
+    gfx.fillRect(box.x, box.y, box.w, 13)  -- 標題列
+    gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+    gfx.drawText(title, box.x + 3, box.y + 1)
+    gfx.setImageDrawMode(gfx.kDrawModeCopy)
+end
 
 local GRID_MAP = {}       
 local cursor_col = 1      
@@ -930,9 +959,15 @@ function StateHQ.draw()
     gfx.setFont(font) 
     -- 使用時間為基準的閃爍，避免某些情況下 tick 未更新導致不閃爍
     local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
-    
+
+    -- [[ G2 版型 ]] 先鋪三個框線盒（內容於後續各區段繪於盒內）
+    if not is_unequip_mode then
+        drawTitledBox(HQ_LAYOUT.data, "DATA")
+        drawTitledBox(HQ_LAYOUT.panel, "PANEL")
+    end
+
     -- 1. 繪製組裝網格背景
-    
+
     -- 2. 繪製機甲網格邊框 (作為機甲本體的佔位符)
     local mech_image_x = GRID_START_X
     local mech_image_y = GRID_START_Y
@@ -1085,11 +1120,11 @@ function StateHQ.draw()
         end
     end
     
-    -- 4. 繪製零件清單 (左側) - 分類顯示
-    gfx.drawText("PARTS:", 5, 20)
-    local list_y = 50
+    -- 4. [[ G2 ]] 零件選單 / 零件清單（底部中央）
+    local list_x = HQ_LAYOUT.menu_x
+    local list_y = HQ_LAYOUT.menu_y
     local line_height = 15
-    
+
     if not selected_category and not is_unequip_mode then
         -- [[ P5 ]] 主選單：TOP PARTS / BOTTOM PARTS / REMOVE PART（SHOP 原型隱藏）
         for i = 1, #MAIN_MENU do
@@ -1101,11 +1136,11 @@ function StateHQ.draw()
                     text = "  " .. text .. "  "
                 end
             end
-            gfx.drawText(text, 10, list_y + (i - 1) * line_height)
+            gfx.drawText(text, list_x, list_y + (i - 1) * line_height)
         end
     elseif selected_category then
         -- 顯示選中分類的零件
-            gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
+            gfx.drawText(selected_category .. " PARTS:", list_x, list_y - 15)
             local parts_list = _G.GameState.parts_by_category[selected_category]
             for i, part_id in ipairs(parts_list) do
                 -- 檢查是否已安裝
@@ -1127,7 +1162,7 @@ function StateHQ.draw()
                     end
                 end
                 
-                local text_x = 10
+                local text_x = list_x
                 local text_y = list_y + (i - 1) * line_height
                 gfx.drawText(text, text_x, text_y)
                 
@@ -1140,9 +1175,9 @@ function StateHQ.draw()
             end
     end
     
-    -- 5. 繪製零件詳細資訊 / 狀態 (右側)
-    local detail_x = 250
-    local detail_y = 30
+    -- 5. [[ G2 ]] DATA 盒內容座標（HP / WEIGHT），盒本身於畫面開頭已鋪
+    local detail_x = HQ_LAYOUT.data.x + 5
+    local detail_y = HQ_LAYOUT.data.y + 15
     
     -- 繪製格子格線（上下兩排都顯示）
     for r = 1, GRID_ROWS do
@@ -1403,11 +1438,11 @@ function StateHQ.draw()
         end
     end
     
-    -- 6. 繪製機甲狀態
-    gfx.drawText("MECH STATS:", detail_x, detail_y)
+    -- 6. [[ G2 ]] 機甲狀態（DATA 盒內；標題由 drawTitledBox 畫）
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
-    gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y + 20)
-    gfx.drawText("Weight: " .. stats.total_weight, detail_x, detail_y + 40)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y)
+    gfx.drawText("WEIGHT: " .. stats.total_weight, detail_x, detail_y + 16)
     
     -- [[ P5 ]] 7. 固定右下角 START 鈕（取代 READY/BACK 選項與 READY 彈窗）
     do
@@ -1417,7 +1452,7 @@ function StateHQ.draw()
         local box_w = tw + pad_x * 2
         local box_h = th + pad_y * 2
         local box_x = SCREEN_WIDTH - box_w - 8
-        local box_y = GAME_HEIGHT - box_h - 22
+        local box_y = HQ_LAYOUT.start_y  -- [[ G2 ]] 底部（版型表控制）
 
         -- [[ 零件限制 ]] 缺必要零件：START 上方顯示 NEED 提示，按下會被擋
         local missing = getMissingRequiredParts()
@@ -1556,26 +1591,21 @@ function StateHQ.draw()
 --       gfx.drawText("Select category", info_x, UI_START_Y)
 --    end
     
-    -- 9. 顯示關卡簡介（下半部右側）
+    -- 9. [[ G2 ]] 頂部任務面板（標題列＝任務名，內文＝目標）
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or "M001"
     if MissionData and MissionData[mission_id] then
         local mission = MissionData[mission_id]
-        local brief_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
-        local brief_y = UI_START_Y 
-        
+        local mbox = HQ_LAYOUT.mission
+        drawTitledBox(mbox, mission.name or "MISSION")
         gfx.setColor(gfx.kColorBlack)
-        gfx.drawText("MISSION:", brief_x, brief_y)
-        gfx.drawText(mission.name or "Unknown", brief_x, brief_y + 12)
-
         if mission.objective then
-            gfx.drawText("Objective:", brief_x, brief_y + 30)
-            gfx.drawText(mission.objective.description or "", brief_x, brief_y + 42)
+            gfx.drawText(mission.objective.description or "", mbox.x + 5, mbox.y + 18)
         end
-
-        -- [[ 零件限制 ]] 任務需求零件顯示在簡報右上（有宣告 required_parts 才顯示）
+        -- [[ 零件限制 ]] 任務需求零件顯示在面板右側（有宣告 required_parts 才顯示）
         if mission.required_parts and #mission.required_parts > 0 then
             local req_text = "REQ: " .. table.concat(mission.required_parts, ",")
-            gfx.drawText(req_text, brief_x + 160, brief_y)
+            local rtw = gfx.getTextSize(req_text)
+            gfx.drawText(req_text, mbox.x + mbox.w - rtw - 6, mbox.y + 18)
         end
     end
 end
