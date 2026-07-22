@@ -110,6 +110,7 @@ local is_placing_part = false
 -- [[ P5 ]] 放置回饋：不可放的格子在放置模式中以 X.png 靜態標示
 -- （取代舊「按下才紅閃」——且舊紅閃的 y 映射用 (row-1)，實際畫錯排）
 local x_marker_img = nil  -- images/X.png，於 setup 載入
+local hq_bg_img = nil     -- [[ G2 ]] images/hq_bg.png 組裝介面底圖（400x240），於 setup 載入
 local cursor_blink_tick = 0  -- 控制粗邊框的閃爍
 -- 播放標題/一般介面 BGM（循環）
 function StateHQ.setupBGM()
@@ -447,6 +448,14 @@ function StateHQ.setup()
         x_marker_img = gfx.image.new("images/X")
         if not x_marker_img then
             print("WARNING: failed to load images/X.png, fallback to text X")
+        end
+    end
+
+    -- [[ G2 ]] 載入組裝介面底圖（400x240）
+    if not hq_bg_img then
+        hq_bg_img = gfx.image.new("images/hq_bg")
+        if not hq_bg_img then
+            print("WARNING: failed to load images/hq_bg.png")
         end
     end
 
@@ -978,9 +987,14 @@ end
 
 function StateHQ.draw()
     
-    gfx.clear(gfx.kColorWhite)
+    -- [[ G2 ]] 底圖：有 hq_bg 就鋪滿全螢幕，否則退回白底
+    if hq_bg_img then
+        pcall(function() hq_bg_img:draw(0, 0) end)
+    else
+        gfx.clear(gfx.kColorWhite)
+    end
     gfx.setColor(gfx.kColorBlack)
-    gfx.setFont(font) 
+    gfx.setFont(font)
     -- 使用時間為基準的閃爍，避免某些情況下 tick 未更新導致不閃爍
     local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
 
@@ -1505,22 +1519,7 @@ function StateHQ.draw()
         end
     end
 
-    -- [[ P5 ]] 每層操作提示列（遊戲區底部一行，明示下一步）
-    do
-        local hint
-        if is_unequip_mode then
-            hint = "A:REMOVE  B:BACK"
-        elseif is_placing_part then
-            hint = "A:PLACE  B:CANCEL"
-        elseif cursor_on_start then
-            hint = "A:START MISSION  <(B):BACK"
-        elseif selected_category then
-            hint = "A:PICK  B:BACK  >:START"
-        else
-            hint = "A:OK  B:MISSION LIST  >:START"
-        end
-        gfx.drawText(hint, 5, GAME_HEIGHT - 16)
-    end
+    -- [[ G2 ]] 操作提示列已移除（依使用者要求）
 
     -- 8. 繪製控制介面 UI（下半部）
     -- 繪製 3x2 控制格子
