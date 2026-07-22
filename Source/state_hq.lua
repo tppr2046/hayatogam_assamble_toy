@@ -131,6 +131,33 @@ local function checkIfFits(part_data, start_col, start_row)
     return true, ""
 end
 
+-- [[ 零件限制 ]] 檢查目前任務要求的零件「類別」是否已全部裝備。
+-- 回傳缺少的類別清單（nil = 無限制或已滿足）。任務以 required_parts = {"CLAW", ...} 宣告。
+local function getMissingRequiredParts()
+    local mission_id = _G.GameState and _G.GameState.current_mission
+    local mission = mission_id and _G.MissionData and _G.MissionData[mission_id]
+    local required = mission and mission.required_parts
+    if not required or #required == 0 then return nil end
+
+    local missing = {}
+    local eq = (_G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
+    for _, req_type in ipairs(required) do
+        local found = false
+        for _, item in ipairs(eq) do
+            local pdata = _G.PartsData and _G.PartsData[item.id]
+            if pdata and pdata.part_type == req_type then
+                found = true
+                break
+            end
+        end
+        if not found then
+            missing[#missing + 1] = req_type
+        end
+    end
+    if #missing == 0 then return nil end
+    return missing
+end
+
 -- 在已裝備清單中尋找覆蓋指定格子的零件，回傳索引與該項
 local function findEquippedPartAt(col, row)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
@@ -716,6 +743,13 @@ function StateHQ.update()
             -- [[ P5 ]] 游標在右下角固定 START 鈕：A 直接開始任務（READY 彈窗已移除），
             -- 左鍵/B 回主選單
             if playdate.buttonJustPressed(playdate.kButtonA) then
+                -- [[ 零件限制 ]] 任務要求的零件類別未裝備時擋下（START 鈕旁有 NEED 提示）
+                if getMissingRequiredParts() then
+                    if _G.SoundManager and _G.SoundManager.playCancel then
+                        _G.SoundManager.playCancel()
+                    end
+                    return
+                end
                 if _G.SoundManager and _G.SoundManager.playSelect then
                     _G.SoundManager.playSelect()
                 end
@@ -1384,6 +1418,16 @@ function StateHQ.draw()
         local box_h = th + pad_y * 2
         local box_x = SCREEN_WIDTH - box_w - 8
         local box_y = GAME_HEIGHT - box_h - 22
+
+        -- [[ 零件限制 ]] 缺必要零件：START 上方顯示 NEED 提示，按下會被擋
+        local missing = getMissingRequiredParts()
+        if missing then
+            local need_text = "NEED: " .. table.concat(missing, ",")
+            local ntw = gfx.getTextSize(need_text)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawText(need_text, SCREEN_WIDTH - ntw - 8, box_y - 16)
+        end
+
         if cursor_on_start then
             -- 選中：黑底白字 + 閃爍粗框
             gfx.setColor(gfx.kColorBlack)
@@ -1522,10 +1566,16 @@ function StateHQ.draw()
         gfx.setColor(gfx.kColorBlack)
         gfx.drawText("MISSION:", brief_x, brief_y)
         gfx.drawText(mission.name or "Unknown", brief_x, brief_y + 12)
-        
+
         if mission.objective then
             gfx.drawText("Objective:", brief_x, brief_y + 30)
             gfx.drawText(mission.objective.description or "", brief_x, brief_y + 42)
+        end
+
+        -- [[ 零件限制 ]] 任務需求零件顯示在簡報右上（有宣告 required_parts 才顯示）
+        if mission.required_parts and #mission.required_parts > 0 then
+            local req_text = "REQ: " .. table.concat(mission.required_parts, ",")
+            gfx.drawText(req_text, brief_x + 160, brief_y)
         end
     end
 end
