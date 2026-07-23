@@ -101,7 +101,6 @@ local unequip_selected_row = 1  -- 解除模式選中的格子排
 local selected_category = nil   -- nil = 主選單層, "TOP" or "BOTTOM" = 零件清單層
 local selected_part_index = 1
 local hq_mode = "EQUIP"         -- 固定 EQUIP（舊 UNEQUIP 分支為死碼，已移除）
-local is_placing_part = false
 
 -- [[ P5 ]] 放置回饋：不可放的格子在放置模式中以 X.png 靜態標示
 -- （取代舊「按下才紅閃」——且舊紅閃的 y 映射用 (row-1)，實際畫錯排）
@@ -240,6 +239,59 @@ local function findFirstEmptyCell(part_data)
     end
     -- 沒有空位，返回中間位置
     return 2, 2
+end
+
+-- [[ G2 ]] 依零件的 placement_row 決定安裝列（TOP→上排、BOTTOM→下排）。
+-- 玩家只用左右鍵選「欄」，列由零件類別自動決定。
+local function rowForPart(part_data)
+    if not part_data then return 1 end
+    local h = part_data.slot_y or 1
+    if part_data.placement_row == "TOP" then
+        return GRID_ROWS - h + 1
+    end
+    return 1
+end
+
+-- [[ G2 ]] 實際安裝零件到指定格：填 GRID_MAP、加入 equipped_parts、累加數值、自動存檔
+local function installPart(part_id, part_data, col, row)
+    local w = part_data.slot_x or 1
+    local h = part_data.slot_y or 1
+    for r = row, row + h - 1 do
+        GRID_MAP[r] = GRID_MAP[r] or {}
+        for c = col, col + w - 1 do
+            GRID_MAP[r][c] = part_id
+        end
+    end
+    table.insert(_G.GameState.mech_stats.equipped_parts, { id = part_id, col = col, row = row, w = w, h = h })
+    if part_data.hp then
+        _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) + part_data.hp
+    end
+    if part_data.weight then
+        _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
+    end
+    if _G.SaveManager and _G.SaveManager.saveCurrent then
+        _G.SaveManager.saveCurrent()
+        print("LOG: Mech configuration auto-saved.")
+    end
+end
+
+-- [[ G2 ]] 從 from_index 之後找下一個「未裝備」的零件索引（找不到就繞回頭找）
+local function nextUnequippedIndex(parts_list, from_index)
+    local count = parts_list and #parts_list or 0
+    local eq = _G.GameState.mech_stats.equipped_parts or {}
+    local function equipped(pid)
+        for _, item in ipairs(eq) do
+            if item.id == pid then return true end
+        end
+        return false
+    end
+    for i = from_index + 1, count do
+        if not equipped(parts_list[i]) then return i end
+    end
+    for i = 1, from_index - 1 do
+        if not equipped(parts_list[i]) then return i end
+    end
+    return from_index
 end
 
 -- 從 equipped_parts 刪除指定索引的零件，並把 GRID_MAP 與 mech_stats 更新
@@ -653,151 +705,7 @@ function StateHQ.update()
     end
     
     if hq_mode == "EQUIP" then
-        if is_placing_part then
-            -- 零件放置中：移動網格游標
-            if playdate.buttonJustPressed(playdate.kButtonLeft) then
-                cursor_col = math.max(1, cursor_col - 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-                cursor_col = math.min(GRID_COLS, cursor_col + 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-                cursor_row = math.min(GRID_ROWS, cursor_row + 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                cursor_row = math.max(1, cursor_row - 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                -- 取消放置，返回零件清單
-                is_placing_part = false
-                if _G.SoundManager and _G.SoundManager.playCancel then
-                    _G.SoundManager.playCancel()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 嘗試放置
-                if selected_category then
-                    local parts_list = _G.GameState.parts_by_category[selected_category]
-                    local part_id = parts_list[selected_part_index]
-                    local part_data = _G.PartsData and _G.PartsData[part_id]
-                    local can_fit, reason = checkIfFits(part_data, cursor_col, cursor_row)
-                    
-                    if can_fit then
-                        local w = part_data.slot_x or 1
-                        local h = part_data.slot_y or 1
-                        for r = cursor_row, cursor_row + h - 1 do
-                            for c = cursor_col, cursor_col + w - 1 do
-                                GRID_MAP[r][c] = part_id
-                            end
-                        end
-                        table.insert(_G.GameState.mech_stats.equipped_parts, { id = part_id, col = cursor_col, row = cursor_row, w = w, h = h })
-                        if part_data.hp then
-                            _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) + part_data.hp
-                        end
-                        if part_data.weight then
-                            _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
-                        end
-                        
-                        -- 自動儲存機甲配置
-                        if _G.SaveManager and _G.SaveManager.saveCurrent then
-                            _G.SaveManager.saveCurrent()
-                            print("LOG: Mech configuration auto-saved.")
-                        end
-                        -- 播放選擇音效
-                        if _G.SoundManager and _G.SoundManager.playSelect then
-                            _G.SoundManager.playSelect()
-                        end
-                        
-                        is_placing_part = false
-                        
-                        -- 檢查該分類（TOP/BOTTOM）是否已滿，如果滿了就返回分類選擇
-                        local eq = _G.GameState.mech_stats.equipped_parts or {}
-                        local has_top_part = false
-                        local has_bottom_part = false
-                        
-                        for _, item in ipairs(eq) do
-                            for r = item.row, item.row + (item.h or 1) - 1 do
-                                if r == 2 then has_top_part = true end
-                                if r == 1 then has_bottom_part = true end
-                            end
-                        end
-                        
-                        -- 如果當前分類是 TOP 且已有上半部零件，或是 BOTTOM 且已有下半部零件，則返回分類選擇
-                        if (selected_category == "TOP" and has_top_part) or (selected_category == "BOTTOM" and has_bottom_part) then
-                            selected_category = nil
-                            selected_part_index = 1
-                        else
-                            -- 否則，自動選取下一個未裝備的零件
-                            local parts_list = _G.GameState.parts_by_category[selected_category]
-                            local parts_count = parts_list and #parts_list or 0
-                            local found_next = false
-                            
-                            -- 從當前位置的下一個開始尋找未裝備的零件
-                            for i = selected_part_index + 1, parts_count do
-                                local check_part_id = parts_list[i]
-                                local is_equipped = false
-                                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                                for _, item in ipairs(eq) do
-                                    if item.id == check_part_id then
-                                        is_equipped = true
-                                        break
-                                    end
-                                end
-                                if not is_equipped then
-                                    selected_part_index = i
-                                    found_next = true
-                                    break
-                                end
-                            end
-                            
-                            -- 如果後面沒有未裝備的零件，從頭開始找
-                            if not found_next then
-                                for i = 1, selected_part_index - 1 do
-                                    local check_part_id = parts_list[i]
-                                    local is_equipped = false
-                                    local eq = _G.GameState.mech_stats.equipped_parts or {}
-                                    for _, item in ipairs(eq) do
-                                        if item.id == check_part_id then
-                                            is_equipped = true
-                                            break
-                                        end
-                                    end
-                                    if not is_equipped then
-                                        selected_part_index = i
-                                        found_next = true
-                                        break
-                                    end
-                                end
-                            end
-                            
-                            -- [[ P5 ]] 如果所有零件都已裝備，游標跳到 START
-                            if not found_next then
-                                cursor_on_start = true
-                                last_part_index = selected_part_index
-                            end
-                        end
-                    else
-                        -- [[ P5 ]] 放置失敗不再紅閃：不可放的格子已在放置模式中以 X 靜態標示
-                        if _G.SoundManager and _G.SoundManager.playCancel then
-                            _G.SoundManager.playCancel()
-                        end
-                    end
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                is_placing_part = false
-            end
-        elseif cursor_on_start then
+        if cursor_on_start then
             -- [[ P5 ]] 游標在右下角固定 START 鈕：A 直接開始任務（READY 彈窗已移除），
             -- 左鍵/B 回主選單
             if playdate.buttonJustPressed(playdate.kButtonA) then
@@ -851,12 +759,19 @@ function StateHQ.update()
                 if _G.SoundManager and _G.SoundManager.playSelect then
                     _G.SoundManager.playSelect()
                 end
-                if main_menu_index == 1 then
-                    selected_category = "TOP"
+                if main_menu_index == 1 or main_menu_index == 2 then
+                    selected_category = (main_menu_index == 1) and "TOP" or "BOTTOM"
                     selected_part_index = 1
-                elseif main_menu_index == 2 then
-                    selected_category = "BOTTOM"
-                    selected_part_index = 1
+                    -- [[ G2 ]] 進入清單時，安裝位置預設為第一個可放的格（之後用左右鍵調整）
+                    local plist = _G.GameState.parts_by_category[selected_category]
+                    local pdata0 = plist and plist[1] and _G.PartsData and _G.PartsData[plist[1]]
+                    if pdata0 then
+                        local c0 = findFirstEmptyCell(pdata0)
+                        cursor_col = c0 or 1
+                        cursor_row = rowForPart(pdata0)
+                    else
+                        cursor_col, cursor_row = 1, 1
+                    end
                 else
                     -- REMOVE PART：進入拆卸模式
                     is_unequip_mode = true
@@ -917,54 +832,60 @@ function StateHQ.update()
                     end
                     new_index = new_index + 1
                 end
-                -- [[ P5 ]] 清單底部再往下：游標跳到 START
-                if new_index > parts_count then
-                    cursor_on_start = true
-                    last_part_index = selected_part_index
-                end
                 -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
+            elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
+                -- [[ G2 ]] 左右鍵＝選擇安裝位置（欄），不再跳 START
+                cursor_col = math.max(1, cursor_col - 1)
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-                -- [[ P5 ]] 右鍵跳到 START（拆卸入口移至主選單 REMOVE PART）
-                cursor_on_start = true
-                -- 播放游標移動音效
+                cursor_col = math.min(GRID_COLS, cursor_col + 1)
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 選中零件，檢查是否已安裝
-                local parts_list = _G.GameState.parts_by_category[selected_category]
-                local part_id = parts_list[selected_part_index]
-                
-                -- 檢查是否已安裝
+                -- [[ G2 ]] A＝直接安裝在目前選定的位置（放置模式已合併掉）
+                local parts_list2 = _G.GameState.parts_by_category[selected_category]
+                local part_id = parts_list2 and parts_list2[selected_part_index]
+                local part_data = part_id and _G.PartsData and _G.PartsData[part_id]
+
+                -- 已安裝的零件不能再選
                 local is_equipped = false
-                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                for _, item in ipairs(eq) do
-                    if item.id == part_id then
-                        is_equipped = true
-                        break
-                    end
+                for _, item in ipairs(_G.GameState.mech_stats.equipped_parts or {}) do
+                    if item.id == part_id then is_equipped = true break end
                 end
-                
-                -- 如果已安裝，不做任何事（無法選取）
-                if is_equipped then
-                    print("Part already equipped: " .. part_id)
-                    return
-                end
-                
-                local part_data = _G.PartsData and _G.PartsData[part_id]
-                
-                if part_data then
-                    -- 找到第一個空格子
-                    local empty_col, empty_row = findFirstEmptyCell(part_data)
-                    cursor_col = empty_col
-                    cursor_row = empty_row
-                    is_placing_part = true
-                    -- 播放選擇音效
-                    if _G.SoundManager and _G.SoundManager.playSelect then
-                        _G.SoundManager.playSelect()
+
+                if part_data and not is_equipped then
+                    cursor_row = rowForPart(part_data)
+                    local can_fit = checkIfFits(part_data, cursor_col, cursor_row)
+                    if can_fit then
+                        installPart(part_id, part_data, cursor_col, cursor_row)
+                        if _G.SoundManager and _G.SoundManager.playSelect then
+                            _G.SoundManager.playSelect()
+                        end
+                        -- 安裝後：該排已滿就回主選單，否則自動選下一個未裝備零件
+                        local has_top, has_bottom = false, false
+                        for _, item in ipairs(_G.GameState.mech_stats.equipped_parts or {}) do
+                            for r = item.row, item.row + (item.h or 1) - 1 do
+                                if r == 2 then has_top = true end
+                                if r == 1 then has_bottom = true end
+                            end
+                        end
+                        if (selected_category == "TOP" and has_top) or (selected_category == "BOTTOM" and has_bottom) then
+                            selected_category = nil
+                            selected_part_index = 1
+                        else
+                            selected_part_index = nextUnequippedIndex(parts_list2, selected_part_index)
+                        end
+                    else
+                        -- 不可放（該格已有零件／排限制／槍口淨空）：X 標示已事前顯示
+                        if _G.SoundManager and _G.SoundManager.playCancel then
+                            _G.SoundManager.playCancel()
+                        end
                     end
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
@@ -1026,22 +947,12 @@ function StateHQ.draw()
         if pdata then
             local preview_x, preview_y
             
-            if is_placing_part then
-                -- 放置模式：預覽在游標位置
-                preview_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-                preview_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
-            else
-                -- [[ G2 ]] 非放置模式：預覽直接畫在「將要安裝的那一格」。
-                -- 取代舊的「機體上方浮動預覽」——那個在 2 倍放大後會超出機甲框上緣。
-                -- 好處：受格子邊界約束不可能溢出，且玩家直接看到零件會裝在哪。
-                local ec, er = findFirstEmptyCell(pdata)
-                if not ec or not er then
-                    ec = 1
-                    er = (pdata.placement_row == "TOP") and GRID_ROWS or 1
-                end
-                preview_x = GRID_START_X + (ec - 1) * GRID_CELL_SIZE
-                preview_y = GRID_START_Y + (GRID_ROWS - er) * GRID_CELL_SIZE
-            end
+            -- [[ G2 ]] 預覽畫在玩家用左右鍵選定的那一格（列由零件類別決定）。
+            -- 取代舊的「機體上方浮動預覽」——那個在 2 倍放大後會超出機甲框上緣；
+            -- 現在受格子邊界約束不可能溢出，且直接看到零件會裝在哪。
+            local prow = rowForPart(pdata)
+            preview_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
+            preview_y = GRID_START_Y + (GRID_ROWS - prow) * GRID_CELL_SIZE
             
             -- 繪製預覽圖片
             if pdata._img_scaled then
@@ -1139,9 +1050,9 @@ function StateHQ.draw()
         gfx.setLineWidth(1)
     end
     
-    -- [[ P5 ]] 放置模式：不可作為放置位置的格子以 X 靜態標示（取代舊紅閃）。
+    -- [[ P5/G2 ]] 瀏覽零件清單時即以 X 靜態標示不可放置的格子（取代舊紅閃）。
     -- 排限制 / 已佔用 / 槍口淨空全部走同一個 checkIfFits 判定，事前可見。
-    if is_placing_part and selected_category and selected_part_index then
+    if selected_category and selected_part_index and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = _G.PartsData and _G.PartsData[part_id]
@@ -1179,7 +1090,7 @@ function StateHQ.draw()
     end
     
     -- 預覽模式：在組裝格子上顯示 dither.png（解除模式時不顯示預覽）
-    if selected_category and selected_part_index and not cursor_on_start and not is_placing_part and not is_unequip_mode then
+    if selected_category and selected_part_index and not cursor_on_start and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = _G.PartsData and _G.PartsData[part_id]
@@ -1384,18 +1295,19 @@ function StateHQ.draw()
                     end
                 end
 
-    -- 繪製置中的粗框（放置模式／拆卸模式），在零件圖上層
+    -- 繪製置中的粗框（選位置／拆卸模式），在零件圖上層
     if blink_on then
-        -- 放置模式：在組裝格中繪製粗邊框
-        if hq_mode == "EQUIP" and is_placing_part and selected_category and selected_part_index then
+        -- [[ G2 ]] 瀏覽清單時即顯示「目前選定安裝位置」的粗框
+        if hq_mode == "EQUIP" and selected_category and selected_part_index and not is_unequip_mode then
             local parts_list = _G.GameState.parts_by_category[selected_category]
             local part_id = parts_list and parts_list[selected_part_index]
             local pdata = _G.PartsData and _G.PartsData[part_id]
             if pdata then
                 local w = pdata.slot_x or 1
                 local h = pdata.slot_y or 1
+                local prow = rowForPart(pdata)
                 local fx = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-                local fy = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE - (h - 1) * GRID_CELL_SIZE
+                local fy = GRID_START_Y + (GRID_ROWS - prow) * GRID_CELL_SIZE - (h - 1) * GRID_CELL_SIZE
                 local fw = w * GRID_CELL_SIZE
                 local fh = h * GRID_CELL_SIZE
                 gfx.setColor(gfx.kColorBlack)
