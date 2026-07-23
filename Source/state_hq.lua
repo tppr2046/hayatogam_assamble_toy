@@ -30,23 +30,25 @@ local GRID_CELL_SIZE = 16
 local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
 
 -- ============================================================
--- [[ G2 版型 ]] 組裝介面版型（依使用者 mockup：帶標題列的框線盒）。
--- 要移動任何區塊，只改這張表的座標即可，重新編譯就生效。
---   單位：像素，畫面 400x240。box = {x, y, w, h}。
+-- [[ G2 版型 ]] 組裝介面版型。框線由底圖 images/hq_bg.png 提供，
+-- 程式不再畫白底框，只把內容對齊到底圖各框的「內緣」。
+-- 下列座標由 hq_bg.png 掃描實測而得（單位：像素，畫面 400x240）。
+-- 要微調任何區塊，只改這張表，重新編譯就生效。
 -- ============================================================
 local HQ_LAYOUT = {
-    mission  = { x = 4,   y = 2,   w = 392, h = 40 },   -- 頂部：任務面板（標題列＋目標）
-    data     = { x = 6,   y = 48,  w = 104, h = 46 },   -- 左上：DATA（HP / WEIGHT）
-    panel    = { x = 6,   y = 100, w = 108, h = 92 },   -- 左下：PANEL（放大以容納 3x2 操作面板）
-    -- 機體：以離屏圖 2 倍放大置中顯示（見 draw 的機甲區）
+    mission  = { x = 6,   y = 19,  w = 387, h = 49 },   -- 頂部框：任務名＋目標
+    data     = { x = 7,   y = 95,  w = 97,  h = 49 },   -- 左上框：HP / WEIGHT
+    -- 左下「無白框」的空位：放 3x2 操作面板（96x64）
+    panel    = { x = 8,   y = 168, w = 108, h = 68 },
+    -- 中右框 x131 y83 w262 h74：機體 2 倍放大置中於此
     mech_scale = 2,      -- 機體放大倍率
-    mech_cx  = 250,      -- 放大後機體「組裝格中心」落點 x（畫面中右）
-    mech_cy  = 96,       -- 放大後機體「組裝格中心」落點 y
-    menu_x   = 176,      -- 底部：零件選單 / 零件清單 x
-    menu_y   = 170,      -- 底部：零件選單 / 零件清單 y
-    start_size = 46,     -- START 正方形邊長
-    start_x  = 344,      -- START 鈕左上 x
-    start_y  = 176,      -- START 鈕左上 y
+    mech_cx  = 262,      -- 放大後機體「組裝格中心」落點 x（＝中右框水平中心）
+    mech_cy  = 120,      -- 放大後機體「組裝格中心」落點 y（＝中右框垂直中心）
+    menu_x   = 138,      -- 底中框 x131 w157：零件選單 / 零件清單
+    menu_y   = 180,
+    start_size = 55,     -- 底右框 x300 y173 55x55（正方形）
+    start_x  = 300,
+    start_y  = 173,
 }
 
 -- [[ G2 ]] 機甲離屏畫布：機甲先以原生像素畫進此畫布，再 drawScaled 放大置中。
@@ -79,17 +81,7 @@ local function drawSelectableText(text, x, y, selected)
     end
 end
 
--- [[ G2 ]] 繪製「帶黑底標題列的白底框線盒」（DATA / PANEL / MISSION 共用）
-local function drawTitledBox(box, title)
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRect(box.x, box.y, box.w, box.h)
-    gfx.setColor(gfx.kColorBlack)
-    gfx.drawRect(box.x, box.y, box.w, box.h)
-    gfx.fillRect(box.x, box.y, box.w, 13)  -- 標題列
-    gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-    gfx.drawText(title, box.x + 3, box.y + 1)
-    gfx.setImageDrawMode(gfx.kDrawModeCopy)
-end
+-- [[ G2 ]] 白底框線盒已移除：框線改由底圖 hq_bg.png 提供，程式只畫內容。
 
 local GRID_MAP = {}       
 local cursor_col = 1      
@@ -998,11 +990,7 @@ function StateHQ.draw()
     -- 使用時間為基準的閃爍，避免某些情況下 tick 未更新導致不閃爍
     local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
 
-    -- [[ G2 版型 ]] 先鋪三個框線盒（內容於後續各區段繪於盒內）
-    if not is_unequip_mode then
-        drawTitledBox(HQ_LAYOUT.data, "DATA")
-        drawTitledBox(HQ_LAYOUT.panel, "PANEL")
-    end
+    -- [[ G2 ]] 不再畫白底框：DATA / PANEL / MISSION 的框線由底圖 hq_bg.png 提供
 
     -- [[ G2 機甲 2 倍放大 ]] 機甲（格線／零件／爪臂／游標）先以原生像素畫進離屏
     -- 畫布，本區段結束後再 drawScaled 置中放大。期間座標皆為畫布內座標。
@@ -1168,9 +1156,9 @@ function StateHQ.draw()
     
     -- （4. 零件選單／清單已移至機甲離屏區之後，避免被畫進畫布）
 
-    -- 5. [[ G2 ]] DATA 盒內容座標（HP / WEIGHT），盒本身於畫面開頭已鋪
-    local detail_x = HQ_LAYOUT.data.x + 5
-    local detail_y = HQ_LAYOUT.data.y + 15
+    -- 5. [[ G2 ]] DATA 框內容座標（HP / WEIGHT）；框線由底圖提供
+    local detail_x = HQ_LAYOUT.data.x + 6
+    local detail_y = HQ_LAYOUT.data.y + 8
     
     -- 繪製格子格線（上下兩排都顯示）
     for r = 1, GRID_ROWS do
@@ -1476,7 +1464,7 @@ function StateHQ.draw()
         end
     end
 
-    -- 6. [[ G2 ]] 機甲狀態（DATA 盒內；標題由 drawTitledBox 畫）
+    -- 6. [[ G2 ]] 機甲狀態（畫在底圖的 DATA 框內）
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
     gfx.setColor(gfx.kColorBlack)
     gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y)
@@ -1502,19 +1490,15 @@ function StateHQ.draw()
             gfx.drawText(need_text, box_x + box_w - ntw, box_y - 14)
         end
 
+        -- [[ G2 ]] 方框由底圖提供：選中＝整格反白（黑底白字），未選中＝只畫黑字
         if cursor_on_start then
-            -- [[ G2 ]] 選中：反白（黑底白字，穩定不閃爍）
             gfx.setColor(gfx.kColorBlack)
             gfx.fillRect(box_x, box_y, box_w, box_h)
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
             gfx.drawText(start_text, text_x, text_y)
             gfx.setImageDrawMode(gfx.kDrawModeCopy)
         else
-            -- 未選中：白底黑字黑框
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(box_x, box_y, box_w, box_h)
             gfx.setColor(gfx.kColorBlack)
-            gfx.drawRect(box_x, box_y, box_w, box_h)
             gfx.drawText(start_text, text_x, text_y)
         end
     end
@@ -1609,21 +1593,21 @@ function StateHQ.draw()
 --       gfx.drawText("Select category", info_x, UI_START_Y)
 --    end
     
-    -- 9. [[ G2 ]] 頂部任務面板（標題列＝任務名，內文＝目標）
+    -- 9. [[ G2 ]] 頂部任務資訊（框線由底圖提供，這裡只畫文字）
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or "M001"
     if MissionData and MissionData[mission_id] then
         local mission = MissionData[mission_id]
         local mbox = HQ_LAYOUT.mission
-        drawTitledBox(mbox, mission.name or "MISSION")
         gfx.setColor(gfx.kColorBlack)
+        gfx.drawText(mission.name or "MISSION", mbox.x + 6, mbox.y + 4)
         if mission.objective then
-            gfx.drawText(mission.objective.description or "", mbox.x + 5, mbox.y + 18)
+            gfx.drawText(mission.objective.description or "", mbox.x + 6, mbox.y + 24)
         end
         -- [[ 零件限制 ]] 任務需求零件顯示在面板右側（有宣告 required_parts 才顯示）
         if mission.required_parts and #mission.required_parts > 0 then
             local req_text = "REQ: " .. table.concat(mission.required_parts, ",")
             local rtw = gfx.getTextSize(req_text)
-            gfx.drawText(req_text, mbox.x + mbox.w - rtw - 6, mbox.y + 18)
+            gfx.drawText(req_text, mbox.x + mbox.w - rtw - 6, mbox.y + 4)
         end
     end
 end
