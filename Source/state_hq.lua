@@ -39,7 +39,7 @@ local HQ_LAYOUT = {
     mission  = { x = 6,   y = 19,  w = 387, h = 49 },   -- 頂部框：任務名＋目標
     data     = { x = 7,   y = 95,  w = 97,  h = 49 },   -- 左上框：HP / WEIGHT
     -- 左下「無白框」的空位：放 3x2 操作面板（96x64）
-    panel    = { x = 8,   y = 168, w = 108, h = 68 },
+    panel    = { x = 2,   y = 150, w = 108, h = 68 },
     -- 中右框 x131 y83 w262 h74：機體 2 倍放大置中於此
     mech_scale = 2,      -- 機體放大倍率
     mech_cx  = 262,      -- 放大後機體「組裝格中心」落點 x（＝中右框水平中心）
@@ -50,6 +50,10 @@ local HQ_LAYOUT = {
     start_x  = 300,
     start_y  = 173,
 }
+
+-- [[ G2 ]] 零件清單一次顯示幾筆（底中框 y173~228 高 55px，起點 y180、行高 15
+-- → 放得下 3 筆）。超過時捲動並顯示 ▲▼。改行高或框高時記得一起調。
+local LIST_VISIBLE = 3
 
 -- [[ G2 ]] 機甲離屏畫布：機甲先以原生像素畫進此畫布，再 drawScaled 放大置中。
 -- GRID_START_X/Y 改為「畫布內的組裝格原點」（四周留邊給砲管/腳/預覽溢出）。
@@ -1027,12 +1031,16 @@ function StateHQ.draw()
                 preview_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
                 preview_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
             else
-                -- 非放置模式：預覽顯示在組裝格上方（置中）
-                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
-                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
-                local grid_width = GRID_COLS * GRID_CELL_SIZE
-                preview_x = GRID_START_X + (grid_width - sw) / 2
-                preview_y = GRID_START_Y - sh - 10  -- 組裝格上方，留40像素間距
+                -- [[ G2 ]] 非放置模式：預覽直接畫在「將要安裝的那一格」。
+                -- 取代舊的「機體上方浮動預覽」——那個在 2 倍放大後會超出機甲框上緣。
+                -- 好處：受格子邊界約束不可能溢出，且玩家直接看到零件會裝在哪。
+                local ec, er = findFirstEmptyCell(pdata)
+                if not ec or not er then
+                    ec = 1
+                    er = (pdata.placement_row == "TOP") and GRID_ROWS or 1
+                end
+                preview_x = GRID_START_X + (ec - 1) * GRID_CELL_SIZE
+                preview_y = GRID_START_Y + (GRID_ROWS - er) * GRID_CELL_SIZE
             end
             
             -- 繪製預覽圖片
@@ -1442,10 +1450,19 @@ function StateHQ.draw()
             drawSelectableText(MAIN_MENU[i], list_x, list_y + (i - 1) * line_height, selected)
         end
     elseif selected_category then
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawText(selected_category .. " PARTS:", list_x, list_y - 15)
-        local parts_list = _G.GameState.parts_by_category[selected_category]
-        for i, part_id in ipairs(parts_list) do
+        -- [[ G2 ]] 捲動視窗：底中框只放得下 LIST_VISIBLE 筆，超過時隨游標捲動，
+        -- 右側以 ▲▼ 指示上下還有項目。（分類標題已移除——反白選取已足夠指示）
+        local parts_list = _G.GameState.parts_by_category[selected_category] or {}
+        local total = #parts_list
+        local first = 1
+        if total > LIST_VISIBLE then
+            first = selected_part_index - math.floor(LIST_VISIBLE / 2)
+            first = math.max(1, math.min(first, total - LIST_VISIBLE + 1))
+        end
+
+        for slot = 1, math.min(LIST_VISIBLE, total) do
+            local i = first + slot - 1
+            local part_id = parts_list[i]
             local is_equipped = false
             local eq3 = _G.GameState.mech_stats.equipped_parts or {}
             for _, item in ipairs(eq3) do
@@ -1453,7 +1470,7 @@ function StateHQ.draw()
             end
             local selected = (i == selected_part_index and not cursor_on_start and not is_unequip_mode)
             local text_x = list_x
-            local text_y = list_y + (i - 1) * line_height
+            local text_y = list_y + (slot - 1) * line_height
             drawSelectableText(part_id, text_x, text_y, selected)
             if is_equipped then
                 local text_width = gfx.getTextSize(part_id)
@@ -1462,6 +1479,28 @@ function StateHQ.draw()
                 gfx.setColor(gfx.kColorBlack)
             end
         end
+
+        -- ▲▼ 捲動指示（畫在框右側內緣）
+        local arrow_x = HQ_LAYOUT.menu_x + 130
+        gfx.setColor(gfx.kColorBlack)
+        if first > 1 then
+            gfx.fillTriangle(arrow_x, list_y + 5, arrow_x + 8, list_y + 5, arrow_x + 4, list_y)
+        end
+        if first + LIST_VISIBLE - 1 < total then
+            local by = list_y + (LIST_VISIBLE - 1) * line_height + 8
+            gfx.fillTriangle(arrow_x, by, arrow_x + 8, by, arrow_x + 4, by + 5)
+        end
+    elseif is_unequip_mode then
+        -- [[ G2 ]] 移除模式：底中框顯示目前選中的零件與操作提示（原本是空的）
+        local _, item = findEquippedPartAt(unequip_selected_col, unequip_selected_row)
+        gfx.setColor(gfx.kColorBlack)
+        if item then
+            gfx.drawText(item.id, list_x, list_y)
+            gfx.drawText("A:REMOVE", list_x, list_y + line_height)
+        else
+            gfx.drawText("(EMPTY)", list_x, list_y)
+        end
+        gfx.drawText("B:BACK", list_x, list_y + line_height * 2)
     end
 
     -- 6. [[ G2 ]] 機甲狀態（畫在底圖的 DATA 框內）
