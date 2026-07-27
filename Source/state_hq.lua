@@ -254,6 +254,12 @@ local function rowForPart(part_data)
     return 1
 end
 
+-- [[ G2 ]] 零件寬 slot_x 的合法原點欄上限（避免寬零件把原點選到超出邊界）
+local function maxOriginCol(part_data)
+    local w = (part_data and part_data.slot_x) or 1
+    return math.max(1, GRID_COLS - w + 1)
+end
+
 -- [[ G2 ]] 實際安裝零件到指定格：填 GRID_MAP、加入 equipped_parts、累加數值、自動存檔
 local function installPart(part_id, part_data, col, row)
     local w = part_data.slot_x or 1
@@ -791,7 +797,12 @@ function StateHQ.update()
             -- 已選分類，選擇零件或移動到 READY
             local parts_list = _G.GameState.parts_by_category[selected_category]
             local parts_count = #parts_list
-            
+            -- [[ G2 ]] 依目前零件寬度夾住安裝欄（切換到不同寬度的零件時同步）
+            do
+                local pd_cur = _G.PartsData and _G.PartsData[parts_list[selected_part_index]]
+                cursor_col = math.max(1, math.min(cursor_col, maxOriginCol(pd_cur)))
+            end
+
             if playdate.buttonJustPressed(playdate.kButtonUp) then
                 -- 向上移動，跳過已安裝的零件
                 local new_index = selected_part_index - 1
@@ -839,13 +850,16 @@ function StateHQ.update()
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
-                -- [[ G2 ]] 左右鍵＝選擇安裝位置（欄），不再跳 START
+                -- [[ G2 ]] 左右鍵＝選擇安裝位置（欄），夾在合法原點範圍（寬零件不可超出）
+                local pd = _G.PartsData and _G.PartsData[parts_list[selected_part_index]]
                 cursor_col = math.max(1, cursor_col - 1)
+                cursor_col = math.min(cursor_col, maxOriginCol(pd))
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-                cursor_col = math.min(GRID_COLS, cursor_col + 1)
+                local pd = _G.PartsData and _G.PartsData[parts_list[selected_part_index]]
+                cursor_col = math.min(maxOriginCol(pd), cursor_col + 1)
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
@@ -1054,16 +1068,29 @@ function StateHQ.draw()
         gfx.setLineWidth(1)
     end
     
-    -- [[ P5/G2 ]] 瀏覽零件清單時即以 X 靜態標示不可放置的格子（取代舊紅閃）。
-    -- 排限制 / 已佔用 / 槍口淨空全部走同一個 checkIfFits 判定，事前可見。
+    -- [[ G2 ]] 以 X 標示「不可放置」的格子。規則（修正舊的 per-origin 誤判）：
+    --   1. 不屬於此零件安裝排的整排 → X（例：CLAW/CANON 是上排零件，下排整排標 X）
+    --   2. 安裝排上、在合法原點範圍內、但該欄放不下（已佔用／槍口淨空）→ X
+    --   3. 安裝排上、超出原點範圍的欄（會被寬零件覆蓋，非可選原點）→ 不標 X
+    -- 這樣就不會出現「上排 col3 因 2 格寬超界而標 X、卻仍能安裝覆蓋該格」的矛盾。
     if selected_category and selected_part_index and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = _G.PartsData and _G.PartsData[part_id]
         if pdata then
+            local vrow = rowForPart(pdata)
+            local max_origin = maxOriginCol(pdata)
             for r = 1, GRID_ROWS do
                 for c = 1, GRID_COLS do
-                    if not checkIfFits(pdata, c, r) then
+                    local blocked
+                    if r ~= vrow then
+                        blocked = true                       -- 規則 1
+                    elseif c <= max_origin then
+                        blocked = not checkIfFits(pdata, c, r) -- 規則 2
+                    else
+                        blocked = false                      -- 規則 3
+                    end
+                    if blocked then
                         local cx = GRID_START_X + (c - 1) * GRID_CELL_SIZE
                         local cy = GRID_START_Y + (GRID_ROWS - r) * GRID_CELL_SIZE
                         if x_marker_img then
