@@ -59,9 +59,9 @@ local LIST_VISIBLE = 3
 -- GRID_START_X/Y 改為「畫布內的組裝格原點」（四周留邊給砲管/腳/預覽溢出）。
 -- 左側留白 = GRID_START_X，需容納「機體左側的未安裝零件預覽」（最寬 3 格=48px
 -- ＋間距）；機體在螢幕上的置中不受留白影響（由 mech_cx 決定）。
-local MECH_CANVAS_W = 202
+local MECH_CANVAS_W = 210
 local MECH_CANVAS_H = 110
-local GRID_START_X = 74
+local GRID_START_X = 82
 local GRID_START_Y = 52
 
 -- UI 控制介面相關（操作面板繪於 PANEL 盒內）
@@ -952,7 +952,7 @@ function StateHQ.draw()
             -- [[ G2 ]] 預覽固定畫在「整台機體的左側」，與機體左緣留一段距離，
             -- 垂直對齊目標列（不隨選定欄左右移動）。目標格本身留給游標框/X。
             -- 空間不足時夾在畫布左緣。PREVIEW_GAP 為機體左緣與預覽的間距。
-            local PREVIEW_GAP = 20
+            local PREVIEW_GAP = 28
             local prow = rowForPart(pdata)
             local part_w_px = (pdata.slot_x or 1) * GRID_CELL_SIZE
             preview_x = math.max(2, GRID_START_X - PREVIEW_GAP - part_w_px)
