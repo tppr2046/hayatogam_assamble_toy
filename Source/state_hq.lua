@@ -947,11 +947,13 @@ function StateHQ.draw()
         if pdata then
             local preview_x, preview_y
             
-            -- [[ G2 ]] 預覽畫在玩家用左右鍵選定的那一格（列由零件類別決定）。
-            -- 取代舊的「機體上方浮動預覽」——那個在 2 倍放大後會超出機甲框上緣；
-            -- 現在受格子邊界約束不可能溢出，且直接看到零件會裝在哪。
+            -- [[ G2 ]] 預覽畫在「目標格同一列、往左偏一個零件寬」的位置——
+            -- 目標格本身留給游標粗框/X 標示，預覽在其左側示意，不互相蓋住。
+            -- （列由零件類別決定；夾住不超出畫布左緣）
             local prow = rowForPart(pdata)
-            preview_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
+            local part_w_px = (pdata.slot_x or 1) * GRID_CELL_SIZE
+            local target_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
+            preview_x = math.max(2, target_x - part_w_px - 2)
             preview_y = GRID_START_Y + (GRID_ROWS - prow) * GRID_CELL_SIZE
             
             -- 繪製預覽圖片
