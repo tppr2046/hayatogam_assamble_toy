@@ -1,0 +1,184 @@
+{
+  "dialog": {
+    "image": "images/dialog_bg",
+    "lines": [
+      "There are many obstacles and rocks out there,",
+      "Remove all of the obstacles and put them to the target zone.",
+      "Good luck, Pilot!"
+    ]
+  },
+  "description": "Eliminate all incoming trainer units and learn movement controls.",
+  "required_parts": [
+    "CLAW"
+  ],
+  "name": "Delivery Mission",
+  "objective": {
+    "description": "Deliver the stone to the target zone",
+    "type": "DELIVER_STONE"
+  },
+  "id": "M002",
+  "reward_rubber": 15,
+  "category": "DELIVER_STONE",
+  "reward_copper": 20,
+  "prerequisite": "M001",
+  "time_limit": -1,
+  "scene": {
+    "ground_y": 220,
+    "delivery_targets": [
+      {
+        "x": 350,
+        "image": "images/target_box",
+        "y": 0,
+        "id": "target1"
+      },
+      {
+        "x": 600,
+        "image": "images/target_box",
+        "y": 90,
+        "id": "target2"
+      }
+    ],
+    "terrain": [
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "up30"
+      },
+      {
+        "height_offset": -35,
+        "type": "flat"
+      },
+      {
+        "height_offset": -35,
+        "type": "flat"
+      },
+      {
+        "height_offset": -35,
+        "type": "down30"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "up15"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "down15"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      }
+    ],
+    "width": 1200,
+    "backgrounds": [
+      {
+        "x": 30,
+        "image": "images/bg_building2.png",
+        "layer": 0,
+        "y": 40
+      },
+      {
+        "x": 160,
+        "image": "images/bg_building3.png",
+        "layer": 1,
+        "y": 70
+      },
+      {
+        "x": 200,
+        "image": "images/bg_building1.png",
+        "layer": 1,
+        "y": 60
+      },
+      {
+        "x": 420,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 60
+      }
+    ],
+    "obstacles": [],
+    "enemies": [],
+    "stones": [
+      {
+        "x": 200,
+        "image": "images/stone.png",
+        "target_id": "target1",
+        "y": -5
+      },
+      {
+        "x": 410,
+        "image": "images/stone.png",
+        "target_id": "target2",
+        "y": -5
+      }
+    ]
+  },
+  "reward_steel": 30
+}

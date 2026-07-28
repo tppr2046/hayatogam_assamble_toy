@@ -1,0 +1,173 @@
+{
+  "description": "S1 multi-scene demo: reach the teleport, then clear the enemies.",
+  "name": "Multi-Scene Test",
+  "objective": {
+    "description": "Clear all enemies in the final scene",
+    "type": "ELIMINATE_ALL"
+  },
+  "id": "M007",
+  "reward_rubber": 20,
+  "category": "ELIMINATION",
+  "reward_copper": 20,
+  "prerequisite": 0,
+  "reward_steel": 20,
+  "time_limit": -1,
+  "scenes": [
+    {
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 1: head right to the teleport.",
+          "Reaching it warps you to the next area."
+        ]
+      },
+      "delivery_targets": [],
+      "width": 560,
+      "backgrounds": [
+        {
+          "x": 40,
+          "image": "images/bg_building3.png",
+          "layer": 0,
+          "y": 60
+        },
+        {
+          "x": 260,
+          "image": "images/bg_building1.png",
+          "layer": 1,
+          "y": 70
+        }
+      ],
+      "obstacles": [],
+      "ground_y": 220,
+      "terrain": [
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        }
+      ],
+      "teleport": {
+        "x": 480
+      },
+      "enemies": [],
+      "stones": []
+    },
+    {
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 2: enemies incoming!",
+          "Clear them all to complete the mission."
+        ]
+      },
+      "delivery_targets": [],
+      "width": 680,
+      "backgrounds": [
+        {
+          "x": 30,
+          "image": "images/bg_building4.png",
+          "layer": 0,
+          "y": 65
+        },
+        {
+          "x": 300,
+          "image": "images/bg_building2.png",
+          "layer": 1,
+          "y": 60
+        }
+      ],
+      "obstacles": [],
+      "ground_y": 220,
+      "terrain": [
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        }
+      ],
+      "enemies": [
+        {
+          "x": 360,
+          "y": 0,
+          "type": "BASIC_ENEMY"
+        },
+        {
+          "x": 520,
+          "y": 0,
+          "type": "BASIC_ENEMY"
+        }
+      ],
+      "stones": []
+    }
+  ]
+}

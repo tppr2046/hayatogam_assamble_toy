@@ -1,0 +1,251 @@
+{
+  "description": "Deliver the stone to the target zone.",
+  "required_parts": [
+    "CLAW"
+  ],
+  "name": "Brave Delivery",
+  "objective": {
+    "description": "Deliver the stone to the target zone",
+    "type": "DELIVER_STONE"
+  },
+  "id": "M005",
+  "category": "DELIVER_STONE",
+  "prerequisite": "M003",
+  "scene": {
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "Thank you, Pilot, you save our civilization.",
+        "More stones, more enemies. We cannot live in peace yet.",
+        "Take stones to the targets."
+      ]
+    },
+    "delivery_targets": [
+      {
+        "x": 450,
+        "image": "images/target_box",
+        "y": 110,
+        "id": "target1"
+      },
+      {
+        "x": 1200,
+        "image": "images/target_box",
+        "y": 0,
+        "id": "target2"
+      }
+    ],
+    "width": 1600,
+    "backgrounds": [
+      {
+        "x": 30,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 65
+      },
+      {
+        "x": 270,
+        "image": "images/bg_building3.png",
+        "layer": 1,
+        "y": 35
+      },
+      {
+        "x": 380,
+        "image": "images/bg_building2.png",
+        "layer": 1,
+        "y": 75
+      },
+      {
+        "x": 560,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 55
+      },
+      {
+        "x": 800,
+        "image": "images/bg_building1.png",
+        "layer": 1,
+        "y": 65
+      },
+      {
+        "x": 960,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 55
+      }
+    ],
+    "obstacles": [],
+    "reward_copper": 10,
+    "ground_y": 220,
+    "terrain": [
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "up15"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "down15"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "up15"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "down15"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      }
+    ],
+    "reward_rubber": 55,
+    "reward_steel": 30,
+    "enemies": [
+      {
+        "x": 250,
+        "y": 0,
+        "type": "MINE"
+      },
+      {
+        "x": 380,
+        "y": -17,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 650,
+        "y": 0,
+        "type": "SWORD_ENEMY"
+      },
+      {
+        "x": 750,
+        "y": 0,
+        "type": "JUMP_ENEMY"
+      },
+      {
+        "x": 850,
+        "y": 0,
+        "type": "MINE"
+      },
+      {
+        "x": 1080,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      }
+    ],
+    "stones": [
+      {
+        "x": 200,
+        "image": "images/stone.png",
+        "target_id": "target1",
+        "y": -5
+      },
+      {
+        "x": 720,
+        "image": "images/stone.png",
+        "target_id": "target2",
+        "y": -5
+      }
+    ]
+  },
+  "time_limit": -1
+}

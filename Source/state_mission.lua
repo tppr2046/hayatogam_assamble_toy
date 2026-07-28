@@ -51,7 +51,10 @@ local feet_frame_delay = 100  -- 每幀延遲（毫秒）
 -- 任務狀態的局部變數
 local is_paused = false
 local timer = 0
-local current_scene = nil 
+local current_scene = nil
+-- [[ S1 多場景 ]] 一關可含多個場景，經傳送點/達標載入下一場景
+local current_scenes = nil        -- 場景陣列（單場景時 = { mission.scene }）
+local current_scene_index = 1      -- 目前第幾個場景
 local mech_x, mech_y, mech_vy = 0, 0, 0
 local is_on_ground = true
 local camera_x = 0       
@@ -90,6 +93,60 @@ local camera_shake_intensity = 3  -- 震動幅度（像素）
 -- ==========================================
 -- 狀態機接口
 -- ==========================================
+
+-- [[ S1 多場景 ]] 載入一個場景：建立實體控制器、放置機甲、重置鏡頭、啟用該場景對話。
+-- setup（第一場景）與 completeCurrentScene（傳送到下一場景）共用此函式。
+local function loadScene(scene)
+    current_scene = scene
+    if current_scene and EntityController then
+        local enemies = (current_scene.enemies) or {}
+        entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED, UI_HEIGHT)
+    else
+        entity_controller = nil
+    end
+
+    -- 機甲起始位置（每個場景從左側地面重新開始）
+    if current_scene and current_scene.ground_y then
+        mech_x = 50
+        local adjusted_ground_y = entity_controller and entity_controller.ground_y or (current_scene.ground_y - UI_HEIGHT)
+        mech_y = adjusted_ground_y - mech_draw_h
+    else
+        mech_x = 50
+        mech_y = GAME_HEIGHT - mech_draw_h - 10
+    end
+    mech_vy = 0
+    is_on_ground = true
+    mech_y_old = mech_y
+    camera_x = 0
+
+    -- 場景對話（打字機）
+    dialog_active = false
+    dialog_lines = nil
+    dialog_index = 1
+    dialog_image = nil
+    typewriter_progress = 0
+    if current_scene and current_scene.dialog and current_scene.dialog.lines then
+        dialog_lines = current_scene.dialog.lines
+        dialog_active = true
+        typewriter_progress = 0
+        if current_scene.dialog.image then
+            local ok, img = pcall(function() return playdate.graphics.image.new(current_scene.dialog.image) end)
+            if ok and img then dialog_image = img end
+        end
+    end
+end
+
+-- [[ S1 多場景 ]] 目前場景達標：非最後一場景→載入下一場景（保留機甲 HP/組裝）；最後一場景→通關結算。
+local function completeCurrentScene()
+    if current_scenes and current_scene_index < #current_scenes then
+        current_scene_index = current_scene_index + 1
+        print("LOG: Advancing to scene " .. current_scene_index .. "/" .. #current_scenes)
+        loadScene(current_scenes[current_scene_index])
+    else
+        print("LOG: Final scene complete -> mission success")
+        setState(_G.StateResult, true, "Mission Complete!", current_mission_id)
+    end
+end
 
 function StateMission.setup()
     -- 初始化字體與狀態
@@ -205,8 +262,16 @@ function StateMission.setup()
         end
     end
     
-    if mission_id and MissionDataToUse and MissionDataToUse[mission_id] and MissionDataToUse[mission_id].scene then
-        current_scene = MissionDataToUse[mission_id].scene
+    -- [[ S1 多場景 ]] 解析場景清單：優先 mission.scenes[]（多場景），否則 { mission.scene }（單場景，向後相容）
+    current_scenes = nil
+    current_scene_index = 1
+    local mdata = mission_id and MissionDataToUse and MissionDataToUse[mission_id]
+    if mdata then
+        if mdata.scenes and #mdata.scenes > 0 then
+            current_scenes = mdata.scenes
+        elseif mdata.scene then
+            current_scenes = { mdata.scene }
+        end
     end
 
     -- Initialize entity controller for the current scene (so ground/obstacles/enemies draw)
@@ -221,26 +286,7 @@ function StateMission.setup()
         mission_time_limit = -1
     end
     
-    if current_scene and EntityController then
-        local enemies = (current_scene.enemies) or {}
-        entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED, UI_HEIGHT)
-    else
-        entity_controller = nil
-    end
-
-    if current_scene and current_scene.ground_y then
-        mech_x = 50
-        -- EntityController 已經將 ground_y 上移 UI_HEIGHT，所以直接使用 entity_controller.ground_y
-        local adjusted_ground_y = entity_controller and entity_controller.ground_y or (current_scene.ground_y - UI_HEIGHT)
-        mech_y = adjusted_ground_y - mech_draw_h
-    else
-        mech_x = 50
-        mech_y = GAME_HEIGHT - mech_draw_h - 10
-    end
-    mech_vy = 0
-    is_on_ground = true
-    mech_y_old = mech_y
-    camera_x = 0
+    -- [[ S1 ]] 場景相依初始化（控制器/機甲位置/鏡頭/對話）改由 loadScene 統一處理，於本函式末尾呼叫
 
     -- 初始化機甲控制器
     mech_controller = MechController:init()
@@ -263,21 +309,8 @@ function StateMission.setup()
         _G.SoundManager.playMissionBGM()
     end
 
-    -- 讀取並啟用任務對話（如果設定）
-    dialog_active = false
-    dialog_lines = nil
-    dialog_index = 1
-    dialog_image = nil
-    typewriter_progress = 0
-    if current_scene and current_scene.dialog and current_scene.dialog.lines then
-        dialog_lines = current_scene.dialog.lines
-        dialog_active = true
-        typewriter_progress = 0
-        if current_scene.dialog.image then
-            local ok, img = pcall(function() return playdate.graphics.image.new(current_scene.dialog.image) end)
-            if ok and img then dialog_image = img end
-        end
-    end
+    -- [[ S1 多場景 ]] 載入第一個場景（建立控制器/機甲位置/鏡頭/對話）
+    loadScene(current_scenes and current_scenes[current_scene_index] or nil)
 end
 
 function StateMission.update()
@@ -679,12 +712,29 @@ function StateMission.update()
         return
     end
     
+    -- [[ S1 傳送點 ]] 場景設有傳送點：機甲到達且敵人已清空 → 完成本場景（載入下一場景或通關）
+    if current_scene and current_scene.teleport then
+        local tx = current_scene.teleport.x or 0
+        local enemies_clear = true
+        if entity_controller and entity_controller.enemies then
+            for _, e in ipairs(entity_controller.enemies) do
+                if (e.hp and e.hp > 0) or e.is_exploding then enemies_clear = false break end
+            end
+        end
+        if enemies_clear and mech_x >= tx then
+            print("LOG: Reached teleport at scene " .. current_scene_index)
+            completeCurrentScene()
+            return
+        end
+    end
+
     -- 7. 檢查關卡目標是否完成
     local MissionDataToUse = _G.MissionData or MissionData
     if MissionDataToUse and current_mission_id then
         local mission = MissionDataToUse[current_mission_id]
-        if mission and mission.objective then
-            local obj = mission.objective
+        -- [[ S1 ]] 允許場景自帶 objective 覆寫任務 objective（多場景可各有目標）
+        local obj = (current_scene and current_scene.objective) or (mission and mission.objective)
+        if mission and obj then
             
             -- 目標類型：打倒所有敵人
             if obj.type == "ELIMINATE_ALL" then
@@ -701,7 +751,7 @@ function StateMission.update()
                     
                     if all_defeated and #entity_controller.enemies > 0 then
                         print("MISSION SUCCESS: All enemies defeated!")
-                        setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
+                        completeCurrentScene()
                         return
                     end
                 end
@@ -779,7 +829,7 @@ function StateMission.update()
 
                     if all_placed and not effect_playing and #entity_controller.stones > 0 then
                         print("MISSION SUCCESS: All stones delivered to targets!")
-                        setState(_G.StateResult, true, obj.description or "Mission Complete!", current_mission_id)
+                        completeCurrentScene()
                         return
                     end
                 end

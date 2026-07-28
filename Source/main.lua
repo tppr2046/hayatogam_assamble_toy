@@ -24,9 +24,19 @@ _G.SoundManager = sound or {}
 local pd = import "parts_data"
 _G.PartsData = pd or _G.PartsData or {}
 
--- 載入任務資料並設置為全域
-local md = import "mission_data"
-_G.MissionData = md or _G.MissionData or {}
+-- [[ 一關一檔 ]] 掃描 levels/ 資料夾的 JSON 組成任務資料。
+-- 新增關卡＝把編輯工具匯出的 .json 丟進 Source/levels/ 後重新編譯即可，無需改程式。
+local loadLevels = import "level_loader"
+local levels = loadLevels()
+local level_count = 0
+for _ in pairs(levels) do level_count = level_count + 1 end
+if level_count == 0 then
+    -- 安全網：levels/ 空的話回退到舊的 mission_data.lua（若仍存在）
+    print("LEVELS: 資料夾無關卡，回退 mission_data.lua")
+    local ok, md = pcall(function() return import "mission_data" end)
+    levels = (ok and md) or {}
+end
+_G.MissionData = levels
 
 -- 載入實體模組 (機甲與敵人邏輯)
 local me = import "module_entities"

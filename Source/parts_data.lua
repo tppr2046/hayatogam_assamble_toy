@@ -229,4 +229,19 @@ local parts_data = {
 
 }
 
+-- [[ G2b ]] 商店文字說明（集中管理，一處編修）。key = 零件 id。
+local descriptions = {
+    GUN    = "Auto-firing gun. Shoots forward on its own.",
+    WHEEL1 = "Basic wheel. Move left and right.",
+    WHEEL2 = "Tougher wheel. Climbs steeper slopes.",
+    CLAW   = "Crank to swing the arm. Press A to grab or release.",
+    CANON1 = "Cannon. Aim the barrel with the crank.",
+    CANON2 = "Heavy cannon. Stronger shots, slower fire.",
+    SWORD  = "Swing the blade with the crank.",
+    FEET   = "Legs. Move around and press A to jump.",
+}
+for pid, d in pairs(descriptions) do
+    if parts_data[pid] then parts_data[pid].description = d end
+end
+
 return parts_data

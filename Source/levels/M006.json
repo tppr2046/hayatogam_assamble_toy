@@ -1,0 +1,204 @@
+{
+  "scene": {
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "It's the final battle, Pilot.",
+        "Evil forces are gathering to stop us.",
+        "We will succeed, we trust in you."
+      ]
+    },
+    "width": 1200,
+    "backgrounds": [
+      {
+        "x": 30,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 65
+      },
+      {
+        "x": 300,
+        "image": "images/bg_building2.png",
+        "layer": 0,
+        "y": 35
+      },
+      {
+        "x": 180,
+        "image": "images/bg_building1.png",
+        "layer": 1,
+        "y": 75
+      },
+      {
+        "x": 500,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 55
+      },
+      {
+        "x": 700,
+        "image": "images/bg_building3.png",
+        "layer": 1,
+        "y": 65
+      }
+    ],
+    "obstacles": [],
+    "reward_copper": 60,
+    "ground_y": 220,
+    "terrain": [
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      }
+    ],
+    "reward_rubber": 35,
+    "enemies": [
+      {
+        "x": 250,
+        "y": 0,
+        "type": "JUMP_ENEMY"
+      },
+      {
+        "x": 320,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 380,
+        "y": 0,
+        "type": "SWORD_ENEMY"
+      },
+      {
+        "x": 550,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 750,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 800,
+        "y": 0,
+        "type": "MINE"
+      },
+      {
+        "x": 880,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 1050,
+        "y": 0,
+        "type": "SWORD_ENEMY"
+      }
+    ],
+    "reward_steel": 10
+  },
+  "prerequisite": "M004",
+  "category": "ELIMINATION",
+  "time_limit": -1,
+  "name": "MORE ENEMIES",
+  "objective": {
+    "description": "Eliminate all enemies",
+    "type": "ELIMINATE_ALL"
+  },
+  "description": "Eliminate all enemies.",
+  "id": "M006"
+}

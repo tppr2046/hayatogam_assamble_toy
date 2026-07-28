@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Write-Output \"PLAYDATE_SDK_PATH = $env:PLAYDATE_SDK_PATH\"; if \\($env:PLAYDATE_SDK_PATH -and \\(Test-Path $env:PLAYDATE_SDK_PATH\\)\\) { Write-Output \"SDK path exists\"; $pdc = Join-Path $env:PLAYDATE_SDK_PATH \"bin\\\\pdc.exe\"; $sim = Join-Path $env:PLAYDATE_SDK_PATH \"bin\\\\PlaydateSimulator.exe\"; Write-Output \"pdc exists: $\\(Test-Path $pdc\\)\"; Write-Output \"simulator exists: $\\(Test-Path $sim\\)\" } else { Write-Output \"SDK PATH NOT SET or missing\" }; Write-Output \"---pdc on PATH---\"; \\(Get-Command pdc -ErrorAction SilentlyContinue\\).Source)",
+      "Bash(E:/PlaydateSDK/bin/pdc.exe -sdkpath E:/PlaydateSDK Source __TRACKED_VAR__/test.pdx)",
+      "Bash(echo \"EXIT CODE: $?\")",
+      "Bash(echo \"PDC EXIT: $?\")",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\")",
+      "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy/Source\" && sed -i 's/crank_degrees_per_rotation = 180,  -- crank 轉 1 圈產生的「臂」角度變化（A2 可調）/crank_degrees_per_rotation = 90,  -- crank 轉 1 圈產生的「臂」角度變化（A2 調校 180→90：全範圍 ±90° 需轉兩圈，強化手忙腳亂感）/' parts_data.lua && grep -n \"crank_degrees_per_rotation = 90\" parts_data.lua)"
+    ],
+    "additionalDirectories": [
+      "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"
+    ]
+  }
+}

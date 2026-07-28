@@ -108,13 +108,27 @@ function StateResult.draw()
         end
     end
     
-    -- 顯示 OK 選項
-    local ok_text = "> OK <"
-    local ok_width = gfx.getTextSize(ok_text)
-    gfx.drawText(ok_text, (400 - ok_width) / 2, 185)
-    
-    -- 提示文字
-    gfx.drawText("Press A to continue", 10, 220)
+    -- [[ G2b ]] OK 鈕：黑底白字（與其他按鈕一致）並閃爍
+    local ok_text = "OK"
+    local tw, th = gfx.getTextSize(ok_text)
+    local pad_x, pad_y = 16, 6
+    local bw, bh = tw + pad_x * 2, th + pad_y * 2
+    local bx = (400 - bw) // 2
+    local by = 180
+    local tx = bx + pad_x
+    local ty = by + pad_y
+    local blink_on = (playdate.getCurrentTimeMilliseconds() // 300) % 2 == 0
+    if blink_on then
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(bx, by, bw, bh)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(ok_text, tx, ty)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    else
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawRect(bx, by, bw, bh)
+        gfx.drawText(ok_text, tx, ty)
+    end
 end
 
 return StateResult

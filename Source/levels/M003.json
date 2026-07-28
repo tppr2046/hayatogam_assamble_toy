@@ -1,0 +1,195 @@
+{
+  "description": "Deliver the stone to the target zone.",
+  "required_parts": [
+    "CLAW"
+  ],
+  "name": "Dangerous Delivery",
+  "objective": {
+    "description": "Deliver the stone to the target zone",
+    "type": "DELIVER_STONE"
+  },
+  "id": "M003",
+  "category": "DELIVER_STONE",
+  "prerequisite": "M002",
+  "scene": {
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "Thank you, Pilot, but the world is still in danger.",
+        "More stones, more enemies. We cannot live in peace yet.",
+        "Take stones to the targets."
+      ]
+    },
+    "delivery_targets": [
+      {
+        "x": 350,
+        "image": "images/target_box",
+        "y": 0,
+        "id": "target1"
+      },
+      {
+        "x": 900,
+        "image": "images/target_box",
+        "y": 0,
+        "id": "target2"
+      }
+    ],
+    "width": 1200,
+    "backgrounds": [
+      {
+        "x": 30,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 65
+      },
+      {
+        "x": 300,
+        "image": "images/bg_building2.png",
+        "layer": 0,
+        "y": 35
+      },
+      {
+        "x": 180,
+        "image": "images/bg_building1.png",
+        "layer": 1,
+        "y": 75
+      },
+      {
+        "x": 500,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 55
+      },
+      {
+        "x": 700,
+        "image": "images/bg_building3.png",
+        "layer": 1,
+        "y": 65
+      }
+    ],
+    "obstacles": [],
+    "reward_copper": 40,
+    "ground_y": 220,
+    "terrain": [
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      }
+    ],
+    "reward_rubber": 25,
+    "reward_steel": 0,
+    "enemies": [
+      {
+        "x": 380,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 250,
+        "y": 0,
+        "type": "MINE"
+      },
+      {
+        "x": 550,
+        "y": 0,
+        "type": "MINE"
+      },
+      {
+        "x": 780,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      }
+    ],
+    "stones": [
+      {
+        "x": 200,
+        "image": "images/stone.png",
+        "target_id": "target1",
+        "y": -5
+      },
+      {
+        "x": 510,
+        "image": "images/stone.png",
+        "target_id": "target2",
+        "y": -5
+      }
+    ]
+  },
+  "time_limit": 99
+}

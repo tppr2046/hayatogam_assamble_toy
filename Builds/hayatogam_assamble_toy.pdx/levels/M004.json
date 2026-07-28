@@ -1,0 +1,199 @@
+{
+  "scene": {
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "Thank you, Pilot, now we will move to farther land to build our base.",
+        "More enemies out there trying to stop us.",
+        "Clear the area to ensure safe passage."
+      ]
+    },
+    "width": 1200,
+    "backgrounds": [
+      {
+        "x": 30,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 65
+      },
+      {
+        "x": 300,
+        "image": "images/bg_building2.png",
+        "layer": 0,
+        "y": 35
+      },
+      {
+        "x": 180,
+        "image": "images/bg_building1.png",
+        "layer": 1,
+        "y": 75
+      },
+      {
+        "x": 500,
+        "image": "images/bg_building4.png",
+        "layer": 0,
+        "y": 55
+      },
+      {
+        "x": 700,
+        "image": "images/bg_building3.png",
+        "layer": 1,
+        "y": 65
+      }
+    ],
+    "obstacles": [],
+    "reward_copper": 10,
+    "ground_y": 220,
+    "terrain": [
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "up15"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "flat"
+      },
+      {
+        "height_offset": -17,
+        "type": "down15"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      },
+      {
+        "height_offset": 0,
+        "type": "flat"
+      }
+    ],
+    "reward_rubber": 5,
+    "enemies": [
+      {
+        "x": 250,
+        "y": 0,
+        "type": "JUMP_ENEMY"
+      },
+      {
+        "x": 320,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 380,
+        "y": -17,
+        "type": "SWORD_ENEMY"
+      },
+      {
+        "x": 450,
+        "y": -17,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 650,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 780,
+        "y": 0,
+        "type": "BASIC_ENEMY"
+      },
+      {
+        "x": 950,
+        "y": 0,
+        "type": "SWORD_ENEMY"
+      }
+    ],
+    "reward_steel": 60
+  },
+  "prerequisite": "M002",
+  "category": "ELIMINATION",
+  "time_limit": -1,
+  "name": "MORE ENEMIES",
+  "objective": {
+    "description": "Eliminate all enemies",
+    "type": "ELIMINATE_ALL"
+  },
+  "description": "Eliminate all enemies.",
+  "id": "M004"
+}

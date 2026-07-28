@@ -42,13 +42,17 @@ local HQ_LAYOUT = {
     panel    = { x = 2,   y = 150, w = 108, h = 68 },
     -- 中右框 x131 y83 w262 h74：機體 2 倍放大置中於此
     mech_scale = 2,      -- 機體放大倍率
-    mech_cx  = 302,      -- 放大後機體「組裝格中心」落點 x（往右移 40px，避免左側預覽/溢出零件擋到機體）
+    mech_cx  = 285,      -- 放大後機體「組裝格中心」落點 x（往右移 40px，避免左側預覽/溢出零件擋到機體；再往左 5px）
     mech_cy  = 120,      -- 放大後機體「組裝格中心」落點 y（＝中右框垂直中心）
-    menu_x   = 138,      -- 底中框 x131 w157：零件選單 / 零件清單
+    menu_x   = 182,      -- 底中框 x174~325：零件選單 / 零件清單（G2b：右移對齊新底圖）
     menu_y   = 180,
-    start_size = 55,     -- 底右框 x300 y173 55x55（正方形）
-    start_x  = 300,
+    start_size = 55,     -- 底右框 x336~392 55x55（正方形）
+    start_x  = 336,      -- G2b：右移對齊新底圖 START 框
     start_y  = 173,
+    -- G2b：新增 SHOP 方塊（底圖左下新方塊 x108~165 y171~228），選中按 A 進商店
+    shop_size = 55,
+    shop_x   = 110,
+    shop_y   = 173,
 }
 
 -- [[ G2 ]] 零件清單一次顯示幾筆（底中框 y173~228 高 55px，起點 y180、行高 15
@@ -97,6 +101,7 @@ local cursor_row = 1
 local MAIN_MENU = { "TOP PARTS", "BOTTOM PARTS", "REMOVE PART" }  -- SHOP 原型隱藏
 local main_menu_index = 1       -- 主選單游標（1..#MAIN_MENU）
 local cursor_on_start = false   -- 游標是否在右下角固定 START 鈕上
+local cursor_on_shop = false    -- 游標是否在左下角 SHOP 鈕上（主選單按左鍵進入）
 local is_unequip_mode = false  -- 是否在解除裝備模式（由主選單 REMOVE PART 進入）
 local unequip_selected_col = 1  -- 解除模式選中的格子列
 local unequip_selected_row = 1  -- 解除模式選中的格子排
@@ -430,6 +435,7 @@ function StateHQ.setup()
     selected_category = nil  -- 重置分類選擇
     main_menu_index = 1
     cursor_on_start = false
+    cursor_on_shop = false
 
     -- 初始化 GRID_MAP（row-major），nil 表示空
     GRID_MAP = {}
@@ -741,6 +747,19 @@ function StateHQ.update()
                     _G.SoundManager.playCursorMove()
                 end
             end
+        elseif cursor_on_shop then
+            -- [[ G2b ]] 游標在左下角 SHOP 鈕：A 進入商店，右鍵/B 回主選單
+            if playdate.buttonJustPressed(playdate.kButtonA) then
+                if _G.SoundManager and _G.SoundManager.playSelect then
+                    _G.SoundManager.playSelect()
+                end
+                setState(_G.StateShop)
+            elseif playdate.buttonJustPressed(playdate.kButtonRight) or playdate.buttonJustPressed(playdate.kButtonB) then
+                cursor_on_shop = false
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
+            end
         elseif not selected_category then
             -- [[ P5 ]] 主選單層：上下移動、A 進入、右鍵跳 START、B 回任務選擇
             -- （SHOP 原型隱藏；拆卸改為明示選項 REMOVE PART）
@@ -759,6 +778,12 @@ function StateHQ.update()
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
                 cursor_on_start = true
                 -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
+            elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
+                -- [[ G2b ]] 左鍵跳至左下角 SHOP 鈕
+                cursor_on_shop = true
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
@@ -961,80 +986,37 @@ function StateHQ.draw()
         local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
         
         if pdata then
-            local preview_x, preview_y
-            
-            -- [[ G2 ]] 預覽固定畫在「整台機體的左側」，與機體左緣留一段距離，
-            -- 垂直對齊目標列（不隨選定欄左右移動）。目標格本身留給游標框/X。
-            -- 空間不足時夾在畫布左緣。PREVIEW_GAP 為機體左緣與預覽的間距。
-            local PREVIEW_GAP = 28
-            local prow = rowForPart(pdata)
-            local part_w_px = (pdata.slot_x or 1) * GRID_CELL_SIZE
-            preview_x = math.max(2, GRID_START_X - PREVIEW_GAP - part_w_px)
-            preview_y = GRID_START_Y + (GRID_ROWS - prow) * GRID_CELL_SIZE
-            
-            -- 繪製預覽圖片
-            if pdata._img_scaled then
-                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
-                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
-                local draw_y = preview_y + (GRID_CELL_SIZE - sh)
-                pcall(function() pdata._img_scaled:draw(preview_x, draw_y) end)
-                -- CLAW 特殊處理：繪製額外部件
+            -- [[ G2b ]] 預覽畫進底圖「左側零件框」（螢幕座標，量自 hq_bg.png）：
+            -- 以「圖片中心點對齊該框中心點」繪製，不縮放、不裁切、不隨零件寬度位移。
+            -- 本區在機甲離屏畫布內作畫（稍後整張 drawScaled 貼上底圖），故需把螢幕框中心
+            -- 反算成畫布座標：screen = draw + canvas*scale，draw = mech_c - grid_c_local*scale。
+            local PREVIEW_BOX = { x = 113, y = 82, w = 97, h = 75 }  -- 左框（螢幕像素）
+            if pdata._img then
+                local scale = HQ_LAYOUT.mech_scale
+                local grid_cx_local = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE) / 2
+                local grid_cy_local = GRID_START_Y + (GRID_ROWS * GRID_CELL_SIZE) / 2
+                local box_scr_cx = PREVIEW_BOX.x + PREVIEW_BOX.w / 2
+                local box_scr_cy = PREVIEW_BOX.y + PREVIEW_BOX.h / 2
+                -- 框中心對應的畫布座標
+                local cu = (box_scr_cx - HQ_LAYOUT.mech_cx) / scale + grid_cx_local
+                local cv = (box_scr_cy - HQ_LAYOUT.mech_cy) / scale + grid_cy_local
+                -- 主圖：中心對齊框中心
+                local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+                local ix = ok and iw and math.floor(cu - iw / 2) or math.floor(cu)
+                local iy = ok and ih and math.floor(cv - ih / 2) or math.floor(cv)
+                pcall(function() pdata._img:draw(ix, iy) end)
+                -- CLAW 疊件：與主圖同錨點（維持設計疊合關係）
                 if part_id == "CLAW" then
-                    if pdata._arm_img then pcall(function() pdata._arm_img:draw(preview_x, draw_y) end) end
-                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(preview_x, draw_y) end) end
-                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(preview_x, draw_y) end) end
+                    if pdata._arm_img   then pcall(function() pdata._arm_img:draw(ix, iy) end) end
+                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(ix, iy) end) end
+                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(ix, iy) end) end
                 end
-                -- CANON 特殊處理：繪製底座
-                if part_id == "CANON1" or part_id == "CANON2" then
-                    if pdata._base_img then
-                        pcall(function() pdata._base_img:draw(preview_x, draw_y) end)
-                    end
-                end
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawRect(preview_x, draw_y, sw, sh)
-                -- 在選擇時繪製閃爍邊框
-                if blink_on then
-                    gfx.setLineWidth(3)
-                    gfx.drawRect(preview_x - 2, draw_y - 2, sw + 4, sh + 4)
-                    gfx.setLineWidth(1)
-                end
-            elseif pdata._img then
-                local iw, ih
-                local ok, a, b = pcall(function() return pdata._img:getSize() end)
-                if ok then iw, ih = a, b end
-                local draw_x = preview_x
-                local draw_y = preview_y
-                if iw and ih then
-                    draw_x = preview_x + math.floor((GRID_CELL_SIZE - iw) / 2)
-                    draw_y = preview_y + math.floor((GRID_CELL_SIZE - ih) / 2)
-                end
-                pcall(function() pdata._img:draw(draw_x, draw_y) end)
-                -- CLAW 特殊處理：繪製額外部件
-                if part_id == "CLAW" then
-                    if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
-                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
-                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
-                end
-                -- CANON 特殊處理：繪製底座（在砲管後繪製，這樣底座會顯示在上面）
-                if part_id == "CANON1" or part_id == "CANON2" then
-                    if pdata._base_img then
-                        local ok_base, base_width, base_height = pcall(function() return pdata._base_img:getSize() end)
-                        if ok_base and base_width and base_height then
-                            local base_draw_x = preview_x + math.floor((GRID_CELL_SIZE - base_width) / 2)
-                            local base_draw_y = preview_y + math.floor((GRID_CELL_SIZE - base_height) / 2)
-                            pcall(function() pdata._base_img:draw(base_draw_x, base_draw_y) end)
-                        else
-                            pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
-                        end
-                    end
-                end
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawRect(preview_x, preview_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-                -- 在選擇時繪製閃爍邊框
-                if blink_on then
-                    gfx.setLineWidth(3)
-                    gfx.drawRect(preview_x - 2, preview_y - 2, GRID_CELL_SIZE + 4, GRID_CELL_SIZE + 4)
-                    gfx.setLineWidth(1)
+                -- CANON 底座：各自中心對齊框中心
+                if (part_id == "CANON1" or part_id == "CANON2") and pdata._base_img then
+                    local okb, bw, bh = pcall(function() return pdata._base_img:getSize() end)
+                    local bx = okb and bw and math.floor(cu - bw / 2) or ix
+                    local by = okb and bh and math.floor(cv - bh / 2) or iy
+                    pcall(function() pdata._base_img:draw(bx, by) end)
                 end
             end
         end
@@ -1389,7 +1371,7 @@ function StateHQ.draw()
     if not selected_category and not is_unequip_mode then
         -- 主選單：反白選取
         for i = 1, #MAIN_MENU do
-            local selected = (i == main_menu_index and not cursor_on_start)
+            local selected = (i == main_menu_index and not cursor_on_start and not cursor_on_shop)
             drawSelectableText(MAIN_MENU[i], list_x, list_y + (i - 1) * line_height, selected)
         end
     elseif selected_category then
@@ -1475,13 +1457,37 @@ function StateHQ.draw()
         -- [[ G2 ]] 方框由底圖提供：選中＝整格反白（黑底白字），未選中＝只畫黑字
         if cursor_on_start then
             gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(box_x, box_y, box_w, box_h)
+            -- 左右外擴 4px 吃進底圖框線，避免反白時露出白邊
+            gfx.fillRect(box_x - 2, box_y, box_w + 4, box_h)
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
             gfx.drawText(start_text, text_x, text_y)
             gfx.setImageDrawMode(gfx.kDrawModeCopy)
         else
             gfx.setColor(gfx.kColorBlack)
             gfx.drawText(start_text, text_x, text_y)
+        end
+    end
+
+    -- [[ G2b ]] 7b. SHOP 正方形鈕（底圖左下方塊；選中＝整格反白）
+    do
+        local shop_text = "SHOP"
+        local tw, th = gfx.getTextSize(shop_text)
+        local box_w = HQ_LAYOUT.shop_size
+        local box_h = HQ_LAYOUT.shop_size
+        local box_x = HQ_LAYOUT.shop_x
+        local box_y = HQ_LAYOUT.shop_y
+        local text_x = box_x + math.floor((box_w - tw) / 2)
+        local text_y = box_y + math.floor((box_h - th) / 2)
+        if cursor_on_shop then
+            gfx.setColor(gfx.kColorBlack)
+            -- 左右外擴 4px 吃進底圖框線，避免反白時露出白邊
+            gfx.fillRect(box_x - 2, box_y, box_w + 4, box_h)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText(shop_text, text_x, text_y)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawText(shop_text, text_x, text_y)
         end
     end
 
@@ -1580,10 +1586,24 @@ function StateHQ.draw()
     if MissionData and MissionData[mission_id] then
         local mission = MissionData[mission_id]
         local mbox = HQ_LAYOUT.mission
+        -- [[ G2b ]] 上方黑色標籤：程式畫「寬度隨標題文字長度」的黑底＋白字。
+        -- （底圖左上原本的固定黑塊請移除，改由此處動態繪製以自動適應長度。）
+        local title = mission.name or "MISSION"
+        local ttw, tth = gfx.getTextSize(title)
+        local TAB_PAD_X = 8   -- 文字左右內距
+        local tab = { x = 4, y = 1, h = 18 }
+        tab.w = ttw + TAB_PAD_X * 2
         gfx.setColor(gfx.kColorBlack)
-        gfx.drawText(mission.name or "MISSION", mbox.x + 6, mbox.y + 4)
+        gfx.fillRect(tab.x, tab.y, tab.w, tab.h)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(title, tab.x + TAB_PAD_X, tab.y + 2 + math.floor((tab.h - tth) / 2))
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        -- [[ G2b ]] 說明框：只顯示說明文字（標題已移到黑色標籤），垂直置中
+        gfx.setColor(gfx.kColorBlack)
         if mission.objective then
-            gfx.drawText(mission.objective.description or "", mbox.x + 6, mbox.y + 24)
+            local desc = mission.objective.description or ""
+            local _, dth = gfx.getTextSize(desc)
+            gfx.drawText(desc, mbox.x + 6, mbox.y + math.floor((mbox.h - dth) / 2))
         end
         -- [[ 零件限制 ]] 任務需求零件顯示在面板右側（有宣告 required_parts 才顯示）
         if mission.required_parts and #mission.required_parts > 0 then
