@@ -436,6 +436,14 @@ function StateHQ.setup()
     main_menu_index = 1
     cursor_on_start = false
     cursor_on_shop = false
+    -- [[ S8 ]] 前端設定選單（Menu 鍵）：BGM / SFX 音量
+    if _G.MenuItems and _G.MenuItems.installForFrontend then
+        _G.MenuItems.installForFrontend()
+    end
+    -- [[ S10 ]] 首次進入組裝介面：播放教學
+    if _G.Tutorial and _G.Tutorial.maybeStart then
+        _G.Tutorial.maybeStart("hq")
+    end
 
     -- 初始化 GRID_MAP（row-major），nil 表示空
     GRID_MAP = {}
@@ -608,7 +616,12 @@ function StateHQ.setup()
 end
 
 function StateHQ.update()
-    
+    -- [[ S10 ]] 教學覆蓋層作用中：吃掉輸入
+    if _G.Tutorial and _G.Tutorial.isActive and _G.Tutorial.isActive() then
+        _G.Tutorial.update()
+        return
+    end
+
     if is_unequip_mode then
         -- 解除裝備模式
         local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -1000,23 +1013,31 @@ function StateHQ.draw()
                 -- 框中心對應的畫布座標
                 local cu = (box_scr_cx - HQ_LAYOUT.mech_cx) / scale + grid_cx_local
                 local cv = (box_scr_cy - HQ_LAYOUT.mech_cy) / scale + grid_cy_local
-                -- 主圖：中心對齊框中心
-                local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
-                local ix = ok and iw and math.floor(cu - iw / 2) or math.floor(cu)
-                local iy = ok and ih and math.floor(cv - ih / 2) or math.floor(cv)
-                pcall(function() pdata._img:draw(ix, iy) end)
-                -- CLAW 疊件：與主圖同錨點（維持設計疊合關係）
-                if part_id == "CLAW" then
-                    if pdata._arm_img   then pcall(function() pdata._arm_img:draw(ix, iy) end) end
-                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(ix, iy) end) end
-                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(ix, iy) end) end
-                end
-                -- CANON 底座：各自中心對齊框中心
                 if (part_id == "CANON1" or part_id == "CANON2") and pdata._base_img then
-                    local okb, bw, bh = pcall(function() return pdata._base_img:getSize() end)
-                    local bx = okb and bw and math.floor(cu - bw / 2) or ix
-                    local by = okb and bh and math.floor(cv - bh / 2) or iy
-                    pcall(function() pdata._base_img:draw(bx, by) end)
+                    -- [[ 修正 ]] CANON 依機體上的形狀：砲座與砲管「底部＋左緣」對齊同一角
+                    -- （＝機體 rest pose，砲管由左緣向右伸出），整個形狀的中心置中於框。
+                    local okb, bw, bh = pcall(function() return pdata._img:getSize() end)       -- 砲管
+                    local okc, cbw, cbh = pcall(function() return pdata._base_img:getSize() end) -- 砲座
+                    bw = (okb and bw) or 0; bh = (okb and bh) or 0
+                    cbw = (okc and cbw) or 0; cbh = (okc and cbh) or 0
+                    local uw = math.max(bw, cbw)
+                    local uh = math.max(bh, cbh)
+                    local ox = math.floor(cu - uw / 2)
+                    local oy = math.floor(cv - uh / 2)
+                    pcall(function() pdata._base_img:draw(ox, oy + uh - cbh) end)  -- 砲座在下
+                    pcall(function() pdata._img:draw(ox, oy + uh - bh) end)        -- 砲管疊上
+                else
+                    -- 一般零件：主圖中心對齊框中心
+                    local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+                    local ix = ok and iw and math.floor(cu - iw / 2) or math.floor(cu)
+                    local iy = ok and ih and math.floor(cv - ih / 2) or math.floor(cv)
+                    pcall(function() pdata._img:draw(ix, iy) end)
+                    -- CLAW 疊件：與主圖同錨點（維持設計疊合關係）
+                    if part_id == "CLAW" then
+                        if pdata._arm_img   then pcall(function() pdata._arm_img:draw(ix, iy) end) end
+                        if pdata._upper_img then pcall(function() pdata._upper_img:draw(ix, iy) end) end
+                        if pdata._lower_img then pcall(function() pdata._lower_img:draw(ix, iy) end) end
+                    end
                 end
             end
         end
@@ -1612,6 +1633,9 @@ function StateHQ.draw()
             gfx.drawText(req_text, mbox.x + mbox.w - rtw - 6, mbox.y + 4)
         end
     end
+
+    -- [[ S10 ]] 教學覆蓋層（畫在最上層）
+    if _G.Tutorial and _G.Tutorial.draw then _G.Tutorial.draw() end
 end
 
 return StateHQ

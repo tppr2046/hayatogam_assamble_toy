@@ -190,6 +190,10 @@ function Enemy:init(x, y, type_id, ground_y)
 end
 
 function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    -- [[ S6 ]] BOSS 走專屬階段控制器
+    if self.is_boss then
+        return self:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    end
     -- 如果正在爆炸，更新爆炸動畫
     if self.is_exploding then
         self.exploding_frame_timer = self.exploding_frame_timer + dt
@@ -202,7 +206,12 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     end
     
     if not self.is_alive then return end
-    
+
+    -- [[ S5 護送戰 ]] 若場景有存活的 NPC → 敵人改為朝 NPC 移動並攻擊它（護送戰模式）
+    if controller and controller.npc and (controller.npc.hp or 0) > 0 and not controller.npc.reached_goal then
+        return self:updateAttackNPC(dt, controller)
+    end
+
     self.move_timer = self.move_timer + dt
     self.fire_timer = self.fire_timer + dt
     
@@ -480,6 +489,192 @@ function Enemy:fire(target_x, controller)
     table.insert(controller.projectiles, projectile)
 end
 
+-- [[ S5 護送戰 ]] 敵人朝 NPC 移動並接觸攻擊（有 NPC 時取代一般巡邏/射擊）
+function Enemy:updateAttackNPC(dt, controller)
+    local npc = controller.npc
+    local dir = (npc.x > self.x) and 1 or -1
+    self.move_dir = dir
+    self.x = self.x + dir * (self.move_speed or 20) * dt
+    self.npc_attack_timer = (self.npc_attack_timer or 0) + dt
+    if math.abs(self.x - npc.x) < (self.width or 24) then
+        if self.npc_attack_timer >= 0.6 then
+            self.npc_attack_timer = 0
+            npc.hp = npc.hp - (self.attack or 5)
+            if _G.SoundManager and _G.SoundManager.playHit then _G.SoundManager.playHit() end
+        end
+    end
+end
+
+-- ==========================================================================
+-- [[ S6 BOSS ]] BOSS = 核心 + 依序外掛可破壞武器零件；一次只露出一個弱點
+-- ==========================================================================
+
+-- 建立 BOSS（特殊敵人）。edata = { type="BOSS", boss_id, x, y }
+function Enemy:initBoss(edata, ground_y)
+    local bd = (_G.BossData or {})[edata.boss_id]
+    if not bd or not bd.parts or #bd.parts == 0 then
+        print("ERROR: BossData missing for " .. tostring(edata.boss_id))
+        return Enemy:init(edata.x, edata.y or 0, "BASIC_ENEMY", ground_y)  -- 安全回退
+    end
+    local body_w = bd.body_w or 56
+    local body_h = bd.body_h or 64
+    local e = {
+        is_boss = true, type_id = "BOSS", boss_id = edata.boss_id,
+        boss_data = bd, boss_parts = bd.parts, boss_phase = 1,
+        boss_x = edata.x, boss_y = ground_y - body_h,
+        boss_body_w = body_w, boss_body_h = body_h,
+        boss_ground_y = ground_y, origin_x = edata.x,
+        boss_speed = bd.move_speed or 16, boss_range = bd.move_range or 90,
+        boss_trans_time = bd.trans_time or 1.0, boss_invuln = 0,
+        move_dir = -1,
+        -- 傷害/碰撞管線需要的欄位
+        hp = bd.parts[1].hp, attack = (bd.parts[1].attack and bd.parts[1].attack.damage) or 5,
+        ground_y = ground_y, is_alive = true, is_exploding = false,
+        exploding_frame_timer = 0, exploding_duration = 1.0, exploding_frame_index = 0,
+        exploding_image_table = nil, fire_timer = 0,
+        projectile_speed_mult = 1.0, projectile_grav_mult = 1.0,
+        bullet_offset_x = 0, bullet_offset_y = 0, hit_shake_offset_x = 0,
+        x = edata.x, y = ground_y - body_h, width = 26, height = 26,
+    }
+    setmetatable(e, { __index = Enemy })
+    e:bossPositionHitbox()
+    print("LOG: Created BOSS " .. tostring(edata.boss_id) .. " at " .. edata.x)
+    return e
+end
+
+-- 把命中框（x/y/width/height、子彈發射點、攻擊力）對齊「當前露出的零件」
+function Enemy:bossPositionHitbox()
+    local part = self.boss_parts[self.boss_phase]
+    self.width = part.w; self.height = part.h
+    self.x = self.boss_x + part.dx
+    self.y = self.boss_y + part.dy
+    self.bullet_offset_x = part.w / 2
+    self.bullet_offset_y = part.h / 2
+    self.attack = (part.attack and part.attack.damage) or 5
+    self.projectile_speed_mult = (part.attack and part.attack.speed_mult) or 1.0
+end
+
+-- 以出生點為中心左右巡邏（速度 ≈ 一般敵人）
+function Enemy:bossMove(dt)
+    self.boss_x = self.boss_x + self.move_dir * self.boss_speed * dt
+    if self.boss_x > self.origin_x + self.boss_range then
+        self.boss_x = self.origin_x + self.boss_range; self.move_dir = -1
+    elseif self.boss_x < self.origin_x - self.boss_range then
+        self.boss_x = self.origin_x - self.boss_range; self.move_dir = 1
+    end
+end
+
+-- 發射當前零件的 VOLLEY（n 發，spread 為散射）
+function Enemy:bossVolley(atk, mech_x, controller)
+    local n = atk.n or 1
+    self.attack = atk.damage or 5
+    self.projectile_speed_mult = atk.speed_mult or 1.0
+    for i = 1, n do
+        local off = 0
+        if atk.spread and n > 1 then off = (i - (n + 1) / 2) * 60 end
+        self:fire(mech_x + off, controller)
+    end
+end
+
+function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    -- 零件被打爆（管線把 hp 打到 0 → 設 is_exploding）
+    if self.is_exploding then
+        if self.boss_phase < #self.boss_parts then
+            -- 還有零件 → 攔截爆炸，推進階段 + 無敵轉場
+            self.is_exploding = false
+            self.boss_phase = self.boss_phase + 1
+            self.boss_invuln = self.boss_trans_time or 1.0
+            self.hp = self.boss_parts[self.boss_phase].hp
+            self:bossPositionHitbox()
+            self.fire_timer = 0
+            if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+            print("LOG: Boss part destroyed -> phase " .. self.boss_phase .. "/" .. #self.boss_parts)
+            return
+        else
+            -- 最後零件 → 真正死亡（播完爆炸動畫）
+            self.exploding_frame_timer = self.exploding_frame_timer + dt
+            if self.exploding_frame_timer >= self.exploding_duration then
+                self.is_alive = false; self.is_exploding = false
+                print("LOG: BOSS defeated")
+            end
+            return
+        end
+    end
+    if not self.is_alive then return end
+
+    -- 轉場無敵：閃爍、不攻擊、免傷（把 hp 釘在當前零件滿血）
+    if self.boss_invuln and self.boss_invuln > 0 then
+        self.boss_invuln = self.boss_invuln - dt
+        self.hp = self.boss_parts[self.boss_phase].hp
+        self:bossMove(dt); self:bossPositionHitbox()
+        return
+    end
+
+    -- 正常階段：移動 + 依冷卻發射當前零件武器
+    self:bossMove(dt); self:bossPositionHitbox()
+    self.fire_timer = self.fire_timer + dt
+    local atk = self.boss_parts[self.boss_phase].attack
+    if atk and self.fire_timer >= (atk.cooldown or 2.0) then
+        self.fire_timer = 0
+        if atk.type == "VOLLEY" then self:bossVolley(atk, mech_x, controller) end
+    end
+end
+
+function Enemy:drawBoss(camera_x)
+    local g = playdate.graphics
+    local bx = self.boss_x - camera_x
+    local by = self.boss_y
+    -- 核心本體（白底黑框）
+    g.setColor(g.kColorWhite); g.fillRect(bx, by, self.boss_body_w, self.boss_body_h)
+    g.setColor(g.kColorBlack); g.drawRect(bx, by, self.boss_body_w, self.boss_body_h)
+
+    local invuln = self.boss_invuln and self.boss_invuln > 0
+    local blink = (math.floor(playdate.getCurrentTimeMilliseconds() / 100) % 2 == 0)
+    g.setFont(g.getFont())
+    for i, part in ipairs(self.boss_parts) do
+        local px = bx + part.dx
+        local py = by + part.dy
+        if i < self.boss_phase then
+            -- 已破壞：不畫（消失）
+        elseif i == self.boss_phase then
+            -- 當前露出的弱點：實心方塊；轉場無敵時閃爍
+            if not (invuln and blink) then
+                g.setColor(g.kColorBlack); g.fillRect(px, py, part.w, part.h)
+                g.setImageDrawMode(g.kDrawModeFillWhite)
+                g.drawText(part.label or "", px + 2, py + 2)
+                g.setImageDrawMode(g.kDrawModeCopy)
+            end
+            -- 弱點提示外框（非轉場時閃爍，告訴玩家打這裡）
+            if not invuln then
+                g.setColor(g.kColorBlack); g.setLineWidth(1)
+                g.drawRect(px - 3, py - 3, part.w + 6, part.h + 6)
+            end
+        else
+            -- 尚未輪到：內部武器隱藏；外部零件以外框呈現（掛著待打）
+            if part.reveal ~= "internal" then
+                g.setColor(g.kColorBlack); g.drawRect(px, py, part.w, part.h)
+            end
+        end
+    end
+    self:drawBossHpBar()
+end
+
+-- 螢幕上方固定：BOSS 名稱、階段進度、當前零件血條
+function Enemy:drawBossHpBar()
+    local g = playdate.graphics
+    local part = self.boss_parts[self.boss_phase]
+    local ratio = math.max(0, math.min(1, self.hp / (part.hp or 1)))
+    local bw, bh = 220, 8
+    local bx = (400 - bw) / 2
+    local by = 22
+    g.setColor(g.kColorBlack)
+    local title = (self.boss_data.name or "BOSS") .. "  [" .. (part.label or "?") ..
+        "  " .. self.boss_phase .. "/" .. #self.boss_parts .. "]"
+    g.drawText(title, bx, by - 16)
+    g.drawRect(bx, by, bw, bh)
+    g.fillRect(bx, by, math.floor(bw * ratio), bh)
+end
+
 function Enemy:drawMineExplosion(screen_x)
     if self.is_exploded and self.explode_image_table then
         -- Get frame with 1-based indexing (Playdate imagetable uses 1-based indexing)
@@ -515,6 +710,10 @@ function Enemy:drawMineExplosion(screen_x)
 end
 
 function Enemy:draw(camera_x)
+    -- [[ S6 ]] BOSS 專屬繪製（爆炸中則落到下方沿用死亡爆炸動畫）
+    if self.is_boss and not self.is_exploding then
+        return self:drawBoss(camera_x)
+    end
     -- 敌人死亡爆炸动画
     if self.is_exploding then
         local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)

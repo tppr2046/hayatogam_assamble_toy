@@ -12,6 +12,27 @@ local result_message = ""
 local reward_steel = 0
 local reward_copper = 0
 local reward_rubber = 0
+-- [[ S7 ]] 結算選項：成功＝NEXT/SELECT（有下一關時）；失敗＝RETRY/SELECT
+local result_options = {}
+local result_option_index = 1
+local result_mission_id = nil
+
+-- 找出下一個「已解鎖且未完成」的任務（依 id 排序）
+local function findNextMission()
+    local completed = (_G.GameState and _G.GameState.completed_missions) or {}
+    local ids = {}
+    for id, _ in pairs(_G.MissionData or {}) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        if not completed[id] then
+            local m = _G.MissionData[id]
+            local pre = m and m.prerequisite
+            local unlocked = (pre == 0) or (type(pre) == "string" and completed[pre])
+            if unlocked then return id end
+        end
+    end
+    return nil
+end
 
 function StateResult.setup(success, message, mission_id)
     gfx.setFont(font)
@@ -55,12 +76,39 @@ function StateResult.setup(success, message, mission_id)
             print("LOG: Obtained resources - Steel:" .. reward_steel .. " Copper:" .. reward_copper .. " Rubber:" .. reward_rubber)
         end
     end
+
+    -- [[ S7 ]] 組出結算選項
+    result_mission_id = mission_id or (_G.GameState and _G.GameState.current_mission)
+    result_options = {}
+    if result_success then
+        local nxt = findNextMission()
+        if nxt then result_options[#result_options + 1] = { label = "NEXT", mission = nxt } end
+    else
+        if result_mission_id then
+            result_options[#result_options + 1] = { label = "RETRY", mission = result_mission_id }
+        end
+    end
+    result_options[#result_options + 1] = { label = "MISSION SELECT" }
+    result_option_index = 1
 end
 
 function StateResult.update()
-    if playdate.buttonJustPressed(playdate.kButtonA) then
-        -- 返回任務選擇畫面
-        setState(_G.StateMissionSelect)
+    -- [[ S7 ]] 左右選擇、A 確認
+    if playdate.buttonJustPressed(playdate.kButtonLeft) or playdate.buttonJustPressed(playdate.kButtonRight) then
+        if #result_options > 1 then
+            result_option_index = (result_option_index % #result_options) + 1
+            if _G.SoundManager and _G.SoundManager.playCursorMove then _G.SoundManager.playCursorMove() end
+        end
+    elseif playdate.buttonJustPressed(playdate.kButtonA) then
+        if _G.SoundManager and _G.SoundManager.playSelect then _G.SoundManager.playSelect() end
+        local opt = result_options[result_option_index]
+        if opt and opt.mission then
+            _G.GameState = _G.GameState or {}
+            _G.GameState.current_mission = opt.mission
+            setState(_G.StateHQ)          -- 下一關/重試：先進 HQ 組裝
+        else
+            setState(_G.StateMissionSelect)
+        end
     end
 end
 
@@ -108,26 +156,41 @@ function StateResult.draw()
         end
     end
     
-    -- [[ G2b ]] OK 鈕：黑底白字（與其他按鈕一致）並閃爍
-    local ok_text = "OK"
-    local tw, th = gfx.getTextSize(ok_text)
-    local pad_x, pad_y = 16, 6
-    local bw, bh = tw + pad_x * 2, th + pad_y * 2
-    local bx = (400 - bw) // 2
+    -- [[ S7 ]] 結算選項列（NEXT / RETRY / MISSION SELECT）：選中＝黑底白字並閃爍
+    local pad_x, pad_y, gap = 12, 6, 14
     local by = 180
-    local tx = bx + pad_x
-    local ty = by + pad_y
     local blink_on = (playdate.getCurrentTimeMilliseconds() // 300) % 2 == 0
-    if blink_on then
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(bx, by, bw, bh)
-        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        gfx.drawText(ok_text, tx, ty)
-        gfx.setImageDrawMode(gfx.kDrawModeCopy)
-    else
-        gfx.setColor(gfx.kColorBlack)
-        gfx.drawRect(bx, by, bw, bh)
-        gfx.drawText(ok_text, tx, ty)
+    -- 先算總寬以置中
+    local total_w, widths = 0, {}
+    for i, opt in ipairs(result_options) do
+        local tw = gfx.getTextSize(opt.label)
+        widths[i] = tw + pad_x * 2
+        total_w = total_w + widths[i] + (i > 1 and gap or 0)
+    end
+    local bx = (400 - total_w) // 2
+    local _, th = gfx.getTextSize("A")
+    local bh = th + pad_y * 2
+    for i, opt in ipairs(result_options) do
+        local w = widths[i]
+        local selected = (i == result_option_index)
+        if selected and blink_on then
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(bx, by, w, bh)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText(opt.label, bx + pad_x, by + pad_y)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawRect(bx, by, w, bh)
+            gfx.drawText(opt.label, bx + pad_x, by + pad_y)
+        end
+        bx = bx + w + gap
+    end
+    -- 多個選項時提示左右切換
+    if #result_options > 1 then
+        local hint = "left/right: choose   A: confirm"
+        local htw = gfx.getTextSize(hint)
+        gfx.drawText(hint, (400 - htw) // 2, by + bh + 6)
     end
 end
 

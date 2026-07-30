@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"E:/PlaydateSDK/bin/pdc.exe\" Source Builds/hayatogam_assamble_toy.pdx)",
+      "Bash(echo \"PDC EXIT $?\")"
+    ]
+  }
+}

@@ -73,9 +73,18 @@ function StateShop.setup()
     shop_confirm_mode = false
     shop_confirm_option = 1
     scroll_offset = 0
+    -- [[ S10 ]] 首次進入商店：播放教學
+    if _G.Tutorial and _G.Tutorial.maybeStart then
+        _G.Tutorial.maybeStart("shop")
+    end
 end
 
 function StateShop.update()
+    -- [[ S10 ]] 教學覆蓋層作用中：吃掉輸入
+    if _G.Tutorial and _G.Tutorial.isActive and _G.Tutorial.isActive() then
+        _G.Tutorial.update()
+        return
+    end
     -- [[ G2b ]] 效果計時器每幀遞減
     if res_flash_timer > 0 then res_flash_timer = res_flash_timer - 1 end
     if buy_error_flash > 0 then buy_error_flash = buy_error_flash - 1 end
@@ -454,6 +463,9 @@ function StateShop.draw()
             end
         end
     end
+
+    -- [[ S10 ]] 教學覆蓋層（畫在最上層）
+    if _G.Tutorial and _G.Tutorial.draw then _G.Tutorial.draw() end
 end
 
 return StateShop

@@ -108,12 +108,68 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         table.insert(controller.obstacles, obs)
     end
     
-    -- 初始化敵人
+    -- 初始化敵人（[[ S6 ]] type=="BOSS" 走 BOSS 工廠）
     for _, edata in ipairs(enemies_data or {}) do
-        local enemy = Enemy:init(edata.x, edata.y, edata.type, safe_ground_y)
+        local enemy
+        if edata.type == "BOSS" then
+            enemy = Enemy:initBoss(edata, safe_ground_y)
+        else
+            enemy = Enemy:init(edata.x, edata.y, edata.type, safe_ground_y)
+        end
         table.insert(controller.enemies, enemy)
     end
-    
+
+    -- [[ S4 ]] 敵人重生點（資料驅動）：{ type, x, y, interval 秒, max 上限(nil=無限) }
+    controller.respawners = {}
+    local respawns_data = (scene_data and scene_data.respawns) or {}
+    for _, rd in ipairs(respawns_data) do
+        table.insert(controller.respawners, {
+            type = rd.type,
+            x = rd.x or 0,
+            y = rd.y or 0,
+            interval = rd.interval or 3.0,
+            max = rd.max,                 -- nil = 無上限
+            timer = rd.interval or 3.0,    -- 首次生成前先等一個 interval
+            spawned = 0,
+        })
+    end
+
+    -- [[ S5 護送戰 ]] NPC（scene.npc）+ REACH 目標點（scene.reach）
+    controller.npc = nil
+    if scene_data and scene_data.npc then
+        local n = scene_data.npc
+        local ny = (n.y and n.y ~= 0) and n.y or (safe_ground_y - 24)
+        controller.npc = {
+            x = n.x or 100, y = ny, origin_x = n.x or 100,
+            hp = n.hp or 60, max_hp = n.hp or 60,
+            mode = n.mode or "HOLD",          -- "MOVE"（走到目標）/ "HOLD"（定點撐時間）
+            goal_x = n.goal_x, range = n.range or 30, speed = n.speed or 12,
+            duration = n.duration or 20,
+            dir = 1, timer = 0, width = 20, height = 24,
+            reached_goal = false, is_dead = false, protect_done = false,
+        }
+    end
+    controller.reach = (scene_data and scene_data.reach) or nil
+
+    -- [[ S3 場景武器 ]] 可接管的場景武器（砲台）
+    controller.weapons = {}
+    local weapons_data = (scene_data and scene_data.weapons) or {}
+    for _, wd in ipairs(weapons_data) do
+        table.insert(controller.weapons, {
+            type = wd.type or "TURRET",
+            x = wd.x or 0,
+            y = (wd.y and wd.y ~= 0) and wd.y or (safe_ground_y - 20),
+            angle = wd.angle_init or 30,      -- 砲管仰角（度，往上為正、朝右發射）
+            angle_min = wd.angle_min or 0,
+            angle_max = wd.angle_max or 80,
+            cooldown = wd.cooldown or 0.5,
+            damage = wd.damage or 10,
+            speed_mult = wd.speed_mult or 30,   -- 倍率（× base 2.0，對齊 CANON）
+            bullet_size = wd.bullet_size or 8,
+            grav_mult = wd.grav_mult or 0.3,
+        })
+    end
+
     -- 初始化石頭
     local stones_data = (scene_data and scene_data.stones) or {}
     for _, sdata in ipairs(stones_data) do
@@ -219,14 +275,34 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
 end
 
 -- 添加玩家砲彈
-function EntityController:addPlayerProjectile(x, y, vx, vy, damage, grav_mult)
+function EntityController:addPlayerProjectile(x, y, vx, vy, damage, grav_mult, size)
     grav_mult = grav_mult or 1.0
-    
+
     local projectile = Projectile:init(x, y, vx, vy, damage, true, self.ground_y)
     -- 設定重力（基準重力 * 重力倍率）
     projectile.gravity = (self.GRAVITY or 0.5) * grav_mult
+    if size then projectile.width = size; projectile.height = size end  -- [[ S3 ]] 可指定子彈尺寸
     table.insert(self.projectiles, projectile)
     print("LOG: Player fired projectile at (" .. math.floor(x) .. ", " .. math.floor(y) .. ") vx=" .. math.floor(vx) .. " grav_mult=" .. grav_mult)
+end
+
+-- [[ S3 ]] 找出機體附近可接管的場景武器（水平距離內）
+function EntityController:weaponNear(mx, range)
+    for _, w in ipairs(self.weapons or {}) do
+        if math.abs(w.x - mx) <= (range or 40) then return w end
+    end
+    return nil
+end
+
+-- [[ S3 ]] 場景武器（砲台）依仰角發射玩家子彈（朝右上）
+function EntityController:fireSceneWeapon(w)
+    if not w then return end
+    local rad = math.rad(w.angle or 30)
+    -- 對齊機體 CANON 的速度尺度：base(2.0) × 倍率
+    local speed = (self.player_move_speed or 2.0) * (w.speed_mult or 30)
+    local vx = math.cos(rad) * speed
+    local vy = -math.sin(rad) * speed
+    self:addPlayerProjectile(w.x, w.y - 8, vx, vy, w.damage or 10, w.grav_mult or 0.3, w.bullet_size or 8)
 end
 
 function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height, mech_stats)
@@ -236,6 +312,37 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     for _, target in ipairs(self.delivery_targets or {}) do
         if target.success_effect_timer and target.success_effect_timer > 0 then
             target.success_effect_timer = target.success_effect_timer - dt
+        end
+    end
+
+    -- [[ S4 ]] 敵人重生器：計時到且未達上限 → 於重生點生成新敵人
+    for _, r in ipairs(self.respawners or {}) do
+        if (not r.max) or r.spawned < r.max then
+            r.timer = r.timer - dt
+            if r.timer <= 0 then
+                r.timer = r.interval
+                local e = Enemy:init(r.x, r.y, r.type, self.ground_y)
+                table.insert(self.enemies, e)
+                r.spawned = r.spawned + 1
+                print("LOG: respawned " .. tostring(r.type) .. " (" .. r.spawned .. ")")
+            end
+        end
+    end
+
+    -- [[ S5 護送戰 ]] 更新 NPC：MOVE=自走向目標；HOLD=定點小移動並計時
+    if self.npc and not self.npc.is_dead and not self.npc.reached_goal and not self.npc.protect_done then
+        local npc = self.npc
+        if npc.hp <= 0 then
+            npc.is_dead = true
+        elseif npc.mode == "MOVE" then
+            npc.x = npc.x + (npc.speed or 12) * dt
+            if npc.goal_x and npc.x >= npc.goal_x then npc.x = npc.goal_x; npc.reached_goal = true end
+        else -- HOLD
+            npc.x = npc.x + npc.dir * (npc.speed or 12) * dt
+            if npc.x > npc.origin_x + (npc.range or 30) then npc.dir = -1
+            elseif npc.x < npc.origin_x - (npc.range or 30) then npc.dir = 1 end
+            npc.timer = npc.timer + dt
+            if npc.timer >= (npc.duration or 20) then npc.protect_done = true end
         end
     end
 
@@ -546,13 +653,13 @@ function EntityController:draw(camera_x)
     for _, terrain in ipairs(self.terrain) do
         local screen_x = terrain.x - camera_x
         
-        -- 只繪製在畫面內的地形
-        if screen_x < 400 and screen_x + 64 > 0 then
+        -- 只繪製在畫面內的地形；[[ S2 ]] pit（懸崖空洞）不畫→呈現視覺缺口
+        if terrain.type ~= "pit" and screen_x < 400 and screen_x + 64 > 0 then
             local x1, y1, x2, y2 = self:getTerrainPoints(terrain.type, screen_x, ground_y, terrain.height_offset)
-            
+
             -- 繪製地形線
             gfx.drawLine(x1, y1, x2, y2)
-            
+
             -- 使用填充遮擋背景：將地形線下方填滿至畫面底部，以遮住背景
             gfx.fillTriangle(x1, y1, x2, y2, x2, 240)
             gfx.fillTriangle(x1, y1, x1, 240, x2, 240)
@@ -589,7 +696,53 @@ function EntityController:draw(camera_x)
     for _, enemy in ipairs(self.enemies) do
         enemy:draw(camera_x)
     end
-    
+
+    -- [[ S5 護送戰 ]] 繪製 NPC（白底黑框 + HP 條）與 REACH 目標旗標
+    if self.npc and not self.npc.is_dead then
+        local npc = self.npc
+        local sx = npc.x - camera_x
+        if sx > -30 and sx < 430 then
+            local top = ground_y - npc.height
+            gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - npc.width/2, top, npc.width, npc.height)
+            gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - npc.width/2, top, npc.width, npc.height)
+            gfx.drawText("NPC", sx - npc.width/2 - 2, top - 12)
+            local ratio = math.max(0, math.min(1, npc.hp / (npc.max_hp or 1)))
+            gfx.drawRect(sx - 14, top - 6, 28, 4)
+            gfx.fillRect(sx - 14, top - 6, math.floor(28 * ratio), 4)
+            -- HOLD 模式顯示剩餘保護時間
+            if npc.mode ~= "MOVE" then
+                local remain = math.max(0, (npc.duration or 20) - (npc.timer or 0))
+                gfx.drawText(string.format("%.0f", remain), sx + 16, top - 12)
+            end
+        end
+    end
+    if self.reach and self.reach.x then
+        local fx = self.reach.x - camera_x
+        if fx > -20 and fx < 420 then
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawLine(fx, ground_y, fx, ground_y - 42)
+            gfx.fillTriangle(fx, ground_y - 42, fx, ground_y - 30, fx + 16, ground_y - 36)
+            gfx.drawText("GOAL", fx + 2, ground_y - 56)
+        end
+    end
+
+    -- [[ S3 場景武器 ]] 砲台（底座 + 依仰角的砲管）
+    for _, w in ipairs(self.weapons or {}) do
+        local sx = w.x - camera_x
+        if sx > -30 and sx < 430 then
+            local base_y = ground_y - 20
+            gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - 12, base_y, 24, 20)
+            gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - 12, base_y, 24, 20)
+            local rad = math.rad(w.angle or 30)
+            local bx0, by0 = sx, base_y + 3
+            local blen = 22
+            gfx.setLineWidth(3)
+            gfx.drawLine(bx0, by0, bx0 + math.cos(rad) * blen, by0 - math.sin(rad) * blen)
+            gfx.setLineWidth(1)
+            gfx.drawText("TURRET", sx - 14, base_y - 12)
+        end
+    end
+
     -- 繪製石頭
     for _, stone in ipairs(self.stones) do
         stone:draw(camera_x)
@@ -679,7 +832,10 @@ function EntityController:getGroundHeight(world_x)
             local relative_x = world_x - terrain.x  -- 在地形單位內的相對位置
             local progress = relative_x / 64  -- 0到1的進度
             
-            if terrain.type == "flat" then
+            if terrain.type == "pit" then
+                -- [[ S2 懸崖 ]] 空洞：回傳極大值＝此處無地面，機甲不會被夾住而下墜
+                return base_y + 10000
+            elseif terrain.type == "flat" then
                 return base_y
             elseif terrain.type == "up15" then
                 return base_y - (17 * progress)

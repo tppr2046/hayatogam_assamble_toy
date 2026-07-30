@@ -51,6 +51,13 @@ local feet_frame_delay = 100  -- 每幀延遲（毫秒）
 -- 任務狀態的局部變數
 local is_paused = false
 local timer = 0
+-- [[ S3 場景武器接管 ]]
+local controlling_weapon = nil     -- 目前接管中的場景武器（nil=控制機體）
+local weapon_fire_timer = 0
+local WEAPON_CRANK_FACTOR = 0.3    -- crank 每度 → 砲管仰角變化
+local turret_panel_img = nil       -- 暫代砲台操作面板圖（images/turret_panel.png，缺則畫佔位框）
+local turret_panel_tried = false
+local tutorial_pending = false     -- [[ S10 ]] 待對話結束後啟動關卡內教學
 local current_scene = nil
 -- [[ S1 多場景 ]] 一關可含多個場景，經傳送點/達標載入下一場景
 local current_scenes = nil        -- 場景陣列（單場景時 = { mission.scene }）
@@ -118,6 +125,8 @@ local function loadScene(scene)
     is_on_ground = true
     mech_y_old = mech_y
     camera_x = 0
+    controlling_weapon = nil       -- [[ S3 ]] 進新場景時解除任何武器接管
+    weapon_fire_timer = 0
 
     -- 場景對話（打字機）
     dialog_active = false
@@ -311,10 +320,36 @@ function StateMission.setup()
 
     -- [[ S1 多場景 ]] 載入第一個場景（建立控制器/機甲位置/鏡頭/對話）
     loadScene(current_scenes and current_scenes[current_scene_index] or nil)
+
+    -- [[ S8 ]] 安裝暫停選單（Menu 鍵）：Retry / Mission Select / BGM
+    if _G.MenuItems and _G.MenuItems.installForMission then
+        _G.MenuItems.installForMission()
+    end
+
+    -- [[ S10 ]] 首次遊玩：待關前對話結束後啟動關卡內操作教學
+    tutorial_pending = (_G.Tutorial and _G.Tutorial.shouldShow and _G.Tutorial.shouldShow("mission")) or false
+end
+
+-- [[ S8 ]] 離開任務時清除系統選單項目
+function StateMission.tearDown()
+    if _G.MenuItems and _G.MenuItems.clear then _G.MenuItems.clear() end
 end
 
 function StateMission.update()
     if is_paused then return end
+
+    -- [[ S10 ]] 教學覆蓋層作用中：吃掉輸入、暫停任務
+    if _G.Tutorial and _G.Tutorial.isActive and _G.Tutorial.isActive() then
+        _G.Tutorial.update()
+        return
+    end
+    -- [[ S10 ]] 關前對話播完後，首次遊玩才啟動關卡內操作教學（避免與對話框重疊）
+    if tutorial_pending and not dialog_active then
+        tutorial_pending = false
+        if _G.Tutorial and _G.Tutorial.maybeStart and _G.Tutorial.maybeStart("mission") then
+            return
+        end
+    end
 
     -- 如果對話中，處理打字機效果和按鍵前進
     if dialog_active then
@@ -377,15 +412,40 @@ function StateMission.update()
         end
     end
 
-    -- 1. 處理輸入 (使用 MechController)
+    -- [[ S3 場景武器接管 ]] 靠近武器按 A 接管；接管期間機體暫停，crank 瞄準、A 發射、B 解除
+    if controlling_weapon then
+        local cc = (playdate.getCrankChange and playdate.getCrankChange()) or 0
+        local w = controlling_weapon
+        w.angle = math.max(w.angle_min or 0, math.min(w.angle_max or 80, w.angle + cc * WEAPON_CRANK_FACTOR))
+        weapon_fire_timer = weapon_fire_timer + (1/30)
+        if playdate.buttonJustPressed(playdate.kButtonA) and weapon_fire_timer >= (w.cooldown or 0.5) then
+            weapon_fire_timer = 0
+            if entity_controller then entity_controller:fireSceneWeapon(w) end
+            if _G.SoundManager and _G.SoundManager.playCanonFire then _G.SoundManager.playCanonFire() end
+        end
+        if playdate.buttonJustPressed(playdate.kButtonB) then
+            controlling_weapon = nil
+            if _G.SoundManager and _G.SoundManager.playCursorMove then _G.SoundManager.playCursorMove() end
+        end
+    else
+        local near = entity_controller and entity_controller:weaponNear(mech_x + 24, 44)
+        if near and playdate.buttonJustPressed(playdate.kButtonA) then
+            controlling_weapon = near
+            weapon_fire_timer = 0
+            if _G.SoundManager and _G.SoundManager.playSelect then _G.SoundManager.playSelect() end
+        end
+    end
+
+    -- 1. 處理輸入 (使用 MechController)。接管武器時機體暫停（跳過選擇/操作）
     local dx = 0
     local mech_grid = _G.GameState.mech_grid
-    
-    -- 處理零件選擇和激活
-    mech_controller:handleSelection(_G.GameState.mech_stats)
-    
-    -- 處理零件操作（獲取移動增量）
-    dx = mech_controller:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
+
+    if not controlling_weapon then
+        -- 處理零件選擇和激活
+        mech_controller:handleSelection(_G.GameState.mech_stats)
+        -- 處理零件操作（獲取移動增量）
+        dx = mech_controller:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
+    end
     
     -- 2. 應用物理和碰撞檢測
     
@@ -445,7 +505,13 @@ function StateMission.update()
     else
         ground_level = GAME_HEIGHT - total_h - 10
     end
-    
+
+    -- [[ S2 懸崖 ]] 機甲水平中心是否在 pit（空洞）上方；是則不套用基準地面夾制，任其下墜
+    local over_pit = false
+    if entity_controller and entity_controller.getTerrainType then
+        over_pit = (entity_controller:getTerrainType(new_x + body_w / 2) == "pit")
+    end
+
     if entity_controller then
         -- 使用 EntityController 進行精確碰撞（使用包含 FEET 的總高度）
         local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, body_w, total_h)
@@ -463,8 +529,8 @@ function StateMission.update()
             mech_vy = 0
             is_on_ground = true
             mech_controller:updateGroundState(true)  -- 通知 MechController 已著地
-        elseif new_y >= ground_level then
-            -- 撞到地圖的「地面」
+        elseif (not over_pit) and new_y >= ground_level then
+            -- 撞到地圖的「地面」（pit 上方不夾制→下墜）
             mech_y = ground_level
             mech_vy = 0
             is_on_ground = true
@@ -486,7 +552,14 @@ function StateMission.update()
             is_on_ground = false
         end
     end
-    
+
+    -- [[ S2 懸崖 ]] 掉出畫面底部 → 關卡失敗
+    if mech_y > SCREEN_HEIGHT + 40 then
+        print("MISSION FAILED: fell off a cliff")
+        setState(_G.StateResult, false, "Fell off the cliff!")
+        return
+    end
+
     -- 3. 相機邏輯
     local target_camera_x = mech_x - 150 
     if target_camera_x < 0 then target_camera_x = 0 end
@@ -519,7 +592,10 @@ function StateMission.update()
         end
         
         -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）
-        mech_controller:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
+        -- [[ S3 ]] 接管場景武器期間機體暫停：停止零件更新（含 GUN 自動發射）
+        if not controlling_weapon then
+            mech_controller:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
+        end
         
         -- 更新 CLAW 抓取邏輯（不論是否激活 CLAW 都要更新石頭位置）
         local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -833,6 +909,47 @@ function StateMission.update()
                         return
                     end
                 end
+
+            -- [[ S5/S6 ]] 目標類型：打倒 BOSS
+            elseif obj.type == "BOSS_KILL" then
+                local had_boss, boss_alive = false, false
+                if entity_controller and entity_controller.enemies then
+                    for _, e in ipairs(entity_controller.enemies) do
+                        if e.is_boss then
+                            had_boss = true
+                            if e.is_alive or e.is_exploding then boss_alive = true end
+                        end
+                    end
+                end
+                if had_boss and not boss_alive then
+                    print("MISSION SUCCESS: Boss defeated!")
+                    completeCurrentScene()
+                    return
+                end
+
+            -- [[ S5 ]] 目標類型：走到定點
+            elseif obj.type == "REACH" then
+                local gx = current_scene and current_scene.reach and current_scene.reach.x
+                if gx and (mech_x + 24) >= gx then
+                    print("MISSION SUCCESS: reached the goal")
+                    completeCurrentScene()
+                    return
+                end
+
+            -- [[ S5 ]] 目標類型：護送/保護 NPC（MOVE 走到目標 / HOLD 撐時間；NPC 死亡=失敗）
+            elseif obj.type == "PROTECT" then
+                local npc = entity_controller and entity_controller.npc
+                if npc then
+                    if npc.is_dead or (npc.hp or 1) <= 0 then
+                        print("MISSION FAILED: NPC destroyed")
+                        setState(_G.StateResult, false, "The escort was destroyed!")
+                        return
+                    elseif npc.reached_goal or npc.protect_done then
+                        print("MISSION SUCCESS: escort protected")
+                        completeCurrentScene()
+                        return
+                    end
+                end
             end
         end
     end
@@ -913,6 +1030,18 @@ function StateMission.draw()
     
     gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_bar_y - 7)
     gfx.drawRect(hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height)
+
+    -- [[ S3 場景武器接管 ]] 提示 / 操作指示
+    if controlling_weapon then
+        local msg = "TURRET  crank:aim  A:fire  B:exit"
+        local tw = gfx.getTextSize(msg)
+        gfx.drawText(msg, (400 - tw) // 2, 158)
+    elseif entity_controller then
+        local near = entity_controller:weaponNear(mech_x + 24, 44)
+        if near then
+            gfx.drawText("Press A", near.x - camera_x - 18, (entity_controller.ground_y or 156) - 46)
+        end
+    end
     
     -- 3.1 繪製計時器（如果有時間限制）
     if mission_time_limit > 0 then
@@ -954,6 +1083,28 @@ function StateMission.draw()
         gfx.setColor(gfx.kColorWhite)
         gfx.fillRect(UI_START_X - bg_margin, UI_START_Y - bg_margin, ui_w + bg_margin*2, ui_h + bg_margin*2)
         gfx.setColor(gfx.kColorBlack)
+        local line1_x = UI_START_X + 120
+        local line1_y = UI_START_Y + (UI_GRID_ROWS * UI_CELL_SIZE) - 30
+        if controlling_weapon then
+            -- [[ S3 ]] 接管砲台：改畫砲台操作面板（暫代圖 images/turret_panel.png，缺則佔位框）
+            if not turret_panel_tried then
+                turret_panel_tried = true
+                local ok, img = pcall(function() return playdate.graphics.image.new("images/turret_panel") end)
+                if ok and img then turret_panel_img = img end
+            end
+            if turret_panel_img then
+                pcall(function() turret_panel_img:draw(UI_START_X, UI_START_Y) end)
+            else
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawRect(UI_START_X, UI_START_Y, ui_w, ui_h)
+                gfx.drawText("TURRET", UI_START_X + 8, UI_START_Y + 8)
+                gfx.drawText("(panel)", UI_START_X + 8, UI_START_Y + 26)
+            end
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText("crank: aim", line1_x, line1_y)
+            gfx.drawText("A: fire   B: exit", line1_x, line1_y + 12)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        else
         -- 先正常繪製 UI 圖片與面板
         mech_controller:drawUI(_G.GameState.mech_stats, UI_START_X, UI_START_Y, UI_CELL_SIZE, UI_GRID_COLS, UI_GRID_ROWS)
         -- 以白色繪製操作說明文字（避免影響圖片顯示）
@@ -971,17 +1122,19 @@ function StateMission.draw()
             hint_text = "up/down: select part, A: use the part"
         end
         gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        local line1_x = UI_START_X + 120
-        local line1_y = UI_START_Y + (UI_GRID_ROWS * UI_CELL_SIZE) - 30
         gfx.drawText(hint_text, line1_x, line1_y)
         if operation_hint_text then
             gfx.drawText(operation_hint_text, line1_x, line1_y + 12)
         end
         gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        end
     end
     
     -- 5. 繪製調試信息
 --    gfx.drawText("Mech X: " .. math.floor(mech_x), 10, SCREEN_HEIGHT - 15)
+
+    -- [[ S10 ]] 教學覆蓋層（畫在最上層）
+    if _G.Tutorial and _G.Tutorial.draw then _G.Tutorial.draw() end
 end
 
 -- 立即觸發畫面震動（用於敵人爆炸）

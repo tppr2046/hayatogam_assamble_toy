@@ -17,8 +17,8 @@
       "dialog": {
         "image": "images/dialog_bg",
         "lines": [
-          "Scene 1: head right to the teleport.",
-          "Reaching it warps you to the next area."
+          "Scene 1: reach the teleport on the right.",
+          "Mind the pit — falling in fails the mission!"
         ]
       },
       "delivery_targets": [],
@@ -62,7 +62,7 @@
         },
         {
           "height_offset": 0,
-          "type": "flat"
+          "type": "pit"
         },
         {
           "height_offset": 0,
@@ -87,8 +87,8 @@
       "dialog": {
         "image": "images/dialog_bg",
         "lines": [
-          "Scene 2: enemies incoming!",
-          "Clear them all to complete the mission."
+          "Scene 2: a TURRET is here (x200).",
+          "Stand near it, press A to man it — crank aims, A fires, B exits."
         ]
       },
       "delivery_targets": [],
@@ -155,19 +155,114 @@
           "type": "flat"
         }
       ],
-      "enemies": [
+      "enemies": [],
+      "stones": [],
+      "respawns": [],
+      "teleport": {
+        "x": 600
+      },
+      "weapons": [
         {
-          "x": 360,
+          "type": "TURRET",
+          "x": 200,
           "y": 0,
-          "type": "BASIC_ENEMY"
-        },
+          "cooldown": 0.4,
+          "damage": 10,
+          "angle_init": 25,
+          "angle_min": 0,
+          "angle_max": 80,
+          "speed_mult": 30,
+          "bullet_size": 8
+        }
+      ]
+    },
+    {
+      "width": 800,
+      "ground_y": 220,
+      "objective": {
+        "type": "BOSS_KILL",
+        "description": "Destroy the assembly core"
+      },
+      "backgrounds": [
         {
-          "x": 520,
-          "y": 0,
-          "type": "BASIC_ENEMY"
+          "layer": 0,
+          "x": 60,
+          "y": 55,
+          "image": "images/bg_building4.png"
         }
       ],
-      "stones": []
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "FINAL: the Assembly Core!",
+          "Blow off its weapon parts one by one."
+        ]
+      },
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "enemies": [
+        {
+          "type": "BOSS",
+          "boss_id": "BOSS1",
+          "x": 420,
+          "y": 0
+        }
+      ],
+      "delivery_targets": []
     }
   ]
 }

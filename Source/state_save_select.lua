@@ -135,7 +135,12 @@ function StateSaveSelect.update()
                         SaveManager.createNewSave(selected_slot)
                         SaveManager.loadSave(selected_slot)
                     end
-                    setState(_G.StateMissionSelect)
+                    -- [[ S9 ]] 新遊戲：先播開場過場，再進任務選擇
+                    if _G.StateIntro then
+                        setState(_G.StateIntro)
+                    else
+                        setState(_G.StateMissionSelect)
+                    end
                 end
             end
         elseif playdate.buttonJustPressed(playdate.kButtonB) then

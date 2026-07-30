@@ -58,6 +58,10 @@ function StateMissionSelect:setup()
     scroll_offset = 0
     
     print("StateMissionSelect setup complete. Available missions: " .. #mission_list)
+    -- [[ S8 ]] 前端設定選單（Menu 鍵）：BGM / SFX 音量
+    if _G.MenuItems and _G.MenuItems.installForFrontend then
+        _G.MenuItems.installForFrontend()
+    end
     -- 播放標題/一般介面 BGM（循環）
     if _G.SoundManager and _G.SoundManager.playTitleBGM then
         _G.SoundManager.playTitleBGM()
@@ -85,6 +89,13 @@ function StateMissionSelect:update()
         end
     end
     
+    -- [[ S7 ]] B 鍵：回主選單
+    if playdate.buttonJustPressed(playdate.kButtonB) then
+        if _G.SoundManager and _G.SoundManager.playCursorMove then _G.SoundManager.playCursorMove() end
+        setState(_G.StateMenu)
+        return
+    end
+
     -- 上下鍵：選擇任務
     if playdate.buttonJustPressed(playdate.kButtonUp) then
         selected_index = selected_index - 1
@@ -118,9 +129,20 @@ end
 function StateMissionSelect:draw()
     gfx.clear()
     
-    -- 繪製標題
+    -- 繪製標題（[[ S7 ]] 右側顯示總進度）
     gfx.setFont(FONT_LARGE)
     gfx.drawText("MISSION SELECT", 10, 10)
+    do
+        local completed = (_G.GameState and _G.GameState.completed_missions) or {}
+        local total, done = 0, 0
+        for id, _ in pairs(_G.MissionData or {}) do
+            total = total + 1
+            if completed[id] then done = done + 1 end
+        end
+        local ptext = "CLEARED " .. done .. "/" .. total
+        local ptw = gfx.getTextSize(ptext)
+        gfx.drawText(ptext, 390 - ptw, 10)
+    end
     
     -- 繪製任務列表
     gfx.setFont(FONT_LARGE)
@@ -149,17 +171,26 @@ function StateMissionSelect:draw()
         
         -- 繪製任務名稱
         gfx.drawText(mission.name or mission_id, 10, y)
-        
-        -- 繪製任務目標
+
+        -- [[ S7 ]] 已通關標記（右側 CLEAR）
+        local completed = (_G.GameState and _G.GameState.completed_missions) or {}
+        if completed[mission_id] then
+            local ctw = gfx.getTextSize("CLEAR")
+            gfx.drawText("CLEAR", 390 - ctw - 8, y)
+        end
+
+        -- 繪製任務目標（[[ S7 ]] 含新目標類型；多場景取第一個場景的目標）
+        local obj = mission.objective
+        if (not obj) and mission.scenes and mission.scenes[1] then obj = mission.scenes[1].objective end
+        local LABELS = {
+            ELIMINATE_ALL = "Eliminate All", DELIVER_STONE = "Deliver Stone",
+            REACH = "Reach the Goal", PROTECT = "Protect the Escort", BOSS_KILL = "Destroy the Boss",
+        }
         local objective_text = ""
-        if mission.objective then
-            if mission.objective.type == "ELIMINATE_ALL" then
-                objective_text = "Eliminate All"
-            elseif mission.objective.type == "DELIVER_STONE" then
-                objective_text = "Deliver Stone"
-            else
-                objective_text = mission.objective.description or ""
-            end
+        if obj then objective_text = LABELS[obj.type] or obj.description or "" end
+        -- 多場景關卡標示場景數
+        if mission.scenes and #mission.scenes > 1 then
+            objective_text = objective_text .. "  (" .. #mission.scenes .. " scenes)"
         end
         gfx.drawText(objective_text, 10, y + 16)
         
@@ -181,7 +212,7 @@ function StateMissionSelect:draw()
         if scroll_offset < max_offset then
             gfx.drawText("v", 390, 210)
         end
-        gfx.drawText("A: SELECT", 10, 225)
+        gfx.drawText("A: SELECT   B: TITLE", 10, 225)
 end
 
 function StateMissionSelect:cleanup()

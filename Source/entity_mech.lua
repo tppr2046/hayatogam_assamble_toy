@@ -392,17 +392,27 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                         local ipdata = _G.PartsData and _G.PartsData[item.id]
                         if ipdata and ipdata.part_type == "CANON" and item.id == self.active_part_id then
                             local cell_size = mech_grid.cell_size
-                            local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
-                            local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
-                            
+                            -- 樞紐＝格中心（砲管繞此旋轉，與繪製一致）
+                            local pivot_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                            local pivot_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+
                             -- 使用與敵人相同的計算方式
                             local base_speed = entity_controller.player_move_speed or 2.0
                             local speed_mult = pdata.projectile_speed_mult or 1.0
                             local speed = base_speed * speed_mult
-                            
+
                             local angle_rad = math.rad(self.canon_angle)
-                            local vx = math.cos(angle_rad) * speed
-                            local vy = -math.sin(angle_rad) * speed
+                            local dir_x = math.cos(angle_rad)
+                            local dir_y = -math.sin(angle_rad)
+                            local vx = dir_x * speed
+                            local vy = dir_y * speed
+
+                            -- [[ 修正 ]] 砲彈從砲口發射：樞紐 + 砲管方向 × 砲管長（格中心→砲口）
+                            local ok_iw, iw = pcall(function() return pdata._img:getSize() end)
+                            local barrel_len = ((ok_iw and iw) or (cell_size * 2)) - cell_size / 2
+                            if barrel_len < cell_size / 2 then barrel_len = cell_size / 2 end
+                            local canon_x = pivot_x + dir_x * barrel_len
+                            local canon_y = pivot_y + dir_y * barrel_len
                             local dmg = pdata.projectile_damage or 10
                             local grav_mult = pdata.projectile_grav_mult or 1.0
 
