@@ -134,8 +134,8 @@
       "dialog": {
         "image": "images/dialog_bg",
         "lines": [
-          "Scene 2 (PROTECT-MOVE): escort the NPC to the goal.",
-          "Keep it alive until it arrives."
+          "Scene 2 (ESCORT): walk the NPC to the exit.",
+          "Keep it alive — its damage carries to the next area."
         ]
       },
       "backgrounds": [
@@ -215,7 +215,7 @@
         "y": 0,
         "hp": 80,
         "mode": "MOVE",
-        "goal_x": 720,
+        "goal_x": 700,
         "speed": 15
       },
       "respawns": [
@@ -226,19 +226,23 @@
           "interval": 3.0,
           "max": 6
         }
-      ]
+      ],
+      "teleport": {
+        "x": 700
+      }
     },
     {
       "width": 800,
       "ground_y": 220,
       "objective": {
-        "type": "REACH",
-        "description": "Reach the goal flag"
+        "type": "PROTECT",
+        "description": "Escort the NPC to the bunker"
       },
       "dialog": {
         "image": "images/dialog_bg",
         "lines": [
-          "Scene 3 (REACH): walk to the GOAL flag on the right."
+          "Scene 3 (FINAL): the bunker is ahead.",
+          "Get the NPC inside to finish the mission."
         ]
       },
       "backgrounds": [
@@ -311,10 +315,33 @@
       ],
       "obstacles": [],
       "stones": [],
-      "enemies": [],
+      "enemies": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 420,
+          "y": 0
+        }
+      ],
       "delivery_targets": [],
-      "reach": {
-        "x": 720
+      "npc": {
+        "x": 60,
+        "y": 0,
+        "hp": 80,
+        "mode": "MOVE",
+        "goal_x": 700,
+        "speed": 15
+      },
+      "respawns": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 760,
+          "y": 0,
+          "interval": 3.0,
+          "max": 5
+        }
+      ],
+      "bunker": {
+        "x": 700
       }
     }
   ]

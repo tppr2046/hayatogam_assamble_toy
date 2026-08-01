@@ -11,7 +11,9 @@
       "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\")",
       "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy/Source\" && sed -i 's/crank_degrees_per_rotation = 180,  -- crank 轉 1 圈產生的「臂」角度變化（A2 可調）/crank_degrees_per_rotation = 90,  -- crank 轉 1 圈產生的「臂」角度變化（A2 調校 180→90：全範圍 ±90° 需轉兩圈，強化手忙腳亂感）/' parts_data.lua && grep -n \"crank_degrees_per_rotation = 90\" parts_data.lua)",
       "Bash(\"E:/PlaydateSDK/bin/pdc.exe\" Source Builds/hayatogam_assamble_toy.pdx)",
-      "Bash(echo \"PDC EXIT $?\")"
+      "Bash(echo \"PDC EXIT $?\")",
+      "Bash(cd \"E:/PlaydateSDK\" && ls; echo \"=== setPattern 說明 ===\"; grep -rn \"setPattern\" --include=*.html --include=*.md Inside*  2>/dev/null | head -8)",
+      "Bash(python -c ' *)"
     ],
     "additionalDirectories": [
       "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"

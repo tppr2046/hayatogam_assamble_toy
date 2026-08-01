@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(\"E:/PlaydateSDK/bin/pdc.exe\" Source Builds/hayatogam_assamble_toy.pdx)",
-      "Bash(echo \"PDC EXIT $?\")"
+      "Bash(echo \"PDC EXIT $?\")",
+      "Bash(python -c ' *)",
+      "Bash(mv -f Source/images/boss1.png Source/images/boss1-table-72-72.png)",
+      "Bash(cd \"e:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\" && mv -f Source/images/arrow.png Source/images/arrow-table-32-32.png && ls Source/images/arrow*)",
+      "Bash(cd \"e:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\" && mv -f Source/images/forground.png Source/images/forground-table-32-32.png && ls Source/images/forground*)",
+      "Bash(git add *)"
     ]
   }
 }

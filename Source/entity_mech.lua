@@ -31,7 +31,10 @@ function MechController:init()
         sword_last_attack_angle = nil,
         
         -- CANON 相關
-        canon_angle = 0,
+        -- [[ 修正 ]] CANON 角度改為「每個零件各自保存」（key = 零件 id）：
+        -- 兩門 CANON 不再共用角度；離開焦點時各自維持原本角度。
+        canon_angles = {},
+        canon_knob_angles = {},   -- 操作面板旋鈕角度（僅焦點中的零件會更新→非焦點面板不動作）
         canon_fire_timer = 0,
         canon_button_pressed = false,  -- 按鈕是否按下
         
@@ -282,6 +285,20 @@ function MechController:getActivePartType()
     return pdata and pdata.part_type
 end
 
+-- [[ 修正 ]] 取得某門 CANON 的仰角（每個零件各自保存；未設過則為 0）
+function MechController:getCanonAngle(part_id)
+    if not part_id then return 0 end
+    self.canon_angles = self.canon_angles or {}
+    return self.canon_angles[part_id] or 0
+end
+
+-- [[ 修正 ]] 取得某門 CANON 的面板旋鈕角度（僅焦點中的零件會更新→非焦點面板靜止）
+function MechController:getCanonKnobAngle(part_id)
+    if not part_id then return 0 end
+    self.canon_knob_angles = self.canon_knob_angles or {}
+    return self.canon_knob_angles[part_id] or 0
+end
+
 -- 檢查發射方向是否被已安裝的零件阻擋（不包括當前發射的零件）
 function MechController:isFiringDirectionBlocked(firing_direction, active_part_id)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
@@ -364,19 +381,24 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         local angle_min = pdata and pdata.angle_min or -45  -- 預設 -45 度
         local angle_max = pdata and pdata.angle_max or 45  -- 預設 +45 度
         local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 15  -- 預設 crank 轉 1 圈產生 15 度變化
-        
+
+        -- [[ 修正 ]] 只更新「焦點中」這門砲的角度與面板旋鈕；其他 CANON 維持原角度、面板不動
+        local cid = self.active_part_id
+        self.canon_knob_angles[cid] = playdate.getCrankPosition()
+
         local crankChange = playdate.getCrankChange()
         if crankChange and math.abs(crankChange) > 0 then
             -- crank 轉動量轉換為 canon 角度變化：crankChange 是度數，除以 360 得到圈數，乘以 crank_ratio 得到 canon 角度變化
             local canon_delta = (crankChange / 360.0) * crank_ratio
-            self.canon_angle = self.canon_angle + canon_delta
-            
+            local ang = self:getCanonAngle(cid) + canon_delta
+
             -- 限制角度在範圍內
-            if self.canon_angle > angle_max then
-                self.canon_angle = angle_max
-            elseif self.canon_angle < angle_min then
-                self.canon_angle = angle_min
+            if ang > angle_max then
+                ang = angle_max
+            elseif ang < angle_min then
+                ang = angle_min
             end
+            self.canon_angles[cid] = ang
         end
         
         -- 追蹤 A 按鈕狀態（用於顯示按鈕 UI）
@@ -401,7 +423,7 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                             local speed_mult = pdata.projectile_speed_mult or 1.0
                             local speed = base_speed * speed_mult
 
-                            local angle_rad = math.rad(self.canon_angle)
+                            local angle_rad = math.rad(self:getCanonAngle(item.id))
                             local dir_x = math.cos(angle_rad)
                             local dir_y = -math.sin(angle_rad)
                             local vx = dir_x * speed

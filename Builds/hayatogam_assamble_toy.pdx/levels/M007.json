@@ -81,7 +81,15 @@
         "x": 480
       },
       "enemies": [],
-      "stones": []
+      "stones": [],
+      "foregrounds": [
+        {
+          "x": 260
+        },
+        {
+          "x": 420
+        }
+      ]
     },
     {
       "dialog": {
@@ -254,6 +262,20 @@
       ],
       "obstacles": [],
       "stones": [],
+      "weapons": [
+        {
+          "type": "TURRET",
+          "x": 300,
+          "y": 0,
+          "cooldown": 0.4,
+          "damage": 10,
+          "angle_init": 25,
+          "angle_min": 0,
+          "angle_max": 80,
+          "speed_mult": 30,
+          "bullet_size": 8
+        }
+      ],
       "enemies": [
         {
           "type": "BOSS",

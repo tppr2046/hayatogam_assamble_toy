@@ -408,14 +408,15 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
                 local img_center_y = original_y + ih / 2
                 local dx_from_pivot = img_center_x - pivot_x
                 local dy_from_pivot = img_center_y - pivot_y
-                local angle_rad = math.rad(-self.canon_angle)
+                local canon_ang = self:getCanonAngle(item.id)   -- [[ 修正 ]] 每門砲各自的角度
+                local angle_rad = math.rad(-canon_ang)
                 local cos_a = math.cos(angle_rad)
                 local sin_a = math.sin(angle_rad)
                 local rotated_dx = dx_from_pivot * cos_a - dy_from_pivot * sin_a
                 local rotated_dy = dx_from_pivot * sin_a + dy_from_pivot * cos_a
                 local new_center_x = pivot_x + rotated_dx
                 local new_center_y = pivot_y + rotated_dy
-                pdata._img:drawRotated(new_center_x, new_center_y, -self.canon_angle - rotation_angle)
+                pdata._img:drawRotated(new_center_x, new_center_y, -canon_ang - rotation_angle)
             end
         end
         
@@ -516,17 +517,9 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
         end
     end
     
-    -- 顯示激活零件資訊
-    local info_x = ui_start_x + ui_grid_cols * ui_cell_size + 10
-    if self.active_part_id then
-        local part_type_for_info = self:getActivePartType()
-        gfx.drawText("Active: " .. self.active_part_id, info_x, ui_start_y)
-        if part_type_for_info == "SWORD" then
-            gfx.drawText("Angle: " .. math.floor(self.sword_angle), info_x, ui_start_y + 15)
-        elseif part_type_for_info == "CANON" then
-            gfx.drawText("Angle: " .. math.floor(self.canon_angle), info_x, ui_start_y + 15)
-        end
-    end
+    -- [[ 修正 ]] 舊的除錯資訊文字（Active: / Angle:）已移除：
+    -- 它畫在白色面板底之外、落在「地面填色」區域上，平時黑字疊黑底看不見，
+    -- 但在 pit（懸崖缺口）沒有地面填色處會露出來。焦點零件已由面板高亮指示。
     -- [[ A3 ]] 舊「Select part (A)」提示已移除：直接切換制下焦點永遠存在
 end
 
@@ -553,10 +546,11 @@ function MechController:drawPartUI(part_id, x, y, size)
             -- CANON 的 panel 不旋轉，直接繪製
             pcall(function() panel_img:draw(x, y) end)
             
-            -- 繪製 canon_control（隨 crank 角度旋轉）
+            -- 繪製 canon_control（[[ 修正 ]] 只有焦點中的砲會跟著 crank 轉；
+            -- 非焦點的砲以自己最後的旋鈕角度靜止顯示）
             local control_img = ui.canon_control
             if control_img then
-                local crank_angle = playdate.getCrankPosition()
+                local crank_angle = self:getCanonKnobAngle(part_id)
                 local rotated_control = control_img:rotatedImage(crank_angle)
                 if rotated_control then
                     local rw, rh = rotated_control:getSize()
@@ -569,7 +563,8 @@ function MechController:drawPartUI(part_id, x, y, size)
             local button_table = ui.canon_button
             if button_table then
                 -- sprite 1（左邊）= 未按下，sprite 2（右邊）= 按下
-                local sprite_index = self.canon_button_pressed and 2 or 1
+                -- [[ 修正 ]] 只有焦點中的砲會顯示按下狀態（非焦點面板不動作）
+                local sprite_index = (self.canon_button_pressed and part_id == self.active_part_id) and 2 or 1
                 local button_img = button_table:getImage(sprite_index)
                 if button_img then
                     -- 獲取 panel 和 button 的寬度，將 button 對齊 panel 右邊

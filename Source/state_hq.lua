@@ -53,6 +53,8 @@ local HQ_LAYOUT = {
     shop_size = 55,
     shop_x   = 110,
     shop_y   = 173,
+    -- 左側「零件預覽框」（螢幕座標，量自 hq_bg.png）：未安裝零件預覽 + 必要零件提示
+    preview_box = { x = 113, y = 82, w = 97, h = 75 },
 }
 
 -- [[ G2 ]] 零件清單一次顯示幾筆（底中框 y173~228 高 55px，起點 y180、行高 15
@@ -1003,7 +1005,7 @@ function StateHQ.draw()
             -- 以「圖片中心點對齊該框中心點」繪製，不縮放、不裁切、不隨零件寬度位移。
             -- 本區在機甲離屏畫布內作畫（稍後整張 drawScaled 貼上底圖），故需把螢幕框中心
             -- 反算成畫布座標：screen = draw + canvas*scale，draw = mech_c - grid_c_local*scale。
-            local PREVIEW_BOX = { x = 113, y = 82, w = 97, h = 75 }  -- 左框（螢幕像素）
+            local PREVIEW_BOX = HQ_LAYOUT.preview_box  -- 左框（螢幕像素，單一來源）
             if pdata._img then
                 local scale = HQ_LAYOUT.mech_scale
                 local grid_cx_local = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE) / 2
@@ -1449,6 +1451,23 @@ function StateHQ.draw()
         gfx.drawText("B:BACK", list_x, list_y + line_height * 2)
     end
 
+    -- [[ 零件限制 ]] 缺必要零件的提示改畫在「零件預覽框」內（原本在 START 上方）。
+    -- 畫在框頂端的白底條上，避免蓋住框中央的零件預覽圖。
+    do
+        local missing = getMissingRequiredParts()
+        if missing then
+            local pb = HQ_LAYOUT.preview_box
+            local need_text = "NEED: " .. table.concat(missing, ",")
+            local ntw, nth = gfx.getTextSize(need_text)
+            local nx = pb.x + math.floor((pb.w - ntw) / 2)
+            local ny = pb.y + 3
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(nx - 3, ny - 2, ntw + 6, nth + 4)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawText(need_text, nx, ny)
+        end
+    end
+
     -- 6. [[ G2 ]] 機甲狀態（畫在底圖的 DATA 框內）
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
     gfx.setColor(gfx.kColorBlack)
@@ -1465,15 +1484,6 @@ function StateHQ.draw()
         local box_y = HQ_LAYOUT.start_y
         local text_x = box_x + math.floor((box_w - tw) / 2)  -- 文字置中
         local text_y = box_y + math.floor((box_h - th) / 2)
-
-        -- [[ 零件限制 ]] 缺必要零件：START 上方顯示 NEED 提示，按下會被擋
-        local missing = getMissingRequiredParts()
-        if missing then
-            local need_text = "NEED: " .. table.concat(missing, ",")
-            local ntw = gfx.getTextSize(need_text)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawText(need_text, box_x + box_w - ntw, box_y - 14)
-        end
 
         -- [[ G2 ]] 方框由底圖提供：選中＝整格反白（黑底白字），未選中＝只畫黑字
         if cursor_on_start then

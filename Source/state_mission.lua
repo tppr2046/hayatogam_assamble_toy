@@ -54,14 +54,19 @@ local timer = 0
 -- [[ S3 場景武器接管 ]]
 local controlling_weapon = nil     -- 目前接管中的場景武器（nil=控制機體）
 local weapon_fire_timer = 0
-local WEAPON_CRANK_FACTOR = 0.3    -- crank 每度 → 砲管仰角變化
-local turret_panel_img = nil       -- 暫代砲台操作面板圖（images/turret_panel.png，缺則畫佔位框）
-local turret_panel_tried = false
+-- 砲台仰角的 crank 靈敏度：改用與機體零件相同的表示法「crank 轉 1 圈 → 幾度」
+-- （機體 CANON 為 15；此處預設 30，可在關卡 JSON 的該砲台以 crank_degrees_per_rotation 覆寫）
+local WEAPON_CRANK_DEG_PER_ROTATION = 30
+-- [[ 美術 ]] 接管砲台時的操作面板：turret_control（隨 crank 旋轉）、canon_button（A 發射）、
+-- 其餘格子用 empty。與機體零件面板同為 3x2、每格 32x32。
+local turret_ui = { tried = false, control = nil, button = nil, empty = nil }
+local turret_fire_pressed = false   -- A 是否按著（面板按鈕顯示按下幀）
 local tutorial_pending = false     -- [[ S10 ]] 待對話結束後啟動關卡內教學
 local current_scene = nil
 -- [[ S1 多場景 ]] 一關可含多個場景，經傳送點/達標載入下一場景
 local current_scenes = nil        -- 場景陣列（單場景時 = { mission.scene }）
 local current_scene_index = 1      -- 目前第幾個場景
+local carry_npc_hp = nil           -- [[ S5 護送 ]] 跨場景帶過去的 NPC 血量
 local mech_x, mech_y, mech_vy = 0, 0, 0
 local is_on_ground = true
 local camera_x = 0       
@@ -108,6 +113,11 @@ local function loadScene(scene)
     if current_scene and EntityController then
         local enemies = (current_scene.enemies) or {}
         entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED, UI_HEIGHT)
+        -- [[ S5 護送 ]] 沿用上一場景帶過來的 NPC 血量（受過的傷不會因換場景而回復）
+        if carry_npc_hp and entity_controller.npc then
+            entity_controller.npc.hp = math.min(carry_npc_hp, entity_controller.npc.max_hp or carry_npc_hp)
+        end
+        carry_npc_hp = nil
     else
         entity_controller = nil
     end
@@ -148,6 +158,12 @@ end
 -- [[ S1 多場景 ]] 目前場景達標：非最後一場景→載入下一場景（保留機甲 HP/組裝）；最後一場景→通關結算。
 local function completeCurrentScene()
     if current_scenes and current_scene_index < #current_scenes then
+        -- [[ S5 護送 ]] 把 NPC 目前血量帶到下一場景（跨場景護送才有連續性）
+        if entity_controller and entity_controller.npc and not entity_controller.npc.is_dead then
+            carry_npc_hp = entity_controller.npc.hp
+        else
+            carry_npc_hp = nil
+        end
         current_scene_index = current_scene_index + 1
         print("LOG: Advancing to scene " .. current_scene_index .. "/" .. #current_scenes)
         loadScene(current_scenes[current_scene_index])
@@ -416,8 +432,12 @@ function StateMission.update()
     if controlling_weapon then
         local cc = (playdate.getCrankChange and playdate.getCrankChange()) or 0
         local w = controlling_weapon
-        w.angle = math.max(w.angle_min or 0, math.min(w.angle_max or 80, w.angle + cc * WEAPON_CRANK_FACTOR))
+        -- crank 轉動量（度）→ 圈數 → 仰角變化
+        local per_rot = w.crank_degrees_per_rotation or WEAPON_CRANK_DEG_PER_ROTATION
+        local delta = (cc / 360.0) * per_rot
+        w.angle = math.max(w.angle_min or 0, math.min(w.angle_max or 80, w.angle + delta))
         weapon_fire_timer = weapon_fire_timer + (1/30)
+        turret_fire_pressed = playdate.buttonIsPressed(playdate.kButtonA)   -- 面板按鈕的按下狀態
         if playdate.buttonJustPressed(playdate.kButtonA) and weapon_fire_timer >= (w.cooldown or 0.5) then
             weapon_fire_timer = 0
             if entity_controller then entity_controller:fireSceneWeapon(w) end
@@ -425,6 +445,7 @@ function StateMission.update()
         end
         if playdate.buttonJustPressed(playdate.kButtonB) then
             controlling_weapon = nil
+            turret_fire_pressed = false
             if _G.SoundManager and _G.SoundManager.playCursorMove then _G.SoundManager.playCursorMove() end
         end
     else
@@ -1020,22 +1041,28 @@ function StateMission.draw()
     elseif mech_controller then
         mech_controller:drawMech(mech_x + shake_offset, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
     end
-    
+
+    -- 2.5 [[ 前景層 ]] 畫在機體之上、HUD/操作面板之下（會擋住玩家，不會擋住 UI）
+    if entity_controller and entity_controller.drawForeground then
+        entity_controller:drawForeground(camera_x + shake_offset)
+    end
+
     -- 3. 繪製 HUD (HP 條)
     local hp_bar_x = 10
-    local hp_bar_y = 10
+    local hp_text_y = 3               -- 數字位置維持不變
+    local hp_bar_y = 14               -- 血條往下 3px，避免與上方數字重疊
     local hp_bar_width = 100
     local hp_bar_height = 10
     local hp_percent = current_hp / max_hp
-    
-    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_bar_y - 7)
+
+    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_text_y)
     gfx.drawRect(hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height)
 
     -- [[ S3 場景武器接管 ]] 提示 / 操作指示
     if controlling_weapon then
-        local msg = "TURRET  crank:aim  A:fire  B:exit"
-        local tw = gfx.getTextSize(msg)
-        gfx.drawText(msg, (400 - tw) // 2, 158)
+        -- 與未接管時的「Press A」同位置：砲台正上方
+        gfx.drawText("B:exit", controlling_weapon.x - camera_x - 18,
+                     ((entity_controller and entity_controller.ground_y) or 156) - 46)
     elseif entity_controller then
         local near = entity_controller:weaponNear(mech_x + 24, 44)
         if near then
@@ -1083,50 +1110,50 @@ function StateMission.draw()
         gfx.setColor(gfx.kColorWhite)
         gfx.fillRect(UI_START_X - bg_margin, UI_START_Y - bg_margin, ui_w + bg_margin*2, ui_h + bg_margin*2)
         gfx.setColor(gfx.kColorBlack)
-        local line1_x = UI_START_X + 120
-        local line1_y = UI_START_Y + (UI_GRID_ROWS * UI_CELL_SIZE) - 30
         if controlling_weapon then
-            -- [[ S3 ]] 接管砲台：改畫砲台操作面板（暫代圖 images/turret_panel.png，缺則佔位框）
-            if not turret_panel_tried then
-                turret_panel_tried = true
-                local ok, img = pcall(function() return playdate.graphics.image.new("images/turret_panel") end)
-                if ok and img then turret_panel_img = img end
+            -- [[ S3/美術 ]] 接管砲台的操作面板：其餘格 empty、左上 turret_control（隨 crank 轉）、
+            -- 其右 canon_button（A 發射的按下/放開兩幀）。與機體面板同為 3x2、每格 32x32。
+            if not turret_ui.tried then
+                turret_ui.tried = true
+                local function loadImg(p)
+                    local ok, img = pcall(function() return playdate.graphics.image.new(p) end)
+                    return ok and img or nil
+                end
+                turret_ui.control = loadImg("images/turret_control")
+                turret_ui.empty   = loadImg("images/empty")
+                local okt, tbl = pcall(function() return playdate.graphics.imagetable.new("images/canon_button") end)
+                if okt and tbl then turret_ui.button = tbl end
             end
-            if turret_panel_img then
-                pcall(function() turret_panel_img:draw(UI_START_X, UI_START_Y) end)
-            else
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawRect(UI_START_X, UI_START_Y, ui_w, ui_h)
-                gfx.drawText("TURRET", UI_START_X + 8, UI_START_Y + 8)
-                gfx.drawText("(panel)", UI_START_X + 8, UI_START_Y + 26)
+            -- 底：所有格子鋪 empty
+            if turret_ui.empty then
+                for r = 0, UI_GRID_ROWS - 1 do
+                    for c = 0, UI_GRID_COLS - 1 do
+                        pcall(function()
+                            turret_ui.empty:draw(UI_START_X + c * UI_CELL_SIZE, UI_START_Y + r * UI_CELL_SIZE)
+                        end)
+                    end
+                end
             end
-            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-            gfx.drawText("crank: aim", line1_x, line1_y)
-            gfx.drawText("A: fire   B: exit", line1_x, line1_y + 12)
-            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+            -- 左上格：旋轉控制（依 crank 絕對位置旋轉）
+            if turret_ui.control then
+                local rotated = turret_ui.control:rotatedImage(playdate.getCrankPosition())
+                if rotated then
+                    local rw, rh = rotated:getSize()
+                    pcall(function()
+                        rotated:draw(UI_START_X + (UI_CELL_SIZE - rw) / 2, UI_START_Y + (UI_CELL_SIZE - rh) / 2)
+                    end)
+                end
+            end
+            -- 右鄰格：A 發射按鈕（1=未按下、2=按下）
+            if turret_ui.button then
+                local img = turret_ui.button:getImage(turret_fire_pressed and 2 or 1)
+                if img then
+                    pcall(function() img:draw(UI_START_X + UI_CELL_SIZE, UI_START_Y) end)
+                end
+            end
         else
-        -- 先正常繪製 UI 圖片與面板
-        mech_controller:drawUI(_G.GameState.mech_stats, UI_START_X, UI_START_Y, UI_CELL_SIZE, UI_GRID_COLS, UI_GRID_ROWS)
-        -- 以白色繪製操作說明文字（避免影響圖片顯示）
-        local hint_text = ""
-        local operation_hint_text = nil
-        if mech_controller.active_part_id then
-            -- 已選定零件：顯示取消選擇及零件操作方式
-            hint_text = "B to unselect part"
-            local part_data = _G.PartsData and _G.PartsData[mech_controller.active_part_id]
-            if part_data and part_data.operation_hint and part_data.operation_hint ~= "" then
-                operation_hint_text = part_data.operation_hint
-            end
-        else
-            -- 尚未選擇零件：顯示選擇提示
-            hint_text = "up/down: select part, A: use the part"
-        end
-        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-        gfx.drawText(hint_text, line1_x, line1_y)
-        if operation_hint_text then
-            gfx.drawText(operation_hint_text, line1_x, line1_y + 12)
-        end
-        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+            -- 繪製零件操作面板（白色操作說明文字已移除）
+            mech_controller:drawUI(_G.GameState.mech_stats, UI_START_X, UI_START_Y, UI_CELL_SIZE, UI_GRID_COLS, UI_GRID_ROWS)
         end
     end
     

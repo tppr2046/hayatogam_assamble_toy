@@ -186,12 +186,6 @@ function StateResult.draw()
         end
         bx = bx + w + gap
     end
-    -- 多個選項時提示左右切換
-    if #result_options > 1 then
-        local hint = "left/right: choose   A: confirm"
-        local htw = gfx.getTextSize(hint)
-        gfx.drawText(hint, (400 - htw) // 2, by + bh + 6)
-    end
 end
 
 return StateResult

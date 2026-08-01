@@ -145,11 +145,27 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             mode = n.mode or "HOLD",          -- "MOVE"（走到目標）/ "HOLD"（定點撐時間）
             goal_x = n.goal_x, range = n.range or 30, speed = n.speed or 12,
             duration = n.duration or 20,
-            dir = 1, timer = 0, width = 20, height = 24,
+            dir = 1, timer = 0, width = 24, height = 28,
             reached_goal = false, is_dead = false, protect_done = false,
+            -- [[ 美術 ]] npc_walk-table-24-28.png：2 幀走路動畫
+            frame = 1, frame_timer = 0, frame_delay = 0.16,
         }
+        local okn, tbln = pcall(function() return playdate.graphics.imagetable.new("images/npc_walk") end)
+        if okn and tbln then controller.npc_walk = tbln end
     end
     controller.reach = (scene_data and scene_data.reach) or nil
+    controller.teleport = (scene_data and scene_data.teleport) or nil  -- [[ S1 ]] 出口（供繪製）
+    controller.bunker = (scene_data and scene_data.bunker) or nil      -- [[ S5 ]] 護送終點（供繪製）
+
+    -- [[ 前景層 ]] scene.foregrounds = { {x, y}, ... }：地面上的裝飾動圖（32x32、4 幀），
+    -- 畫在「機體之上、UI 之下」，會擋住玩家但不會擋住操作面板。y 省略＝貼地。
+    controller.foregrounds = {}
+    for _, fd in ipairs((scene_data and scene_data.foregrounds) or {}) do
+        table.insert(controller.foregrounds, { x = fd.x or 0, y = fd.y })
+    end
+    controller.fg_frame = 1
+    controller.fg_timer = 0
+    controller.fg_frame_delay = 0.40
 
     -- [[ S3 場景武器 ]] 可接管的場景武器（砲台）
     controller.weapons = {}
@@ -166,7 +182,13 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             damage = wd.damage or 10,
             speed_mult = wd.speed_mult or 30,   -- 倍率（× base 2.0，對齊 CANON）
             bullet_size = wd.bullet_size or 8,
-            grav_mult = wd.grav_mult or 0.3,
+            grav_mult = wd.grav_mult or 40,     -- 拋物線弧度（對齊機體 CANON1 的 20；越大越彎）
+            -- [[ 美術 ]] turret-table-32-32.png：第1格底座、第2格砲管（砲管靜止朝右）
+            -- 32x32 框以「底部貼地、水平置中於 w.x」擺放；砲管繞 pivot 旋轉，子彈由槍口射出
+            frame_w = 32, frame_h = 32,
+            pivot_x = 10, pivot_y = 10,         -- 砲管旋轉軸心（框內座標）
+            barrel_len = 21,                    -- 軸心→槍口距離
+            crank_degrees_per_rotation = wd.crank_degrees_per_rotation,  -- nil＝用全域預設
         })
     end
 
@@ -300,9 +322,16 @@ function EntityController:fireSceneWeapon(w)
     local rad = math.rad(w.angle or 30)
     -- 對齊機體 CANON 的速度尺度：base(2.0) × 倍率
     local speed = (self.player_move_speed or 2.0) * (w.speed_mult or 30)
-    local vx = math.cos(rad) * speed
-    local vy = -math.sin(rad) * speed
-    self:addPlayerProjectile(w.x, w.y - 8, vx, vy, w.damage or 10, w.grav_mult or 0.3, w.bullet_size or 8)
+    local dir_x, dir_y = math.cos(rad), -math.sin(rad)
+    local vx = dir_x * speed
+    local vy = dir_y * speed
+    -- [[ 美術 ]] 由旋轉後的槍口射出：框底貼地、水平置中於 w.x，軸心 + 方向 × 砲管長
+    local fw, fh = (w.frame_w or 32), (w.frame_h or 32)
+    local pivot_x = w.x - fw / 2 + (w.pivot_x or 10)
+    local pivot_y = self.ground_y - fh + (w.pivot_y or 10)
+    local blen = w.barrel_len or 21
+    self:addPlayerProjectile(pivot_x + dir_x * blen, pivot_y + dir_y * blen,
+                             vx, vy, w.damage or 10, w.grav_mult or 0.3, w.bullet_size or 8)
 end
 
 function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height, mech_stats)
@@ -312,6 +341,16 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     for _, target in ipairs(self.delivery_targets or {}) do
         if target.success_effect_timer and target.success_effect_timer > 0 then
             target.success_effect_timer = target.success_effect_timer - dt
+        end
+    end
+
+    -- [[ 前景層 ]] 裝飾動圖換幀（4 幀循環）
+    if self.foregrounds and #self.foregrounds > 0 then
+        self.fg_timer = (self.fg_timer or 0) + dt
+        if self.fg_timer >= (self.fg_frame_delay or 0.40) then
+            self.fg_timer = 0
+            local n = (self.fg_table and self.fg_table:getLength()) or 4
+            self.fg_frame = ((self.fg_frame or 1) % n) + 1
         end
     end
 
@@ -332,6 +371,15 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     -- [[ S5 護送戰 ]] 更新 NPC：MOVE=自走向目標；HOLD=定點小移動並計時
     if self.npc and not self.npc.is_dead and not self.npc.reached_goal and not self.npc.protect_done then
         local npc = self.npc
+        -- [[ 美術 ]] 走路動畫換幀（NPC 在兩種模式下都持續移動）
+        if self.npc_walk then
+            npc.frame_timer = (npc.frame_timer or 0) + dt
+            if npc.frame_timer >= (npc.frame_delay or 0.16) then
+                npc.frame_timer = 0
+                local n = self.npc_walk:getLength() or 2
+                npc.frame = ((npc.frame or 1) % n) + 1
+            end
+        end
         if npc.hp <= 0 then
             npc.is_dead = true
         elseif npc.mode == "MOVE" then
@@ -350,7 +398,13 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     for i, enemy in ipairs(self.enemies) do
         if enemy.is_alive then
             enemy:update(dt, mech_x, mech_y, mech_width, mech_height, self)
-            
+
+            -- [[ S6 BOSS ]] 由敵人自行判定的傷害（如 BOSS 雷射光束命中）在此收回累加
+            if enemy.pending_mech_damage and enemy.pending_mech_damage > 0 then
+                mech_damage_taken = mech_damage_taken + enemy.pending_mech_damage
+                enemy.pending_mech_damage = 0
+            end
+
             -- 檢查敵人與機甲碰撞 (扣 HP 邏輯)
             if self:checkMechCollision(mech_x, mech_y, mech_width, mech_height, enemy.x, enemy.y, enemy.width, enemy.height) then
                 -- 特殊處理：地雷被玩家踩到時觸發
@@ -629,7 +683,31 @@ function EntityController:checkWeaponCollision(weapon_parts)
 end
 
 
+-- [[ 前景層 ]] 畫在「機體之上、UI 之下」：由 state_mission 在繪製機甲後、繪製 HUD/面板前呼叫。
+-- 會擋住玩家（營造前後景深），但不會蓋到操作介面。
+function EntityController:drawForeground(camera_x)
+    if not (self.foregrounds and #self.foregrounds > 0) then return end
+    if not self.fg_tried then
+        self.fg_tried = true
+        local okf, tbl = pcall(function() return playdate.graphics.imagetable.new("images/forground") end)
+        if okf and tbl then self.fg_table = tbl end
+    end
+    if not self.fg_table then return end
+    local img = self.fg_table:getImage(self.fg_frame or 1)
+    if not img then return end
+    local iw, ih = img:getSize()
+    for _, f in ipairs(self.foregrounds) do
+        local sx = f.x - camera_x
+        if sx > -iw and sx < 400 + iw then
+            -- y 省略＝貼地（圖底部對齊地面線）；有給 y 則視為相對地面的偏移
+            local dy = (self.ground_y - ih) + (f.y or 0)
+            pcall(function() img:draw(sx - iw / 2, dy) end)
+        end
+    end
+end
+
 function EntityController:draw(camera_x)
+    self.camera_x = camera_x   -- [[ S6 ]] 供 BOSS 判斷是否在畫面內（更新時取用上一幀的值）
     local ground_y = self.ground_y
     gfx.setColor(gfx.kColorBlack)
     
@@ -650,21 +728,38 @@ function EntityController:draw(camera_x)
     end
     
     -- 繪製地形
+    -- [[ 美術 ]] 地面＝純黑填充 + 沿地形線的「表面層」（白色帶狀，厚度 SURFACE_T）。
+    -- 表面層沿著每段地形的線平移出等厚度的四邊形，斜坡也會自動貼合。
+    local SURFACE_T = self.surface_thickness or 6
     for _, terrain in ipairs(self.terrain) do
         local screen_x = terrain.x - camera_x
-        
+
         -- 只繪製在畫面內的地形；[[ S2 ]] pit（懸崖空洞）不畫→呈現視覺缺口
         if terrain.type ~= "pit" and screen_x < 400 and screen_x + 64 > 0 then
             local x1, y1, x2, y2 = self:getTerrainPoints(terrain.type, screen_x, ground_y, terrain.height_offset)
+            local s1, s2 = y1 + SURFACE_T, y2 + SURFACE_T   -- 表面層下緣
 
-            -- 繪製地形線
+            -- 1) 表面層以下：純黑填滿至畫面底部（遮住背景）
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillTriangle(x1, s1, x2, s2, x2, 240)
+            gfx.fillTriangle(x1, s1, x1, 240, x2, 240)
+
+            -- 2) 表面層：先填白（不透光，遮住背景），再疊 dither 黑點＝1-bit 的灰
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillTriangle(x1, y1, x2, y2, x2, s2)
+            gfx.fillTriangle(x1, y1, x1, s1, x2, s2)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.setDitherPattern(self.surface_dither or 0.5, gfx.image.kDitherTypeBayer8x8)
+            gfx.fillTriangle(x1, y1, x2, y2, x2, s2)
+            gfx.fillTriangle(x1, y1, x1, s1, x2, s2)
+
+            -- 3) 表面層上下緣的線（讓厚度看得出來）
+            gfx.setColor(gfx.kColorBlack)
             gfx.drawLine(x1, y1, x2, y2)
-
-            -- 使用填充遮擋背景：將地形線下方填滿至畫面底部，以遮住背景
-            gfx.fillTriangle(x1, y1, x2, y2, x2, 240)
-            gfx.fillTriangle(x1, y1, x1, 240, x2, 240)
+            gfx.drawLine(x1, s1, x2, s2)
         end
-    end 
+    end
+    gfx.setColor(gfx.kColorBlack)
 
     -- 繪製障礙物
     for i, obs in ipairs(self.obstacles) do
@@ -697,15 +792,51 @@ function EntityController:draw(camera_x)
         enemy:draw(camera_x)
     end
 
+    -- [[ S5/美術 ]] 護送目標 bunker：由場景資料 scene.bunker = { x } 指定（非自動跟著 goal_x，
+    -- 因為有些場景的終點是傳送點而不是 bunker）。上方顯示 GOAL 字樣。
+    if self.bunker and self.bunker.x then
+        if not self.bunker_tried then
+            self.bunker_tried = true
+            local okb, img = pcall(function() return playdate.graphics.image.new("images/bunker") end)
+            if okb and img then self.bunker_img = img end
+        end
+        local gx = self.bunker.x - camera_x
+        if gx > -50 and gx < 450 then
+            local bh = 32
+            if self.bunker_img then
+                local bw
+                bw, bh = self.bunker_img:getSize()
+                pcall(function() self.bunker_img:draw(gx - bw / 2, ground_y - bh) end)
+            else
+                gfx.setColor(gfx.kColorWhite); gfx.fillRect(gx - 16, ground_y - 32, 32, 32)
+                gfx.setColor(gfx.kColorBlack); gfx.drawRect(gx - 16, ground_y - 32, 32, 32)
+            end
+            gfx.setColor(gfx.kColorBlack)
+            local tw = gfx.getTextSize("GOAL")
+            gfx.drawText("GOAL", gx - tw / 2, ground_y - bh - 14)
+        end
+    end
+
     -- [[ S5 護送戰 ]] 繪製 NPC（白底黑框 + HP 條）與 REACH 目標旗標
     if self.npc and not self.npc.is_dead then
         local npc = self.npc
         local sx = npc.x - camera_x
         if sx > -30 and sx < 430 then
             local top = ground_y - npc.height
-            gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - npc.width/2, top, npc.width, npc.height)
-            gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - npc.width/2, top, npc.width, npc.height)
-            gfx.drawText("NPC", sx - npc.width/2 - 2, top - 12)
+            -- [[ 美術 ]] npc_walk 動畫；載入失敗時退回白底黑框佔位
+            local drawn = false
+            if self.npc_walk then
+                local img = self.npc_walk:getImage(npc.frame or 1)
+                if img then
+                    pcall(function() img:draw(sx - npc.width / 2, top) end)
+                    drawn = true
+                end
+            end
+            if not drawn then
+                gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - npc.width/2, top, npc.width, npc.height)
+                gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - npc.width/2, top, npc.width, npc.height)
+            end
+            gfx.setColor(gfx.kColorBlack)
             local ratio = math.max(0, math.min(1, npc.hp / (npc.max_hp or 1)))
             gfx.drawRect(sx - 14, top - 6, 28, 4)
             gfx.fillRect(sx - 14, top - 6, math.floor(28 * ratio), 4)
@@ -726,20 +857,78 @@ function EntityController:draw(camera_x)
         end
     end
 
-    -- [[ S3 場景武器 ]] 砲台（底座 + 依仰角的砲管）
+    -- [[ S1/美術 ]] 傳送點（本場景出口）：arrow-table-32-32.png 三幀循環，每幀 0.5 秒
+    if self.teleport and self.teleport.x then
+        local tx = self.teleport.x - camera_x
+        if tx > -40 and tx < 440 then
+            if not self.arrow_tried then
+                self.arrow_tried = true
+                local oka, tbl = pcall(function() return playdate.graphics.imagetable.new("images/arrow") end)
+                if oka and tbl then self.arrow_table = tbl end
+            end
+            if self.arrow_table then
+                local n = self.arrow_table:getLength() or 3
+                local idx = (math.floor(playdate.getCurrentTimeMilliseconds() / 500) % n) + 1
+                local img = self.arrow_table:getImage(idx)
+                if img then
+                    local iw, ih = img:getSize()
+                    pcall(function() img:draw(tx - iw / 2, ground_y - ih - 8) end)
+                end
+            else
+                -- 佔位（載入失敗時）
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillTriangle(tx - 8, ground_y - 30, tx - 8, ground_y - 14, tx + 8, ground_y - 22)
+            end
+        end
+    end
+
+    -- [[ S3 場景武器 ]] 砲台：底座（第1格）+ 繞軸心旋轉的砲管（第2格，靜止朝右）
+    if (self.weapons and #self.weapons > 0) and not self.turret_sheet_tried then
+        self.turret_sheet_tried = true
+        local okt, tbl = pcall(function() return playdate.graphics.imagetable.new("images/turret") end)
+        if okt and tbl then
+            self.turret_sheet = tbl
+            -- 砲管裁成「軸心置中」的小圖，供 drawRotated 繞軸心旋轉
+            local src = tbl:getImage(2)
+            if src then
+                local size = 64
+                local okb, buf = pcall(function() return playdate.graphics.image.new(size, size) end)
+                if okb and buf then
+                    playdate.graphics.pushContext(buf)
+                    playdate.graphics.clear(playdate.graphics.kColorClear)
+                    src:draw(-(10 - size / 2), -(10 - size / 2))   -- pivot(10,10) 移到小圖中心
+                    playdate.graphics.popContext()
+                    self.turret_barrel_img = buf
+                end
+            end
+        end
+    end
     for _, w in ipairs(self.weapons or {}) do
         local sx = w.x - camera_x
-        if sx > -30 and sx < 430 then
-            local base_y = ground_y - 20
-            gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - 12, base_y, 24, 20)
-            gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - 12, base_y, 24, 20)
-            local rad = math.rad(w.angle or 30)
-            local bx0, by0 = sx, base_y + 3
-            local blen = 22
-            gfx.setLineWidth(3)
-            gfx.drawLine(bx0, by0, bx0 + math.cos(rad) * blen, by0 - math.sin(rad) * blen)
-            gfx.setLineWidth(1)
-            gfx.drawText("TURRET", sx - 14, base_y - 12)
+        if sx > -40 and sx < 440 then
+            local fw, fh = (w.frame_w or 32), (w.frame_h or 32)
+            local fx = sx - fw / 2                 -- 32x32 框水平置中於 w.x
+            local fy = ground_y - fh               -- 框底貼地
+            if self.turret_sheet then
+                local base = self.turret_sheet:getImage(1)
+                if base then pcall(function() base:draw(fx, fy) end) end
+                if self.turret_barrel_img then
+                    -- 砲管靜止朝右（0°），仰角往上為正 → drawRotated 用負值（順時針為正）
+                    pcall(function()
+                        self.turret_barrel_img:drawRotated(fx + (w.pivot_x or 10), fy + (w.pivot_y or 10),
+                                                           -(w.angle or 0))
+                    end)
+                end
+            else
+                -- 佔位圖形（sprite 載入失敗時的備援）
+                local base_y = ground_y - 20
+                gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - 12, base_y, 24, 20)
+                gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - 12, base_y, 24, 20)
+                local rad = math.rad(w.angle or 30)
+                gfx.setLineWidth(3)
+                gfx.drawLine(sx, base_y + 3, sx + math.cos(rad) * 22, base_y + 3 - math.sin(rad) * 22)
+                gfx.setLineWidth(1)
+            end
         end
     end
 
