@@ -1,1 +1,7 @@
 Builds/hayatogam_assamble_toy.pdx.zip
+
+# Playdate 模擬器執行時產生的當機回報暫存（每次執行都會新增一個目錄）
+.sentry-native/
+
+# pdc 每次編譯都會更新 buildtime，導致此檔一直顯示為已修改
+Builds/hayatogam_assamble_toy.pdx/pdxinfo
