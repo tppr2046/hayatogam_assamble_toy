@@ -91,10 +91,15 @@ return {
         shield_up_duration = 3.0,     -- 盾牌舉起時間（秒）
         shield_down_duration = 2.0,   -- 盾牌收起時間（秒）
         shield_raised = true,         -- 初始盾牌狀態（true=舉起）
-        shield_width = 16,            -- 盾牌寬度（像素）
-        shield_height = 20,           -- 盾牌高度（像素）
-        shield_offset_x = -20,        -- 盾牌相對於敵人的 X 偏移（向左）
-        shield_offset_y = 6,          -- 盾牌相對於敵人的 Y 偏移（向下）
+        -- [[ 2026-08-12 ]] 盾牌改用專屬圖 shield.png（16×32），原本是程式畫的黑底白框。
+        -- ★ 這四個值**同時是「畫在哪」與「擋子彈的判定框」**（entity_controller 的
+        --   SHIELD_ROBOT 分支讀同一組），所以尺寸必須與圖一致，否則會出現
+        --   「看起來擋住卻被打到」或「明明沒碰到卻被擋」。
+        shield_image = "images/shield",
+        shield_width = 16,            -- ＝ shield.png 寬
+        shield_height = 32,           -- ＝ shield.png 高（原本 20，與新圖不符）
+        shield_offset_x = -14,        -- 向左；-14 讓盾稍微疊在車體上，看起來像被持著
+        shield_offset_y = 0,          -- 與敵人同底（敵人也是 32 高），盾才會站在地面線上
         -- 移動參數（盾牌收起時）
         move_speed = 25,
         move_range = 80,

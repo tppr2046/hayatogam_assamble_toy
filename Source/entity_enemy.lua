@@ -163,6 +163,14 @@ function Enemy:init(x, y, type_id, ground_y)
     -- 從敵人資料讀取砲彈 multiplier（可在 enemy_data.lua 調整）
     e.projectile_speed_mult = (data and data.projectile_speed_mult) or 1.0
     e.projectile_grav_mult = (data and data.projectile_grav_mult) or 1.0
+    -- 載入盾牌圖片（若有提供；沒有就退回程式繪製的黑底白框）
+    if data and data.shield_image then
+        local ok_shield, shield_img = pcall(function()
+            return playdate.graphics.image.new(data.shield_image)
+        end)
+        if ok_shield and shield_img then e.shield_image = shield_img end
+    end
+
     -- 載入劍圖片（若有提供）
     if data and data.sword_image then
         local ok_sword, sword_img = pcall(function()
@@ -359,6 +367,15 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         
         -- 上下振動（正弦波）
         self.drone_vertical_offset = math.sin(self.drone_vertical_time * self.vertical_speed) * self.vertical_oscillation
+    end
+
+    -- [[ 交戰範圍 2026-08-11 ]] 離畫面太遠就不攻擊。
+    -- ★ 與 EntityController:isEngageable 是**同一個判定**（那邊同時決定「打不打得到它」），
+    --   兩邊必須一致，否則會變成「看不到卻被打」或「明明在打卻扣不到血」。
+    -- 移動照常，只是不開火 —— 巡邏中的敵人入畫時才不會像剛被生出來一樣。
+    if controller and controller.isEngageable and not controller:isEngageable(self.x, self.width) then
+        self.fire_timer = 0     -- 重置節奏，重新入畫時從頭數冷卻（同 BOSS 的作法）
+        return
     end
 
     -- 根據 attack_type 處理攻擊
@@ -1122,10 +1139,17 @@ function Enemy:draw(camera_x)
     if self.type_id == "SHIELD_ROBOT" and self.shield_raised then
         local shield_x = screen_x + self.shield_offset_x
         local shield_y = draw_y + self.shield_offset_y
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(shield_x, shield_y, self.shield_width, self.shield_height)
-        gfx.setColor(gfx.kColorWhite)
-        gfx.drawRect(shield_x, shield_y, self.shield_width, self.shield_height)
+        -- [[ 2026-08-12 ]] 有 shield.png 就畫圖，否則退回舊的黑底白框。
+        -- ★ 位置與尺寸都來自 enemy_data 的 shield_* —— **擋子彈的判定用的是同一組**，
+        --   所以畫出來的框就是擋得住的範圍，不會有視覺與判定不一致的問題。
+        if self.shield_image then
+            pcall(function() self.shield_image:draw(shield_x, shield_y) end)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(shield_x, shield_y, self.shield_width, self.shield_height)
+            gfx.setColor(gfx.kColorWhite)
+            gfx.drawRect(shield_x, shield_y, self.shield_width, self.shield_height)
+        end
     end
     
     -- 繪製 HP 條

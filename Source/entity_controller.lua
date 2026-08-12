@@ -417,6 +417,24 @@ function EntityController:addBlastVisual(x, y)
     table.insert(self.blasts, { x = x, y = y, frame = 1, timer = 0 })
 end
 
+-- [[ 交戰範圍 2026-08-11 ]] 敵人只有在「畫面內 + 這段餘裕」之內才會攻擊玩家，
+-- **也才會被玩家打到**（兩邊用同一個判定，不能只做一半，否則會變成單方面挨打或單方面白打）。
+-- 目的：不要被看不見的敵人偷打，也不要把子彈浪費在看不見的目標上。
+-- 2 個機身 ≈ 96px（機體 3 格 × 16 = 48 寬）。
+local ENGAGE_MARGIN = 96
+
+-- 這個矩形是否在「可交戰範圍」內（世界座標）。
+-- ⚠️ camera_x 是在 draw() 設定的＝**上一幀的值**，更新期取用會有 1 幀延遲；
+--    BOSS 的同框判定本來就是這樣用，96px 的餘裕遠大於 1 幀的鏡頭位移，可忽略。
+function EntityController:isEngageable(x, w)
+    local cam = self.camera_x or 0
+    return (x + (w or 0)) > (cam - ENGAGE_MARGIN) and x < (cam + 400 + ENGAGE_MARGIN)
+end
+
+-- [[ 雷射槍 GUN2 ]] 光束可以飛到畫面外多遠才被回收（px）。
+-- 設 0 等於「出畫面就消失」→ 剛出畫面的敵人會完全打不到。
+local LASER_OFFSCREEN_MARGIN = 240
+
 -- [[ 雷射槍 GUN2 2026-08-11 ]] 玩家的貫穿光束。
 -- 與砲彈的三個差異：**不受重力**、**速度快很多**、**打到敵人不會消失（貫穿）**。
 -- 每道光束記著自己打過誰（`hit` 集合），所以同一發不會對同一隻重複扣血，
@@ -452,7 +470,7 @@ function EntityController:updatePlayerLasers(dt)
         local x0 = math.min(L.x, L.x + L.length)
         local x1 = math.max(L.x, L.x + L.length)
         for _, enemy in ipairs(self.enemies or {}) do
-            if enemy.is_alive and not L.hit[enemy] then
+            if enemy.is_alive and not L.hit[enemy] and self:isEngageable(enemy.x, enemy.width) then
                 local ex1 = enemy.x + (enemy.width or 0)
                 local ey1 = enemy.y + (enemy.height or 0)
                 if ex1 >= x0 and enemy.x <= x1 and ey1 >= top and enemy.y <= bot then
@@ -489,9 +507,13 @@ function EntityController:updatePlayerLasers(dt)
             end
         end
 
-        -- 飛太遠或飛出畫面就消失
+        -- 飛太遠就消失。★**不能以「飛出畫面右緣」當條件** —— 那樣畫面外的敵人永遠打不到，
+        --   而畫面右緣離機體只有約 250px，很容易就有敵人卡在剛出畫面的位置。
+        --   改成留一段畫面外的餘裕（LASER_OFFSCREEN_MARGIN），真正的上限交給 laser_range。
         local screen_x = L.x - (self.camera_x or 0)
-        if L.travelled >= L.max_range or screen_x > 400 or screen_x + L.length < 0 then
+        if L.travelled >= L.max_range
+           or screen_x > 400 + LASER_OFFSCREEN_MARGIN
+           or screen_x + L.length < -LASER_OFFSCREEN_MARGIN then
             table.remove(self.player_lasers, i)
         end
     end
@@ -776,7 +798,9 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             -- 檢查玩家砲彈是否擊中敵人
             if p.is_player_bullet then
                 for _, enemy in ipairs(self.enemies) do
-                    if enemy.is_alive and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, p.x, p.y, p.width, p.height) then
+                    -- [[ 交戰範圍 ]] 看不見的敵人打不到（與「它也不會攻擊你」對稱）
+                    if enemy.is_alive and self:isEngageable(enemy.x, enemy.width)
+                       and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, p.x, p.y, p.width, p.height) then
                         -- 特殊處理：地雷被砲彈擊中時觸發
                         if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
                             enemy.is_triggered = true
