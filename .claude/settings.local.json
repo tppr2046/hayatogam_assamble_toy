@@ -29,7 +29,10 @@
       "Bash(grep -n \"^#\\\\{2,4\\\\} 15\\\\|^## 1[45]\" \"GDD_正式版_組裝玩具任務.md\")",
       "Bash(awk '{print substr\\($0,1,2\\)}')",
       "Bash(git status *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(git check-attr *)",
+      "Bash(echo \"PDC EXIT=$?\")",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"

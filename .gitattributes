@@ -1,0 +1,7 @@
+# 固定換行，避免 core.autocrlf 造成「整檔看起來被改過」與反覆的
+# 「LF will be replaced by CRLF」警告。
+#
+# 本專案的 core.autocrlf = true（repo 內存 LF、簽出時轉 CRLF）。
+# Lua 一律鎖成 LF：repo 與工作區都是 LF，來源不論是編輯器或腳本產生都一致。
+# pdc 兩種換行都吃得下，所以鎖 LF 不影響編譯。
+*.lua text eol=lf
