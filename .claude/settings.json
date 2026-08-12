@@ -46,7 +46,9 @@
       "Bash(node --check __TRACKED_VAR__/editor_check.js)",
       "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\" && sed -n \"/function MechController:applyMechTilt/,/^end/p\" Source/entity_mech.lua)",
       "Bash(sed -n '/local half = L.thickness \\\\/ 2/,/local x1 = math.max/p' Source/entity_controller.lua)",
-      "Bash(sed -n '/雷射槍 ]] 玩家光束/,/setLineWidth\\(1\\)/p' Source/entity_controller.lua)"
+      "Bash(sed -n '/雷射槍 ]] 玩家光束/,/setLineWidth\\(1\\)/p' Source/entity_controller.lua)",
+      "Bash(sed -n '/if self.move_type == \"MOVE FORWARD\\\\/BACK\"/,/elseif self.move_type == \"JUMP\"/p' Source/entity_enemy.lua)",
+      "Bash(git checkout *)"
     ],
     "additionalDirectories": [
       "e:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source\\images",

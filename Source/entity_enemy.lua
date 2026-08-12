@@ -82,6 +82,14 @@ function Enemy:init(x, y, type_id, ground_y)
         -- 子彈發射位置偏移
         bullet_offset_x = data.bullet_offset_x or (img_width / 2),
         bullet_offset_y = data.bullet_offset_y or (img_height / 2),
+        -- [[ WALKER 2026-08-12 ]] 走走停停（move_type = "MOVE_PAUSE"）
+        move_duration = data.move_duration or 1.5,
+        pause_duration = data.pause_duration or 1.5,
+        walk_fps = data.walk_fps or 8,
+        is_paused = false,        -- 只有停下時才開火（見 fire_only_when_stopped）
+        phase_timer = 0,
+        walk_timer = 0,
+        flip_x = data.flip_x or false,   -- 原圖朝右時整張水平鏡射
         -- 移動參數
         move_probability = data.move_probability or 0.5,
         move_range = data.move_range or 50,
@@ -263,6 +271,50 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self.move_dir = self.move_dir * -1
         end
         
+    elseif self.move_type == "MOVE_PAUSE" then
+        -- [[ WALKER ]] 走一段 → 停一段，循環。**只有停下時會開火**（見下方攻擊段）。
+        self.phase_timer = self.phase_timer + dt
+        if self.is_paused then
+            if self.phase_timer >= self.pause_duration then
+                self.is_paused = false
+                self.phase_timer = 0
+            end
+        else
+            if self.phase_timer >= self.move_duration then
+                self.is_paused = true
+                self.phase_timer = 0
+            else
+                -- 移動邏輯與 BASIC 相同：超出範圍或遇到斜坡就換方向
+                local new_x = self.x + self.move_dir * self.move_speed * dt
+                if math.abs(new_x - self.origin_x) < self.move_range then
+                    if controller and controller:getTerrainType(new_x) ~= "flat" then
+                        self.move_dir = self.move_dir * -1
+                    else
+                        self.x = new_x
+                    end
+                else
+                    self.move_dir = self.move_dir * -1
+                end
+            end
+        end
+        -- 走路動畫：停下＝第 1 格（站立），移動＝第 2 格之後循環。
+        -- ★ 這裡自己控制換幀，所以 enemy_data **不要**設 anim_fps（那個是無條件循環）。
+        if self.imagetable then
+            local n = self.imagetable:getLength() or 1
+            if self.is_paused then
+                self.anim_frame = 1
+            elseif n > 1 then
+                self.walk_timer = self.walk_timer + dt
+                local step = 1 / (self.walk_fps or 8)
+                if self.walk_timer >= step then
+                    self.walk_timer = self.walk_timer - step
+                    self.anim_frame = (self.anim_frame or 1) + 1
+                    if self.anim_frame < 2 or self.anim_frame > n then self.anim_frame = 2 end
+                end
+            end
+            self.image = self.imagetable:getImage(self.anim_frame or 1)
+        end
+
     elseif self.move_type == "JUMP" then
         -- 跳躍敵人
         self.jump_timer = self.jump_timer + dt
@@ -380,7 +432,10 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
 
     -- 根據 attack_type 處理攻擊
     if self.attack_type == "FIRE BULLET" then
-        if self.fire_timer >= self.fire_cooldown then
+        -- [[ WALKER ]] fire_only_when_stopped：移動中不開火，停下才打
+        local ed = EnemyData[self.type_id] or {}
+        local can_fire = (not ed.fire_only_when_stopped) or self.is_paused
+        if can_fire and self.fire_timer >= self.fire_cooldown then
             self:fire(mech_x, controller)
             self.fire_timer = 0
         end
@@ -1129,7 +1184,9 @@ function Enemy:draw(camera_x)
     
     -- 繪製敵人圖片或方塊
     if self.image then
-        pcall(function() self.image:draw(screen_x, draw_y) end)
+        -- flip_x：原圖朝右的敵人整張水平鏡射（本作敵人一律面向左）
+        local fmode = self.flip_x and gfx.kImageFlippedX or gfx.kImageUnflipped
+        pcall(function() self.image:draw(screen_x, draw_y, fmode) end)
     else
         gfx.setColor(gfx.kColorBlack)
         gfx.fillRect(screen_x, draw_y, self.width, self.height)

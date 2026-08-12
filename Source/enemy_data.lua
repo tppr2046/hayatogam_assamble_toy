@@ -113,6 +113,34 @@ return {
         bullet_offset_y = 6
     },
 
+    -- [[ 2026-08-12 ]] 本切片最後一種新敵人。行為＝BASIC 的變體：
+    --   **移動較快、會週期性停下，而且只在停下時開火**（移動中不攻擊）。
+    ["WALKER_ENEMY"] = {
+        name = "WALKER UNIT", hp = 18, attack = 6,
+        move_type = "MOVE_PAUSE", attack_type = "FIRE BULLET",
+        -- 移動／停頓的循環（秒）
+        move_duration = 1.6,          -- 走這麼久
+        pause_duration = 1.4,         -- 停這麼久（只有停下時會開火）
+        move_speed = 55,              -- ★ 比 BASIC(20) 快很多
+        move_range = 120,
+        -- ★ 只在停下時開火（移動中不攻擊）
+        fire_only_when_stopped = true,
+        fire_cooldown = 1.0,
+        projectile_speed_mult = 30,
+        projectile_grav_mult = 20,
+        -- 敵人圖片（3 格 40×32：第 1 格＝站立、第 2~3 格＝走路循環）
+        -- ★ 走路動畫由 MOVE_PAUSE 分支自己控制，**不要設 anim_fps**
+        --   （那會讓它無論停走都一直循環播放）
+        image = "images/enemy04",
+        walk_fps = 8,                 -- 移動中的換幀速度
+        -- ⚠️ 原圖面向**右**，但本作敵人一律面向左（玩家從左側來，enemy01/02 都是朝左）。
+        --   所以整張水平鏡射；bullet_offset 也是鏡射後的座標。
+        flip_x = true,
+        -- 槍口量自原圖：砲管末端 (34, 7) → 鏡射後 x = 40 − 34 = 6
+        bullet_offset_x = 6,
+        bullet_offset_y = 7
+    },
+
     ["DRONE"] = {
         name = "DRONE", hp = 10, attack = 6,
         move_type = "AERIAL", attack_type = "FIRE BULLET",

@@ -117,16 +117,24 @@ Start-Sleep 10; $null = $p.CloseMainWindow(); $null = $p.WaitForExit(8000)
 
 ## 4. 進行中 / 下一步
 
-### 4-1. 立即接續:美術接線(使用者主導)
-待製作清單見 [ArtAssets §0.5](ArtAssets_切片_組裝玩具任務.md)。**2026-08-11 更新:剩 5~12 張。**
+### 4-1. ✅ 切片美術已結案（2026-08-12）
 
-已完成並接線:現有素材修正組(#35–39)、揮劍敵人(#40)、地雷(#41)、CLAW 開合鈕(#42)、
-WHEEL2(#43)、場景背景建物(#28,`bg_building1~7`)、BOSS 6 格改版、
-**標題畫面(#31,透明底 + 零件 4 排捲動)**、**存檔畫面底圖(#32)**。
+**必做素材剩餘 0 張**（逐項見 [ArtAssets §0.5](ArtAssets_切片_組裝玩具任務.md)）。
+最後一張是走路敵人 `enemy04-table-40-32.png`。
 
-**剩下 3~7 張**:結算畫面底圖(#34)、新敵人(#25–27)、障礙物(#29)、結局專屬圖 `cut_ending.png`。
-🟡 選關(#33)與結算(#34)**都暫用 `save_bg`**,要不要畫專屬的由使用者決定。
-✅ **新零件 C1 已結案**——本切片就是雷射槍 `GUN2` 這一個,**不再新增零件**(2026-08-11 使用者拍板)。
+收尾的四個拍板：
+- **新零件 C1 結案** —— 就雷射槍 `GUN2` 一個
+- **新敵人 C3 結案** —— 就 `WALKER_ENEMY` 一種（移動快、走走停停、**停下才開火**）
+- **選關／結算底圖** —— 沿用 `save_bg` 暫代，不另畫
+- **障礙物、結局專屬圖** —— 延後至下階段
+
+**關卡 M001–M003 已完成**（資源數值待調）。
+
+→ **下一步：實機測試 → 檢討 → QA2 工時評估**（見 §4-2）。
+
+⚠️ **尚未實機驗證的項目**（開機驗證都跑不到）：
+BOSS 三階段新圖、雷射斜射打盾牌機器人、WALKER 的走停與開火節奏、
+結算三段式動畫、標題畫面零件捶動。
 
 ### 4-2. 之後:C 內容 + QA 量測
 - **C1** 新功能零件、**C4** BOSS roster、**C5** 3–4 關正式關卡
@@ -192,6 +200,9 @@ crank 只有 8 個呼叫點、換觸控不成問題;**真正的風險是焦點�
 | **砲台** | `entity_controller.lua` 砲台初始化:`pivot_x/y`(10,10)、`barrel_len`(21)、`grav_mult`(40)、`speed_mult`(30);crank 靈敏度 `WEAPON_CRANK_DEG_PER_ROTATION`(30);**接管站位** `TURRET_STAND_OFFSET`(40,★必須 < `weaponNear` 的 range 44) |
 | **CANON3 迫擊砲** | `parts_data` 的 `blast_radius`(44)/`blast_damage`(18)＋`projectile_speed_mult`(24)/`projectile_grav_mult`(40)。範圍爆炸實作在 `entity_controller.lua` 的 `triggerBlast()`,**任何零件設 `blast_radius` 就有** |
 | ★ **雷射槍 GUN2** | `parts_data` 的 `GUN2`:`fire_cooldown`(2.2,比 GUN 的 1.0 長)、`laser_speed_mult`(150,GUN 砲彈是 40)、`laser_length`(40,線段長度)、`laser_thickness`(3)、`laser_range`(420)、`projectile_damage`(12)。<br>★ **手動**(`operable = true`)→ 進焦點循環、按 A 發射,面板右格是共用的 `canon_button`。<br>★ **貫穿**:每道光束記著自己打過誰(`L.hit` 集合),沿路每隻各扣一次、不重複。實作在 `entity_controller:updatePlayerLasers()`。<br>⚠️ 冷卻計時器在 `updateParts` **所有槍都會累加**,只有「自動開火」那段跳過 `operable` 的——否則手動槍打完第一發後計時器不動,再也打不出來 |
+| ★ **交戰範圍** | `entity_controller.lua` 的 `ENGAGE_MARGIN`(96，約 2 個機身)。敵人只在「畫面內 + 這段餘裕」內**才攻擊，也才會被打到**。<br>★ 判定集中在 `EntityController:isEngageable()`，**敵人開火／砲彈命中／雷射命中三處共用** —— 只做一半會變成「看不到卻被打」或「明明在打卻扣不到血」。<br>移動不受限，離開範圍時重置開火節奏。BOSS 維持自己更嚴格的「雙方同框才開打」，未套用這個餘裕 |
+| ★ **雷射槍 GUN2** | `parts_data` 的 `GUN2`：`fire_cooldown`(2.2)、`laser_speed_mult`(150)、`laser_length`(40)、`laser_thickness`(3)、`laser_range`(420)、`projectile_damage`(12)。<br>★ **手動**(`operable = true`) → 進焦點循環、按 A 發射，面板右格是共用的 `canon_button`。<br>★ **貫穿**：每道光束記著自己打過誰(`L.hit`)，沿路每隻各扣一次。<br>★ **光束方向跟著槍口**：發射時記下單位方向 `dx/dy`（速度已由 `applyMechTilt` 依地形角度旋轉），**繪製與命中都用它**。命中用線段-矩形（slab method），不能再用水平帶。<br>⚠️ 冷卻計時器在 `updateParts` **所有槍都會累加**，只有「自動開火」那段跳過 `operable` 的——否則手動槍打完第一發就再也打不出來 |
+| ★ **WALKER 敵人** | `enemy_data` 的 `WALKER_ENEMY`：`move_speed`(55，BASIC 是 20)、`move_duration`(1.6)、`pause_duration`(1.4)、`walk_fps`(8)、`fire_only_when_stopped`(true)。<br>★ 走路動畫由 `MOVE_PAUSE` 分支自己控制（第1格＝站立、第2~3格＝走路），**不要設 `anim_fps`**（那是無條件循環，停著也會走）。<br>★ `flip_x = true`：原圖面向右，但本作敵人一律面向左。這是通用欄位，以後任何畫反方向的敵人都可用 |
 | **BOSS 各階段武器** | `boss_data.lua`:`aim_time`/`aim_speed`/`cooldown`/`speed_mult`/`grav_mult`、雷射 `charge`/`beam_time`/`thickness`。<br>★ 血條標題「name  [label  n/3]」總寬 **≤ 220px**。2026-08-11 重量:最長標籤變成 `CANON`(5字)→後綴 135px,**name 上限只剩 85px**(OVERSEER=76,餘 9px)。<br>⚠️ 標籤寫成 `CANNON`(雙 N)會變 221px **超 1px 就折行**——改標籤前先用 §5-4 的字寬腳本量 |
 | **BOSS 死亡演出** | `entity_enemy.lua` 的 `BOSS_DEATH_DURATION`(3.0)與 `BOSS_DEATH_BURST_INTERVAL`(0.22)。★`BOSS_KILL` 判定本來就等 `is_exploding` 結束,**改長度＝改「爆炸播完才過關」** |
 | **運送目標** | `entity_controller.lua` 開頭一整組:浮空 `TARGET_FLOAT_H`(5)、飄動 `TARGET_BOB_AMP`(3)/`TARGET_BOB_SPEED`(2.2)、換幀 `TARGET_FRAME_TIME`(0.12)、**平台上表面** `TARGET_PLATFORM_TOP`(8,箱底對齊這條線)、飛走 `TARGET_FLY_VX`(-70)/`TARGET_FLY_VY`(-110)/`TARGET_FLY_ACC`(220,加速起飛)/`TARGET_FLY_MAX_T`(3.0,保險)。<br>★**飛到完全離開畫面上緣才消失**,不是固定秒數;箱子位置統一由 `stoneRestPos()` 算 |
