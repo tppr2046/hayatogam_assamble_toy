@@ -13,7 +13,7 @@
   "reward_copper": 10,
   "reward_rubber": 15,
   "scene": {
-    "width": 800,
+    "width": 1200,
     "ground_y": 220,
     "sky": "images/bg_sky",
     "backgrounds": [
@@ -58,6 +58,30 @@
         "x": 511,
         "y": 94,
         "image": "images/bg_building6.png"
+      },
+      {
+        "layer": 0,
+        "x": 855,
+        "y": -89,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 764,
+        "y": 125,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 868,
+        "y": 126,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 1067,
+        "y": 136,
+        "image": "images/bg_building7.png"
       }
     ],
     "terrain": [
@@ -112,6 +136,30 @@
       {
         "type": "flat",
         "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
       }
     ],
     "obstacles": [],
@@ -124,12 +172,27 @@
       },
       {
         "type": "BASIC_ENEMY",
-        "x": 355,
+        "x": 550,
+        "y": -17
+      },
+      {
+        "type": "BASIC_ENEMY",
+        "x": 726,
         "y": 0
       },
       {
         "type": "BASIC_ENEMY",
-        "x": 667,
+        "x": 1068,
+        "y": 0
+      },
+      {
+        "type": "SWORD_ENEMY",
+        "x": 298,
+        "y": 0
+      },
+      {
+        "type": "SWORD_ENEMY",
+        "x": 839,
         "y": 0
       }
     ],
