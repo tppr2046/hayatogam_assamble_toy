@@ -73,10 +73,20 @@ function SaveManager.createNewSave(slot_id)
             cell_size = 16
         },
         mech_stats = {
-            total_hp = 30,
+            -- [[ CORE ]] 空 build 的 HP ＝ 預設核心的基礎 HP（CORE1 = 30，GDD §8.05）。
+            -- 舊版這裡是來源不明的硬編 30，現在由 core_data 推導，改核心數值不會脫節。
+            total_hp = (_G.CoreData and _G.CoreData.get
+                        and _G.CoreData.get(_G.CoreData.default_id).base_hp) or 30,
             total_weight = 0,
             equipped_parts = {}
-        }
+        },
+        -- [[ CORE ]] 目前裝備的核心，以及已取得的核心清單（GDD §8.05）。
+        -- 核心由關卡的 reward_core 給予並自動裝上（純階梯升級，無選擇介面）。
+        core_id = "CORE1",
+        owned_cores = { CORE1 = true },
+        -- [[ S8/S10 ]] 新存檔的預設設定與教學旗標（教學未完成→新遊戲會播放）
+        settings = { bgm_volume = 0.7, sfx_volume = 0.5 },
+        tutorial = {}
     }
     
     -- 寫入存檔
@@ -105,7 +115,14 @@ function SaveManager.loadSave(slot_id)
         _G.GameState.resources = data.resources or {steel = 100, copper = 100, rubber = 100}
         _G.GameState.mech_grid = data.mech_grid or {cols = 3, rows = 2, cell_size = 16}
         _G.GameState.mech_stats = data.mech_stats or {total_hp = 100, total_weight = 0, equipped_parts = {}}
+        -- [[ CORE ]] 舊存檔沒有這些欄位 → 回退到預設核心（不會影響任何既有數值）
+        _G.GameState.core_id = data.core_id or (_G.CoreData and _G.CoreData.default_id) or "CORE1"
+        _G.GameState.owned_cores = data.owned_cores or { [_G.GameState.core_id] = true }
+        -- [[ S8/S10 ]] 設定（音量）與教學完成旗標
+        _G.GameState.settings = data.settings or {bgm_volume = 0.7, sfx_volume = 0.5}
+        _G.GameState.tutorial = data.tutorial or {}
         _G.GameState.current_save_slot = slot_id
+        if _G.SoundManager and _G.SoundManager.applyVolumes then _G.SoundManager.applyVolumes() end
         
         -- 更新元資料
         SaveManager._updateLastUsedSlot(slot_id)
@@ -133,7 +150,13 @@ function SaveManager.saveCurrent()
         owned_parts = _G.GameState.owned_parts or {},
         resources = _G.GameState.resources or {steel = 100, copper = 100, rubber = 100},
         mech_grid = _G.GameState.mech_grid or {cols = 3, rows = 2, cell_size = 16},
-        mech_stats = _G.GameState.mech_stats or {total_hp = 100, total_weight = 0, equipped_parts = {}}
+        mech_stats = _G.GameState.mech_stats or {total_hp = 100, total_weight = 0, equipped_parts = {}},
+        -- [[ CORE ]] 目前裝備的核心 + 已取得清單
+        core_id = _G.GameState.core_id or (_G.CoreData and _G.CoreData.default_id) or "CORE1",
+        owned_cores = _G.GameState.owned_cores or { CORE1 = true },
+        -- [[ S8/S10 ]] 設定與教學旗標
+        settings = _G.GameState.settings or {bgm_volume = 0.7, sfx_volume = 0.5},
+        tutorial = _G.GameState.tutorial or {}
     }
     
     local filename = SAVE_FILE_PREFIX .. slot_id

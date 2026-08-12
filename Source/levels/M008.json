@@ -1,0 +1,351 @@
+{
+  "id": "M008",
+  "final": true,
+  "name": "Escort Test",
+  "description": "S5 demo: reach / protect(hold) / escort(move).",
+  "prerequisite": 0,
+  "time_limit": -1,
+  "objective": {
+    "type": "PROTECT",
+    "description": "Protect the escort"
+  },
+  "reward_steel": 20,
+  "reward_copper": 20,
+  "reward_rubber": 20,
+  "scenes": [
+    {
+      "width": 800,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "objective": {
+        "type": "PROTECT",
+        "description": "Protect the NPC for the time"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 1 (PROTECT-HOLD): keep the NPC alive until the timer ends.",
+          "Enemies rush the NPC — intercept them!"
+        ]
+      },
+      "backgrounds": [
+        {
+          "layer": 0,
+          "x": 26,
+          "y": 82,
+          "image": "images/bg_building3.png"
+        },
+        {
+          "layer": 1,
+          "x": 286,
+          "y": 92,
+          "image": "images/bg_building1.png"
+        }
+      ],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "delivery_targets": [],
+      "enemies": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 720,
+          "y": 0
+        }
+      ],
+      "npc": {
+        "x": 380,
+        "y": 0,
+        "hp": 80,
+        "mode": "HOLD",
+        "range": 40,
+        "speed": 10,
+        "duration": 20
+      },
+      "respawns": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 760,
+          "y": 0,
+          "interval": 2.5,
+          "max": 6
+        }
+      ]
+    },
+    {
+      "width": 800,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "objective": {
+        "type": "PROTECT",
+        "description": "Escort the NPC to the goal"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 2 (ESCORT): walk the NPC to the exit.",
+          "Keep it alive — its damage carries to the next area."
+        ]
+      },
+      "backgrounds": [
+        {
+          "layer": 0,
+          "x": 26,
+          "y": 82,
+          "image": "images/bg_building3.png"
+        },
+        {
+          "layer": 1,
+          "x": 286,
+          "y": 92,
+          "image": "images/bg_building1.png"
+        }
+      ],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "delivery_targets": [],
+      "enemies": [],
+      "npc": {
+        "x": 80,
+        "y": 0,
+        "hp": 80,
+        "mode": "MOVE",
+        "goal_x": 700,
+        "speed": 15
+      },
+      "respawns": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 760,
+          "y": 0,
+          "interval": 3.0,
+          "max": 6
+        }
+      ],
+      "teleport": {
+        "x": 700
+      }
+    },
+    {
+      "width": 800,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "objective": {
+        "type": "PROTECT",
+        "description": "Escort the NPC to the bunker"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 3 (FINAL): the bunker is ahead.",
+          "Get the NPC inside to finish the mission."
+        ]
+      },
+      "backgrounds": [
+        {
+          "layer": 0,
+          "x": 26,
+          "y": 82,
+          "image": "images/bg_building3.png"
+        },
+        {
+          "layer": 1,
+          "x": 286,
+          "y": 92,
+          "image": "images/bg_building1.png"
+        }
+      ],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "enemies": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 420,
+          "y": 0
+        }
+      ],
+      "delivery_targets": [],
+      "npc": {
+        "x": 60,
+        "y": 0,
+        "hp": 80,
+        "mode": "MOVE",
+        "goal_x": 700,
+        "speed": 15
+      },
+      "respawns": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 760,
+          "y": 0,
+          "interval": 3.0,
+          "max": 5
+        }
+      ],
+      "bunker": {
+        "x": 700
+      }
+    }
+  ]
+}

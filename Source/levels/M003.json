@@ -1,0 +1,408 @@
+{
+  "id": "M003",
+  "name": "3 THEY ARE COMING",
+  "description": "3 THEY ARE COMING",
+  "prerequisite": "M002",
+  "time_limit": -1,
+  "objective": {
+    "type": "ELIMINATE_ALL",
+    "description": "Defeat all enemies"
+  },
+  "reward_steel": 10,
+  "reward_copper": 0,
+  "reward_rubber": 2,
+  "scenes": [
+    {
+      "width": 1200,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "backgrounds": [
+        {
+          "layer": 0,
+          "x": 30,
+          "y": 65,
+          "image": "images/bg_building4.png"
+        },
+        {
+          "layer": 0,
+          "x": 300,
+          "y": 35,
+          "image": "images/bg_building2.png"
+        },
+        {
+          "layer": 1,
+          "x": 180,
+          "y": 75,
+          "image": "images/bg_building1.png"
+        },
+        {
+          "layer": 0,
+          "x": 500,
+          "y": 55,
+          "image": "images/bg_building4.png"
+        },
+        {
+          "layer": 1,
+          "x": 700,
+          "y": 65,
+          "image": "images/bg_building3.png"
+        },
+        {
+          "layer": 0,
+          "x": 39,
+          "y": 140,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 0,
+          "x": 211,
+          "y": 141,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 0,
+          "x": 397,
+          "y": 140,
+          "image": "images/bg_building7.png"
+        }
+      ],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "up45",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        },
+        {
+          "type": "flat",
+          "height_offset": -64
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "enemies": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 508,
+          "y": 0
+        },
+        {
+          "type": "BASIC_ENEMY",
+          "x": 673,
+          "y": -64
+        },
+        {
+          "type": "JUMP_ENEMY",
+          "x": 440,
+          "y": 0
+        },
+        {
+          "type": "BASIC_ENEMY",
+          "x": 999,
+          "y": -64
+        },
+        {
+          "type": "JUMP_ENEMY",
+          "x": 891,
+          "y": -64
+        },
+        {
+          "type": "WALKER_ENEMY",
+          "x": 751,
+          "y": -64
+        }
+      ],
+      "delivery_targets": [],
+      "objective": {
+        "type": "ELIMINATE_ALL",
+        "description": "Defeat all enemies"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "OH NO, THEY FOUND US.",
+          "THEY ARE COMING.",
+          "FIGHT NOW!"
+        ]
+      }
+    },
+    {
+      "width": 1600,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "backgrounds": [
+        {
+          "layer": 0,
+          "x": 15,
+          "y": 134,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 0,
+          "x": 405,
+          "y": 65,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 1,
+          "x": 495,
+          "y": 41,
+          "image": "images/bg_building5.png"
+        },
+        {
+          "layer": 1,
+          "x": 863,
+          "y": 82,
+          "image": "images/bg_building6.png"
+        },
+        {
+          "layer": 0,
+          "x": 764,
+          "y": 130,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 0,
+          "x": 577,
+          "y": 64,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 0,
+          "x": 958,
+          "y": 121,
+          "image": "images/bg_building7.png"
+        },
+        {
+          "layer": 0,
+          "x": 1207,
+          "y": 119,
+          "image": "images/bg_building7.png"
+        }
+      ],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "up30",
+          "height_offset": 0
+        },
+        {
+          "type": "up30",
+          "height_offset": -37
+        },
+        {
+          "type": "flat",
+          "height_offset": -74
+        },
+        {
+          "type": "flat",
+          "height_offset": -74
+        },
+        {
+          "type": "flat",
+          "height_offset": -74
+        },
+        {
+          "type": "flat",
+          "height_offset": -74
+        },
+        {
+          "type": "flat",
+          "height_offset": -74
+        },
+        {
+          "type": "down45",
+          "height_offset": -74
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        },
+        {
+          "type": "flat",
+          "height_offset": -10
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "enemies": [
+        {
+          "type": "BASIC_ENEMY",
+          "x": 196,
+          "y": 0
+        },
+        {
+          "type": "JUMP_ENEMY",
+          "x": 434,
+          "y": -74
+        },
+        {
+          "type": "BASIC_ENEMY",
+          "x": 618,
+          "y": -74
+        },
+        {
+          "type": "JUMP_ENEMY",
+          "x": 825,
+          "y": -10
+        },
+        {
+          "type": "BASIC_ENEMY",
+          "x": 981,
+          "y": -10
+        },
+        {
+          "type": "BASIC_ENEMY",
+          "x": 1212,
+          "y": -10
+        },
+        {
+          "type": "JUMP_ENEMY",
+          "x": 1092,
+          "y": -10
+        }
+      ],
+      "delivery_targets": [],
+      "objective": {
+        "type": "ELIMINATE_ALL",
+        "description": "Defeat all enemies"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "MORE MACHINE COMING.",
+          "THEY WILL HURT US!"
+        ]
+      }
+    }
+  ]
+}

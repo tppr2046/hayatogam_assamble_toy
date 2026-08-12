@@ -1,0 +1,212 @@
+{
+  "id": "M002",
+  "name": " 2 WALK WITH ME",
+  "description": " 2 WALK WITH ME",
+  "prerequisite": "M001",
+  "time_limit": -1,
+  "objective": {
+    "type": "PROTECT",
+    "description": "Protect the escort"
+  },
+  "reward_steel": 30,
+  "reward_copper": 20,
+  "reward_rubber": 15,
+  "scene": {
+    "width": 1500,
+    "ground_y": 220,
+    "sky": "images/bg_sky",
+    "backgrounds": [
+      {
+        "layer": 1,
+        "x": 60,
+        "y": 69,
+        "image": "images/bg_building2.png"
+      },
+      {
+        "layer": 1,
+        "x": 268,
+        "y": 109,
+        "image": "images/bg_building4.png"
+      },
+      {
+        "layer": 1,
+        "x": 989,
+        "y": -18,
+        "image": "images/bg_building1.png"
+      },
+      {
+        "layer": 0,
+        "x": 523,
+        "y": 54,
+        "image": "images/bg_building5.png"
+      },
+      {
+        "layer": 0,
+        "x": 17,
+        "y": 131,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 386,
+        "y": 128,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 732,
+        "y": 115,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 577,
+        "y": 56,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 238,
+        "y": 141,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 876,
+        "y": 64,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 1033,
+        "y": 72,
+        "image": "images/bg_building7.png"
+      }
+    ],
+    "terrain": [
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "up30",
+        "height_offset": 0
+      },
+      {
+        "type": "up30",
+        "height_offset": -37
+      },
+      {
+        "type": "flat",
+        "height_offset": -74
+      },
+      {
+        "type": "flat",
+        "height_offset": -74
+      },
+      {
+        "type": "down45",
+        "height_offset": -74
+      },
+      {
+        "type": "flat",
+        "height_offset": -10
+      },
+      {
+        "type": "up45",
+        "height_offset": -10
+      },
+      {
+        "type": "flat",
+        "height_offset": -74
+      },
+      {
+        "type": "down15",
+        "height_offset": -74
+      },
+      {
+        "type": "flat",
+        "height_offset": -57
+      },
+      {
+        "type": "up15",
+        "height_offset": -57
+      },
+      {
+        "type": "up15",
+        "height_offset": -74
+      },
+      {
+        "type": "down30",
+        "height_offset": -91
+      },
+      {
+        "type": "flat",
+        "height_offset": -54
+      },
+      {
+        "type": "flat",
+        "height_offset": -54
+      },
+      {
+        "type": "flat",
+        "height_offset": -54
+      },
+      {
+        "type": "flat",
+        "height_offset": -54
+      }
+    ],
+    "obstacles": [],
+    "stones": [],
+    "enemies": [],
+    "delivery_targets": [],
+    "bunker": {
+      "x": 1387
+    },
+    "npc": {
+      "x": 162,
+      "y": 0,
+      "hp": 80,
+      "mode": "HOLD",
+      "speed": 12,
+      "range": 40,
+      "duration": 20
+    },
+    "objective": {
+      "type": "PROTECT",
+      "description": "Protect the escort"
+    },
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "WALK WITH ME TO THE SHELTER.",
+        "GET NEW PARTS, MAKE YOU STRONG."
+      ]
+    }
+  }
+}

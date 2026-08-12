@@ -207,8 +207,9 @@ function SoundManager.playBGM(path)
     if player then
         SoundManager.bgm_player = player
         SoundManager.current_bgm = path
-        -- 設定循環播放
-        player:setVolume(0.7)
+        -- 設定循環播放（音量取自設定，見 S8）
+        local st = (_G.GameState and _G.GameState.settings) or {}
+        player:setVolume(st.bgm_volume or 0.7)
         player:play(0)  -- 0 = 無限循環
         print("SOUND: BGM started playing -> " .. tostring(path))
     else
@@ -222,6 +223,39 @@ function SoundManager.stopBGM()
         SoundManager.bgm_player = nil
         SoundManager.current_bgm = nil
     end
+end
+
+-- ==========================================
+-- [[ S8 設定 ]] 音量控制（0.0~1.0）。設定值存於 _G.GameState.settings，由存檔保存。
+-- ==========================================
+function SoundManager.getSettings()
+    _G.GameState = _G.GameState or {}
+    _G.GameState.settings = _G.GameState.settings or { bgm_volume = 0.7, sfx_volume = 0.5 }
+    return _G.GameState.settings
+end
+
+function SoundManager.applyVolumes()
+    local s = SoundManager.getSettings()
+    local sfx = s.sfx_volume or 0.5
+    for _, name in ipairs({ "synth_cursor", "synth_select", "synth_hit", "synth_explode" }) do
+        local syn = SoundManager[name]
+        if syn and syn.setVolume then pcall(function() syn:setVolume(sfx) end) end
+    end
+    if SoundManager.bgm_player then
+        pcall(function() SoundManager.bgm_player:setVolume(s.bgm_volume or 0.7) end)
+    end
+end
+
+function SoundManager.setBGMVolume(v)
+    local s = SoundManager.getSettings()
+    s.bgm_volume = math.max(0, math.min(1, v))
+    SoundManager.applyVolumes()
+end
+
+function SoundManager.setSFXVolume(v)
+    local s = SoundManager.getSettings()
+    s.sfx_volume = math.max(0, math.min(1, v))
+    SoundManager.applyVolumes()
 end
 
 function SoundManager.playTitleBGM()

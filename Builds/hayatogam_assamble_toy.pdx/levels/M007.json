@@ -1,0 +1,293 @@
+{
+  "description": "S1 multi-scene demo: reach the teleport, then clear the enemies.",
+  "name": "Multi-Scene Test",
+  "objective": {
+    "description": "Clear all enemies in the final scene",
+    "type": "ELIMINATE_ALL"
+  },
+  "id": "M007",
+  "reward_rubber": 20,
+  "reward_core": "CORE2",
+  "reward_copper": 20,
+  "prerequisite": 0,
+  "reward_steel": 20,
+  "time_limit": -1,
+  "scenes": [
+    {
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 1: reach the teleport on the right.",
+          "Mind the pit — falling in fails the mission!"
+        ]
+      },
+      "delivery_targets": [],
+      "width": 560,
+      "backgrounds": [
+        {
+          "x": 26,
+          "image": "images/bg_building3.png",
+          "layer": 0,
+          "y": 82
+        },
+        {
+          "x": 246,
+          "image": "images/bg_building1.png",
+          "layer": 1,
+          "y": 92
+        }
+      ],
+      "obstacles": [],
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "terrain": [
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "pit"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        }
+      ],
+      "teleport": {
+        "x": 480
+      },
+      "enemies": [],
+      "stones": [],
+      "foregrounds": [
+        {
+          "x": 260
+        },
+        {
+          "x": 420
+        }
+      ]
+    },
+    {
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "Scene 2: a TURRET is here (x200).",
+          "Stand near it, press A to man it — crank aims, A fires, B exits."
+        ]
+      },
+      "delivery_targets": [],
+      "width": 680,
+      "backgrounds": [
+        {
+          "x": 73,
+          "image": "images/bg_building4.png",
+          "layer": 0,
+          "y": 101
+        },
+        {
+          "x": 286,
+          "image": "images/bg_building2.png",
+          "layer": 1,
+          "y": 92
+        }
+      ],
+      "obstacles": [],
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "terrain": [
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        },
+        {
+          "height_offset": 0,
+          "type": "flat"
+        }
+      ],
+      "enemies": [],
+      "stones": [],
+      "respawns": [],
+      "teleport": {
+        "x": 600
+      },
+      "weapons": [
+        {
+          "type": "TURRET",
+          "x": 200,
+          "y": 0,
+          "cooldown": 0.4,
+          "damage": 10,
+          "angle_init": 25,
+          "angle_min": 0,
+          "angle_max": 80,
+          "speed_mult": 30,
+          "bullet_size": 8
+        }
+      ]
+    },
+    {
+      "width": 800,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "objective": {
+        "type": "BOSS_KILL",
+        "description": "Destroy the OVERSEER"
+      },
+      "backgrounds": [
+        {
+          "layer": 0,
+          "x": 103,
+          "y": 91,
+          "image": "images/bg_building4.png"
+        }
+      ],
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "FINAL: the OVERSEER!",
+          "Blow off its weapon parts one by one."
+        ]
+      },
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "weapons": [
+        {
+          "type": "TURRET",
+          "x": 300,
+          "y": 0,
+          "cooldown": 0.4,
+          "damage": 10,
+          "angle_init": 25,
+          "angle_min": 0,
+          "angle_max": 80,
+          "speed_mult": 30,
+          "bullet_size": 8
+        }
+      ],
+      "enemies": [
+        {
+          "type": "BOSS",
+          "boss_id": "BOSS1",
+          "x": 420,
+          "y": 0
+        }
+      ],
+      "delivery_targets": []
+    }
+  ]
+}

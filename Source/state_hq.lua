@@ -28,15 +28,72 @@ local GRID_COLS = 3
 local GRID_ROWS = 2       
 local GRID_CELL_SIZE = 16 
 local GRID_WIDTH = GRID_COLS * GRID_CELL_SIZE
-local GRID_START_X = (SCREEN_WIDTH - GRID_WIDTH) / 2  -- 置中
-local GRID_START_Y = 60  -- 往下移動，為預覽留出空間
 
--- UI 控制介面相關
+-- ============================================================
+-- [[ G2 版型 ]] 組裝介面版型。框線由底圖 images/hq_bg.png 提供，
+-- 程式不再畫白底框，只把內容對齊到底圖各框的「內緣」。
+-- 下列座標由 hq_bg.png 掃描實測而得（單位：像素，畫面 400x240）。
+-- 要微調任何區塊，只改這張表，重新編譯就生效。
+-- ============================================================
+local HQ_LAYOUT = {
+    mission  = { x = 6,   y = 19,  w = 387, h = 49 },   -- 頂部框：任務名＋目標
+    data     = { x = 7,   y = 95,  w = 97,  h = 49 },   -- 左上框：HP / WEIGHT
+    -- 左下「無白框」的空位：放 3x2 操作面板（96x64）
+    panel    = { x = 2,   y = 150, w = 108, h = 68 },
+    -- 中右框 x131 y83 w262 h74：機體 2 倍放大置中於此
+    mech_scale = 2,      -- 機體放大倍率
+    mech_cx  = 285,      -- 放大後機體「組裝格中心」落點 x（往右移 40px，避免左側預覽/溢出零件擋到機體；再往左 5px）
+    mech_cy  = 120,      -- 放大後機體「組裝格中心」落點 y（＝中右框垂直中心）
+    menu_x   = 182,      -- 底中框 x174~325：零件選單 / 零件清單（G2b：右移對齊新底圖）
+    menu_y   = 180,
+    start_size = 55,     -- 底右框 x336~392 55x55（正方形）
+    start_x  = 336,      -- G2b：右移對齊新底圖 START 框
+    start_y  = 173,
+    -- G2b：新增 SHOP 方塊（底圖左下新方塊 x108~165 y171~228），選中按 A 進商店
+    shop_size = 55,
+    shop_x   = 110,
+    shop_y   = 173,
+    -- 左側「零件預覽框」（螢幕座標，量自 hq_bg.png）：未安裝零件預覽 + 必要零件提示
+    preview_box = { x = 113, y = 82, w = 97, h = 75 },
+}
+
+-- [[ G2 ]] 零件清單一次顯示幾筆（底中框 y173~228 高 55px，起點 y180、行高 15
+-- → 放得下 3 筆）。超過時捲動並顯示 ▲▼。改行高或框高時記得一起調。
+local LIST_VISIBLE = 3
+
+-- [[ G2 ]] 機甲離屏畫布：機甲先以原生像素畫進此畫布，再 drawScaled 放大置中。
+-- GRID_START_X/Y 改為「畫布內的組裝格原點」（四周留邊給砲管/腳/預覽溢出）。
+-- 左側留白 = GRID_START_X，需容納「機體左側的未安裝零件預覽」（最寬 3 格=48px
+-- ＋間距）；機體在螢幕上的置中不受留白影響（由 mech_cx 決定）。
+local MECH_CANVAS_W = 210
+local MECH_CANVAS_H = 110
+local GRID_START_X = 82
+local GRID_START_Y = 52
+
+-- UI 控制介面相關（操作面板繪於 PANEL 盒內）
 local UI_GRID_COLS = 3
 local UI_GRID_ROWS = 2
 local UI_CELL_SIZE = 32
-local UI_START_X = 10
-local UI_START_Y = GAME_HEIGHT + 5   
+local UI_START_X = HQ_LAYOUT.panel.x + 6
+local UI_START_Y = HQ_LAYOUT.panel.y + 16
+
+-- [[ G2 ]] 反白選取：選中＝黑底白字（穩定不閃爍），未選中＝純黑字。
+-- 取代舊的「> text <」＋閃爍樣式。
+local function drawSelectableText(text, x, y, selected)
+    if selected then
+        local tw, th = gfx.getTextSize(text)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillRect(x - 2, y - 1, tw + 4, th + 2)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(text, x, y)
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+    else
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText(text, x, y)
+    end
+end
+
+-- [[ G2 ]] 白底框線盒已移除：框線改由底圖 hq_bg.png 提供，程式只畫內容。
 
 local GRID_MAP = {}       
 local cursor_col = 1      
@@ -46,18 +103,21 @@ local cursor_row = 1
 local MAIN_MENU = { "TOP PARTS", "BOTTOM PARTS", "REMOVE PART" }  -- SHOP 原型隱藏
 local main_menu_index = 1       -- 主選單游標（1..#MAIN_MENU）
 local cursor_on_start = false   -- 游標是否在右下角固定 START 鈕上
+local cursor_on_shop = false    -- 游標是否在左下角 SHOP 鈕上（主選單按左鍵進入）
 local is_unequip_mode = false  -- 是否在解除裝備模式（由主選單 REMOVE PART 進入）
 local unequip_selected_col = 1  -- 解除模式選中的格子列
 local unequip_selected_row = 1  -- 解除模式選中的格子排
 local selected_category = nil   -- nil = 主選單層, "TOP" or "BOTTOM" = 零件清單層
 local selected_part_index = 1
 local hq_mode = "EQUIP"         -- 固定 EQUIP（舊 UNEQUIP 分支為死碼，已移除）
-local is_placing_part = false
 
--- [[ P5 ]] 放置回饋：不可放的格子在放置模式中以 X.png 靜態標示
+-- [[ P5 ]] 放置回饋：不可放的格子在放置模式中以 dither.png 靜態標示
 -- （取代舊「按下才紅閃」——且舊紅閃的 y 映射用 (row-1)，實際畫錯排）
-local x_marker_img = nil  -- images/X.png，於 setup 載入
+local x_marker_img = nil  -- images/dither.png，於 setup 載入
+local hq_bg_img = nil     -- [[ G2 ]] images/hq_bg.png 組裝介面底圖（400x240），於 setup 載入
+local core_imagetable = nil  -- [[ CORE ]] images/core-table-32-16.png（3 格 32×16），於 setup 載入
 local cursor_blink_tick = 0  -- 控制粗邊框的閃爍
+local overweight_flash = 0   -- [[ CORE ]] 因超過負重上限而擋下安裝時的提示閃爍幀數
 -- 播放標題/一般介面 BGM（循環）
 function StateHQ.setupBGM()
     if _G.SoundManager and _G.SoundManager.playTitleBGM then
@@ -192,6 +252,61 @@ local function findFirstEmptyCell(part_data)
     return 2, 2
 end
 
+-- [[ G2 ]] 依零件的 placement_row 決定安裝列（TOP→上排、BOTTOM→下排）。
+-- 玩家只用左右鍵選「欄」，列由零件類別自動決定。
+local function rowForPart(part_data)
+    if not part_data then return 1 end
+    local h = part_data.slot_y or 1
+    if part_data.placement_row == "TOP" then
+        return GRID_ROWS - h + 1
+    end
+    return 1
+end
+
+-- [[ G2 ]] 零件寬 slot_x 的合法原點欄上限（避免寬零件把原點選到超出邊界）
+local function maxOriginCol(part_data)
+    local w = (part_data and part_data.slot_x) or 1
+    return math.max(1, GRID_COLS - w + 1)
+end
+
+-- [[ G2 ]] 實際安裝零件到指定格：填 GRID_MAP、加入 equipped_parts、累加數值、自動存檔
+local function installPart(part_id, part_data, col, row)
+    local w = part_data.slot_x or 1
+    local h = part_data.slot_y or 1
+    for r = row, row + h - 1 do
+        GRID_MAP[r] = GRID_MAP[r] or {}
+        for c = col, col + w - 1 do
+            GRID_MAP[r][c] = part_id
+        end
+    end
+    table.insert(_G.GameState.mech_stats.equipped_parts, { id = part_id, col = col, row = row, w = w, h = h })
+    -- [[ CORE ]] 改由 recalcMechStats() 統一重算（含核心基礎 HP），不再各自累加
+    recalcMechStats()
+    if _G.SaveManager and _G.SaveManager.saveCurrent then
+        _G.SaveManager.saveCurrent()
+        print("LOG: Mech configuration auto-saved.")
+    end
+end
+
+-- [[ G2 ]] 從 from_index 之後找下一個「未裝備」的零件索引（找不到就繞回頭找）
+local function nextUnequippedIndex(parts_list, from_index)
+    local count = parts_list and #parts_list or 0
+    local eq = _G.GameState.mech_stats.equipped_parts or {}
+    local function equipped(pid)
+        for _, item in ipairs(eq) do
+            if item.id == pid then return true end
+        end
+        return false
+    end
+    for i = from_index + 1, count do
+        if not equipped(parts_list[i]) then return i end
+    end
+    for i = 1, from_index - 1 do
+        if not equipped(parts_list[i]) then return i end
+    end
+    return from_index
+end
+
 -- 從 equipped_parts 刪除指定索引的零件，並把 GRID_MAP 與 mech_stats 更新
 local function removeEquippedPart(index)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
@@ -232,6 +347,9 @@ local function removeEquippedPart(index)
 end
 
 -- 根據 equipped_parts 重新計算 mech_stats（total_hp, total_weight）
+-- [[ CORE ]] GDD §8.05:**HP = 核心基礎 HP + 已裝零件 hp 總和**（負重不含核心）。
+-- 本函式是 mech_stats 的**唯一真相來源**——安裝/拆卸都改成呼叫它重算，
+-- 不再各自做 +/- 累加（舊做法會累積誤差，且無法帶入核心基礎值）。
 function recalcMechStats()
     if not (_G and _G.GameState and _G.GameState.mech_stats) then return end
     local total_hp = 0
@@ -244,9 +362,20 @@ function recalcMechStats()
             total_weight = total_weight + (pdata.weight or 0)
         end
     end
-    -- 確保即便沒有裝備也有基礎值（例如 0 或先前設定的 base）
-    _G.GameState.mech_stats.total_hp = total_hp
+    local core = _G.CoreData and _G.CoreData.current and _G.CoreData.current() or nil
+    _G.GameState.mech_stats.total_hp = (core and core.base_hp or 0) + total_hp
     _G.GameState.mech_stats.total_weight = total_weight
+    -- 供 UI 顯示與安裝檢查使用（不寫進存檔，每次都由核心推導）
+    _G.GameState.mech_stats.weight_cap = (core and core.weight_cap) or 999
+end
+
+-- [[ CORE ]] 安裝檢查:裝上這個零件後會不會超過核心的負重上限。
+-- 回傳 fits(boolean), 裝上後的總重, 上限
+local function weightAfterInstall(part_data)
+    local cap = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.weight_cap) or 999
+    local cur = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.total_weight) or 0
+    local after = cur + ((part_data and part_data.weight) or 0)
+    return (after <= cap), after, cap
 end
 
 
@@ -320,6 +449,15 @@ function StateHQ.setup()
     selected_category = nil  -- 重置分類選擇
     main_menu_index = 1
     cursor_on_start = false
+    cursor_on_shop = false
+    -- [[ S8 ]] 前端設定選單（Menu 鍵）：BGM / SFX 音量
+    if _G.MenuItems and _G.MenuItems.installForFrontend then
+        _G.MenuItems.installForFrontend()
+    end
+    -- [[ S10 ]] 首次進入組裝介面：播放教學
+    if _G.Tutorial and _G.Tutorial.maybeStart then
+        _G.Tutorial.maybeStart("hq")
+    end
 
     -- 初始化 GRID_MAP（row-major），nil 表示空
     GRID_MAP = {}
@@ -352,12 +490,7 @@ function StateHQ.setup()
                 -- 移除重疊零件、扣回數值、歸還到零件清單
                 local pdata = _G.PartsData and _G.PartsData[item.id]
                 if pdata then
-                    if pdata.hp then
-                        _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) - pdata.hp
-                    end
-                    if pdata.weight then
-                        _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) - pdata.weight
-                    end
+                    -- [[ CORE ]] 數值統一在迴圈結束後 recalcMechStats() 重算
                     local category = (pdata.placement_row == "TOP") and "TOP" or "BOTTOM"
                     local list = _G.GameState.parts_by_category and _G.GameState.parts_by_category[category]
                     if list then
@@ -382,19 +515,46 @@ function StateHQ.setup()
         end
         -- 清理過就存檔，修復既有存檔資料
         if removed_any and _G.SaveManager and _G.SaveManager.saveCurrent then
+            recalcMechStats()   -- [[ CORE ]] 移除重疊零件後重算（含核心基礎 HP）
             _G.SaveManager.saveCurrent()
         end
     end
+    -- [[ CORE ]] 進 HQ 時一律重算一次：舊存檔的 total_hp 不含核心基礎值，這裡補正
+    recalcMechStats()
 
     -- 保存網格設定到全域，供任務關卡使用（用於合成機體影像）
     _G.GameState.mech_grid = { cell_size = GRID_CELL_SIZE, cols = GRID_COLS, rows = GRID_ROWS }
 
     -- [[ P5 ]] 載入「不可放置」標示圖（16x16，放置模式蓋在不可放的格子上）
     if not x_marker_img then
-        x_marker_img = gfx.image.new("images/X")
+        x_marker_img = gfx.image.new("images/dither")
         if not x_marker_img then
-            print("WARNING: failed to load images/X.png, fallback to text X")
+            print("WARNING: failed to load images/dither.png, fallback to text X")
         end
+    end
+
+    -- [[ G2 ]] 載入組裝介面底圖（400x240）
+    if not hq_bg_img then
+        hq_bg_img = gfx.image.new("images/hq_bg")
+        if not hq_bg_img then
+            print("WARNING: failed to load images/hq_bg.png")
+        end
+    end
+
+    -- [[ CORE ]] 載入核心 imagetable（3 格 16×16）
+    if not core_imagetable then
+        local okc, tbl = pcall(function() return gfx.imagetable.new("images/core") end)
+        if okc and tbl then
+            core_imagetable = tbl
+            print("LOG: core imagetable loaded, frames = " .. tostring(tbl:getLength()))
+        else
+            print("WARNING: failed to load images/core-table-32-16.png")
+        end
+    end
+    -- 沒有 core_id 的舊存檔（或還沒讀檔就進 HQ）→ 補上預設核心
+    _G.GameState = _G.GameState or {}
+    if not _G.GameState.core_id then
+        _G.GameState.core_id = (_G.CoreData and _G.CoreData.default_id) or "CORE1"
     end
 
     -- Preload part images into parts data (store as _img)
@@ -456,23 +616,95 @@ function StateHQ.setup()
                 -- ensure buffer is at least the image size so larger-than-slot images (e.g., 32x16 SWORD) are fully visible
                 local sw = math.max((pdata.slot_x or 1) * GRID_CELL_SIZE, (gotSize and iw) or 0)
                 local sh = math.max((pdata.slot_y or 1) * GRID_CELL_SIZE, (gotSize and ih) or 0)
+
+                -- [[ CANON 2026-08-08 ]] 砲台要合成「底座 + 上移的砲管」。
+                -- ★ 這裡才是組裝格實際走的路徑（下方 draw 是 `if _img_scaled then ... elseif _img then`，
+                --   而 _img_scaled 一定存在），所以底座與 barrel_offset_y 必須在這裡處理，
+                --   只改 elseif 分支是沒有作用的。
+                -- 用 part_type 判斷,不要列舉 id —— 新增 CANON3 之類的砲不必再回來改這裡
+                local is_canon = (pdata.part_type == "CANON") and pdata._base_img
+                local b_off, bw, bh = 0, 0, 0
+                if is_canon then
+                    b_off = pdata.barrel_offset_y or 0          -- 負值＝往上
+                    local okb, w2, h2 = pcall(function() return pdata._base_img:getSize() end)
+                    bw = (okb and w2) or 0
+                    bh = (okb and h2) or 0
+                    sw = math.max(sw, bw)
+                    sh = math.max(sh, bh, (ih or 0) - b_off)    -- 砲管上移後多出來的高度
+                end
+
+                -- [[ CLAW 2026-08-08 ]] 組裝介面要與關卡內長得一樣：
+                -- 臂裝在底座右齒輪、爪裝在臂末端圓盤（角度 0）。座標與 drawClaw 同一組。
+                -- 舊版是把臂與爪都畫在 (0,0)（而且用了永遠為 nil 的 dx/dy），所以全部疊在底座上。
+                local is_claw = (pdata.part_type == "CLAW") and pdata._arm_img
+                local claw_pos = nil
+                if is_claw and gotSize and iw and ih then
+                    local okA, aw, ah = pcall(function() return pdata._arm_img:getSize() end)
+                    local okJ, jw, jh = pcall(function() return pdata._upper_img:getSize() end)
+                    if okA and aw and ah and okJ and jw and jh then
+                        local mx  = pdata.arm_mount_x  or (iw / 2)
+                        local my  = pdata.arm_mount_y  or (ih / 2)
+                        local apx = pdata.arm_pivot_x  or 0
+                        local apy = pdata.arm_pivot_y  or (ah / 2)
+                        local arm_x, arm_y = mx - apx, my - apy
+                        local axle_x = mx + ((pdata.claw_pivot_x or aw) - apx)
+                        local axle_y = my + ((pdata.claw_pivot_y or (ah / 2)) - apy)
+                        -- 上爪鉸鏈在左下角、下爪在左上角 → 兩爪各自往上/往下長
+                        local up_x = axle_x - (pdata.upper_pivot_x or 0)
+                        local up_y = axle_y - (pdata.upper_pivot_y or jh)
+                        local lo_x = axle_x - (pdata.lower_pivot_x or 0)
+                        local lo_y = axle_y - (pdata.lower_pivot_y or 0)
+
+                        -- 以「底座左上角」為原點算出整組的外框
+                        local min_y = math.min(0, arm_y, up_y, lo_y)
+                        local max_x = math.max(iw, arm_x + aw, up_x + jw, lo_x + jw)
+                        local max_y = math.max(ih, arm_y + ah, up_y + jh, lo_y + jh)
+                        local top_extra = math.ceil(math.max(0, -min_y))
+
+                        claw_pos = {
+                            arm_x = arm_x, arm_y = arm_y,
+                            up_x = up_x, up_y = up_y, lo_x = lo_x, lo_y = lo_y,
+                            base_y = top_extra,          -- 底座在緩衝區內的 y
+                        }
+                        sw = math.max(sw, math.ceil(max_x))
+                        sh = math.max(sh, math.ceil(max_y) + top_extra)
+                        -- ★ 底座不再貼齊緩衝區底部（爪子往下也伸出去了），
+                        --   所以要告訴繪製端「這張圖要往下移多少才對得回格子」。
+                        --   繪製端的公式是 draw_y = py_top + (格高 − 圖高)，
+                        --   補上這個位移後 → 底座正好落在 py_top。
+                        pdata._scaled_offset_y = sh - GRID_CELL_SIZE - top_extra
+                    end
+                end
+
                 if sw > 0 and sh > 0 then
                     local ok, buf = pcall(function() return gfx.image.new(sw, sh) end)
                     if ok and buf then
                         gfx.pushContext(buf)
                         gfx.clear(gfx.kColorClear)
-                        if gotSize and iw and ih then
+                        if is_canon and gotSize and iw and ih then
+                            -- 底座貼緩衝區底部；砲管貼底後再上移 b_off（左緣對齊，與機體上一致）
+                            pcall(function() pdata._base_img:draw(0, sh - bh) end)
+                            pcall(function() pdata._img:draw(0, sh - ih + b_off) end)
+                        elseif claw_pos and gotSize and iw and ih then
+                            -- CLAW 底座左緣對齊、y 由 claw_pos.base_y 決定（上方要留給上爪）
+                            pcall(function() pdata._img:draw(0, claw_pos.base_y) end)
+                        elseif gotSize and iw and ih then
                             local dx = math.floor((sw - iw) / 2)
                             local dy = math.floor((sh - ih) / 2)
                             pcall(function() pdata._img:draw(math.max(0, dx), math.max(0, dy)) end)
                         else
                             pcall(function() pdata._img:draw(0, 0) end)
                         end
-                        -- 繪製 CLAW 的額外部件到 scaled image
-                        if pid == "CLAW" then
-                            if pdata._arm_img then pcall(function() pdata._arm_img:draw(math.max(0, dx or 0), math.max(0, dy or 0)) end) end
-                            if pdata._upper_img then pcall(function() pdata._upper_img:draw(math.max(0, dx or 0), math.max(0, dy or 0)) end) end
-                            if pdata._lower_img then pcall(function() pdata._lower_img:draw(math.max(0, dx or 0), math.max(0, dy or 0)) end) end
+                        -- CLAW：臂與爪依支點擺位（角度 0），與關卡內的 drawClaw 一致
+                        if claw_pos then
+                            local by = claw_pos.base_y   -- 其餘部件都相對底座左上角
+                            pcall(function() pdata._arm_img:draw(claw_pos.arm_x, by + claw_pos.arm_y) end)
+                            if pdata._upper_img then
+                                pcall(function() pdata._upper_img:draw(claw_pos.up_x, by + claw_pos.up_y) end)
+                            end
+                            if pdata._lower_img then
+                                pcall(function() pdata._lower_img:draw(claw_pos.lo_x, by + claw_pos.lo_y) end)
+                            end
                         end
                         gfx.popContext()
                         pdata._img_scaled = buf
@@ -484,7 +716,12 @@ function StateHQ.setup()
 end
 
 function StateHQ.update()
-    
+    -- [[ S10 ]] 教學覆蓋層作用中：吃掉輸入
+    if _G.Tutorial and _G.Tutorial.isActive and _G.Tutorial.isActive() then
+        _G.Tutorial.update()
+        return
+    end
+
     if is_unequip_mode then
         -- 解除裝備模式
         local eq = _G.GameState.mech_stats.equipped_parts or {}
@@ -569,16 +806,10 @@ function StateHQ.update()
                         end
                     end
                     
-                    -- 扣除 HP 和 Weight
-                    if part_data then
-                        if part_data.hp then
-                            _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) - part_data.hp
-                        end
-                        if part_data.weight then
-                            _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) - part_data.weight
-                        end
-                    end
-                    
+                    -- [[ CORE ]] 統一重算（含核心基礎 HP），不再各自扣除
+                    recalcMechStats()
+
+
                     print("Unequipped part: " .. item.id)
                     -- 播放選擇音效
                     if _G.SoundManager and _G.SoundManager.playSelect then
@@ -595,151 +826,7 @@ function StateHQ.update()
     end
     
     if hq_mode == "EQUIP" then
-        if is_placing_part then
-            -- 零件放置中：移動網格游標
-            if playdate.buttonJustPressed(playdate.kButtonLeft) then
-                cursor_col = math.max(1, cursor_col - 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-                cursor_col = math.min(GRID_COLS, cursor_col + 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonUp) then
-                cursor_row = math.min(GRID_ROWS, cursor_row + 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonDown) then
-                cursor_row = math.max(1, cursor_row - 1)
-                -- 播放游標移動音效
-                if _G.SoundManager and _G.SoundManager.playCursorMove then
-                    _G.SoundManager.playCursorMove()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                -- 取消放置，返回零件清單
-                is_placing_part = false
-                if _G.SoundManager and _G.SoundManager.playCancel then
-                    _G.SoundManager.playCancel()
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 嘗試放置
-                if selected_category then
-                    local parts_list = _G.GameState.parts_by_category[selected_category]
-                    local part_id = parts_list[selected_part_index]
-                    local part_data = _G.PartsData and _G.PartsData[part_id]
-                    local can_fit, reason = checkIfFits(part_data, cursor_col, cursor_row)
-                    
-                    if can_fit then
-                        local w = part_data.slot_x or 1
-                        local h = part_data.slot_y or 1
-                        for r = cursor_row, cursor_row + h - 1 do
-                            for c = cursor_col, cursor_col + w - 1 do
-                                GRID_MAP[r][c] = part_id
-                            end
-                        end
-                        table.insert(_G.GameState.mech_stats.equipped_parts, { id = part_id, col = cursor_col, row = cursor_row, w = w, h = h })
-                        if part_data.hp then
-                            _G.GameState.mech_stats.total_hp = (_G.GameState.mech_stats.total_hp or 0) + part_data.hp
-                        end
-                        if part_data.weight then
-                            _G.GameState.mech_stats.total_weight = (_G.GameState.mech_stats.total_weight or 0) + part_data.weight
-                        end
-                        
-                        -- 自動儲存機甲配置
-                        if _G.SaveManager and _G.SaveManager.saveCurrent then
-                            _G.SaveManager.saveCurrent()
-                            print("LOG: Mech configuration auto-saved.")
-                        end
-                        -- 播放選擇音效
-                        if _G.SoundManager and _G.SoundManager.playSelect then
-                            _G.SoundManager.playSelect()
-                        end
-                        
-                        is_placing_part = false
-                        
-                        -- 檢查該分類（TOP/BOTTOM）是否已滿，如果滿了就返回分類選擇
-                        local eq = _G.GameState.mech_stats.equipped_parts or {}
-                        local has_top_part = false
-                        local has_bottom_part = false
-                        
-                        for _, item in ipairs(eq) do
-                            for r = item.row, item.row + (item.h or 1) - 1 do
-                                if r == 2 then has_top_part = true end
-                                if r == 1 then has_bottom_part = true end
-                            end
-                        end
-                        
-                        -- 如果當前分類是 TOP 且已有上半部零件，或是 BOTTOM 且已有下半部零件，則返回分類選擇
-                        if (selected_category == "TOP" and has_top_part) or (selected_category == "BOTTOM" and has_bottom_part) then
-                            selected_category = nil
-                            selected_part_index = 1
-                        else
-                            -- 否則，自動選取下一個未裝備的零件
-                            local parts_list = _G.GameState.parts_by_category[selected_category]
-                            local parts_count = parts_list and #parts_list or 0
-                            local found_next = false
-                            
-                            -- 從當前位置的下一個開始尋找未裝備的零件
-                            for i = selected_part_index + 1, parts_count do
-                                local check_part_id = parts_list[i]
-                                local is_equipped = false
-                                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                                for _, item in ipairs(eq) do
-                                    if item.id == check_part_id then
-                                        is_equipped = true
-                                        break
-                                    end
-                                end
-                                if not is_equipped then
-                                    selected_part_index = i
-                                    found_next = true
-                                    break
-                                end
-                            end
-                            
-                            -- 如果後面沒有未裝備的零件，從頭開始找
-                            if not found_next then
-                                for i = 1, selected_part_index - 1 do
-                                    local check_part_id = parts_list[i]
-                                    local is_equipped = false
-                                    local eq = _G.GameState.mech_stats.equipped_parts or {}
-                                    for _, item in ipairs(eq) do
-                                        if item.id == check_part_id then
-                                            is_equipped = true
-                                            break
-                                        end
-                                    end
-                                    if not is_equipped then
-                                        selected_part_index = i
-                                        found_next = true
-                                        break
-                                    end
-                                end
-                            end
-                            
-                            -- [[ P5 ]] 如果所有零件都已裝備，游標跳到 START
-                            if not found_next then
-                                cursor_on_start = true
-                                last_part_index = selected_part_index
-                            end
-                        end
-                    else
-                        -- [[ P5 ]] 放置失敗不再紅閃：不可放的格子已在放置模式中以 X 靜態標示
-                        if _G.SoundManager and _G.SoundManager.playCancel then
-                            _G.SoundManager.playCancel()
-                        end
-                    end
-                end
-            elseif playdate.buttonJustPressed(playdate.kButtonB) then
-                is_placing_part = false
-            end
-        elseif cursor_on_start then
+        if cursor_on_start then
             -- [[ P5 ]] 游標在右下角固定 START 鈕：A 直接開始任務（READY 彈窗已移除），
             -- 左鍵/B 回主選單
             if playdate.buttonJustPressed(playdate.kButtonA) then
@@ -767,6 +854,19 @@ function StateHQ.update()
                     _G.SoundManager.playCursorMove()
                 end
             end
+        elseif cursor_on_shop then
+            -- [[ G2b ]] 游標在左下角 SHOP 鈕：A 進入商店，右鍵/B 回主選單
+            if playdate.buttonJustPressed(playdate.kButtonA) then
+                if _G.SoundManager and _G.SoundManager.playSelect then
+                    _G.SoundManager.playSelect()
+                end
+                setState(_G.StateShop)
+            elseif playdate.buttonJustPressed(playdate.kButtonRight) or playdate.buttonJustPressed(playdate.kButtonB) then
+                cursor_on_shop = false
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
+            end
         elseif not selected_category then
             -- [[ P5 ]] 主選單層：上下移動、A 進入、右鍵跳 START、B 回任務選擇
             -- （SHOP 原型隱藏；拆卸改為明示選項 REMOVE PART）
@@ -788,17 +888,30 @@ function StateHQ.update()
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
+            elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
+                -- [[ G2b ]] 左鍵跳至左下角 SHOP 鈕
+                cursor_on_shop = true
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
                 -- 播放選擇音效
                 if _G.SoundManager and _G.SoundManager.playSelect then
                     _G.SoundManager.playSelect()
                 end
-                if main_menu_index == 1 then
-                    selected_category = "TOP"
+                if main_menu_index == 1 or main_menu_index == 2 then
+                    selected_category = (main_menu_index == 1) and "TOP" or "BOTTOM"
                     selected_part_index = 1
-                elseif main_menu_index == 2 then
-                    selected_category = "BOTTOM"
-                    selected_part_index = 1
+                    -- [[ G2 ]] 進入清單時，安裝位置預設為第一個可放的格（之後用左右鍵調整）
+                    local plist = _G.GameState.parts_by_category[selected_category]
+                    local pdata0 = plist and plist[1] and _G.PartsData and _G.PartsData[plist[1]]
+                    if pdata0 then
+                        local c0 = findFirstEmptyCell(pdata0)
+                        cursor_col = c0 or 1
+                        cursor_row = rowForPart(pdata0)
+                    else
+                        cursor_col, cursor_row = 1, 1
+                    end
                 else
                     -- REMOVE PART：進入拆卸模式
                     is_unequip_mode = true
@@ -816,7 +929,12 @@ function StateHQ.update()
             -- 已選分類，選擇零件或移動到 READY
             local parts_list = _G.GameState.parts_by_category[selected_category]
             local parts_count = #parts_list
-            
+            -- [[ G2 ]] 依目前零件寬度夾住安裝欄（切換到不同寬度的零件時同步）
+            do
+                local pd_cur = _G.PartsData and _G.PartsData[parts_list[selected_part_index]]
+                cursor_col = math.max(1, math.min(cursor_col, maxOriginCol(pd_cur)))
+            end
+
             if playdate.buttonJustPressed(playdate.kButtonUp) then
                 -- 向上移動，跳過已安裝的零件
                 local new_index = selected_part_index - 1
@@ -859,54 +977,72 @@ function StateHQ.update()
                     end
                     new_index = new_index + 1
                 end
-                -- [[ P5 ]] 清單底部再往下：游標跳到 START
-                if new_index > parts_count then
-                    cursor_on_start = true
-                    last_part_index = selected_part_index
-                end
                 -- 播放游標移動音效
+                if _G.SoundManager and _G.SoundManager.playCursorMove then
+                    _G.SoundManager.playCursorMove()
+                end
+            elseif playdate.buttonJustPressed(playdate.kButtonLeft) then
+                -- [[ G2 ]] 左右鍵＝選擇安裝位置（欄），夾在合法原點範圍（寬零件不可超出）
+                local pd = _G.PartsData and _G.PartsData[parts_list[selected_part_index]]
+                cursor_col = math.max(1, cursor_col - 1)
+                cursor_col = math.min(cursor_col, maxOriginCol(pd))
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonRight) then
-                -- [[ P5 ]] 右鍵跳到 START（拆卸入口移至主選單 REMOVE PART）
-                cursor_on_start = true
-                -- 播放游標移動音效
+                local pd = _G.PartsData and _G.PartsData[parts_list[selected_part_index]]
+                cursor_col = math.min(maxOriginCol(pd), cursor_col + 1)
                 if _G.SoundManager and _G.SoundManager.playCursorMove then
                     _G.SoundManager.playCursorMove()
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonA) then
-                -- 選中零件，檢查是否已安裝
-                local parts_list = _G.GameState.parts_by_category[selected_category]
-                local part_id = parts_list[selected_part_index]
-                
-                -- 檢查是否已安裝
+                -- [[ G2 ]] A＝直接安裝在目前選定的位置（放置模式已合併掉）
+                local parts_list2 = _G.GameState.parts_by_category[selected_category]
+                local part_id = parts_list2 and parts_list2[selected_part_index]
+                local part_data = part_id and _G.PartsData and _G.PartsData[part_id]
+
+                -- 已安裝的零件不能再選
                 local is_equipped = false
-                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                for _, item in ipairs(eq) do
-                    if item.id == part_id then
-                        is_equipped = true
-                        break
-                    end
+                for _, item in ipairs(_G.GameState.mech_stats.equipped_parts or {}) do
+                    if item.id == part_id then is_equipped = true break end
                 end
-                
-                -- 如果已安裝，不做任何事（無法選取）
-                if is_equipped then
-                    print("Part already equipped: " .. part_id)
-                    return
-                end
-                
-                local part_data = _G.PartsData and _G.PartsData[part_id]
-                
-                if part_data then
-                    -- 找到第一個空格子
-                    local empty_col, empty_row = findFirstEmptyCell(part_data)
-                    cursor_col = empty_col
-                    cursor_row = empty_row
-                    is_placing_part = true
-                    -- 播放選擇音效
-                    if _G.SoundManager and _G.SoundManager.playSelect then
-                        _G.SoundManager.playSelect()
+
+                if part_data and not is_equipped then
+                    cursor_row = rowForPart(part_data)
+                    local can_fit = checkIfFits(part_data, cursor_col, cursor_row)
+                    -- [[ CORE ]] GDD §8.05:超過核心負重上限 → 擋在安裝階段（不做「可裝但變慢」）
+                    local within_weight, after_w, cap_w = weightAfterInstall(part_data)
+                    if can_fit and not within_weight then
+                        overweight_flash = 24   -- 顯示 OVERWEIGHT 提示的幀數
+                        print(string.format("LOG: install blocked, weight %d > cap %d (%s)",
+                                            after_w, cap_w, tostring(part_id)))
+                        if _G.SoundManager and _G.SoundManager.playCancel then
+                            _G.SoundManager.playCancel()
+                        end
+                    elseif can_fit then
+                        installPart(part_id, part_data, cursor_col, cursor_row)
+                        if _G.SoundManager and _G.SoundManager.playSelect then
+                            _G.SoundManager.playSelect()
+                        end
+                        -- 安裝後：該排已滿就回主選單，否則自動選下一個未裝備零件
+                        local has_top, has_bottom = false, false
+                        for _, item in ipairs(_G.GameState.mech_stats.equipped_parts or {}) do
+                            for r = item.row, item.row + (item.h or 1) - 1 do
+                                if r == 2 then has_top = true end
+                                if r == 1 then has_bottom = true end
+                            end
+                        end
+                        if (selected_category == "TOP" and has_top) or (selected_category == "BOTTOM" and has_bottom) then
+                            selected_category = nil
+                            selected_part_index = 1
+                        else
+                            selected_part_index = nextUnequippedIndex(parts_list2, selected_part_index)
+                        end
+                    else
+                        -- 不可放（該格已有零件／排限制／槍口淨空）：X 標示已事前顯示
+                        if _G.SoundManager and _G.SoundManager.playCancel then
+                            _G.SoundManager.playCancel()
+                        end
                     end
                 end
             elseif playdate.buttonJustPressed(playdate.kButtonB) then
@@ -925,14 +1061,29 @@ end
 
 function StateHQ.draw()
     
-    gfx.clear(gfx.kColorWhite)
+    -- [[ G2 ]] 底圖：有 hq_bg 就鋪滿全螢幕，否則退回白底
+    if hq_bg_img then
+        pcall(function() hq_bg_img:draw(0, 0) end)
+    else
+        gfx.clear(gfx.kColorWhite)
+    end
     gfx.setColor(gfx.kColorBlack)
-    gfx.setFont(font) 
+    gfx.setFont(font)
     -- 使用時間為基準的閃爍，避免某些情況下 tick 未更新導致不閃爍
     local blink_on = (math.floor(playdate.getCurrentTimeMilliseconds() / 250) % 2) == 0
-    
+
+    -- [[ G2 ]] 不再畫白底框：DATA / PANEL / MISSION 的框線由底圖 hq_bg.png 提供
+
+    -- [[ G2 機甲 2 倍放大 ]] 機甲（格線／零件／爪臂／游標）先以原生像素畫進離屏
+    -- 畫布，本區段結束後再 drawScaled 置中放大。期間座標皆為畫布內座標。
+    local mech_canvas = gfx.image.new(MECH_CANVAS_W, MECH_CANVAS_H)
+    gfx.pushContext(mech_canvas)
+    gfx.clear(gfx.kColorClear)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.setFont(font)
+
     -- 1. 繪製組裝網格背景
-    
+
     -- 2. 繪製機甲網格邊框 (作為機甲本體的佔位符)
     local mech_image_x = GRID_START_X
     local mech_image_y = GRID_START_Y
@@ -941,7 +1092,9 @@ function StateHQ.draw()
     
     gfx.drawRect(mech_image_x, mech_image_y, mech_width, mech_height)
 --    gfx.drawText("MECH ASSEMBLY GRID", mech_image_x + 5, mech_image_y + 5)
-    
+
+    -- [[ CORE ]] 核心的繪製在下方「繪製格子格線」之後（要蓋過格線），見該處。
+
     -- Grid and parts rendering handled below (draw grid lines, then draw each equipped part once)
     
     -- 3. 繪製零件預覽 (選中零件後，即使沒進入放置模式也顯示預覽；解除模式時不顯示)
@@ -951,84 +1104,46 @@ function StateHQ.draw()
         local pdata = (_G.PartsData and _G.PartsData[part_id]) or nil
         
         if pdata then
-            local preview_x, preview_y
-            
-            if is_placing_part then
-                -- 放置模式：預覽在游標位置
-                preview_x = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-                preview_y = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE
-            else
-                -- 非放置模式：預覽顯示在組裝格上方（置中）
-                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
-                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
-                local grid_width = GRID_COLS * GRID_CELL_SIZE
-                preview_x = GRID_START_X + (grid_width - sw) / 2
-                preview_y = GRID_START_Y - sh - 10  -- 組裝格上方，留40像素間距
-            end
-            
-            -- 繪製預覽圖片
-            if pdata._img_scaled then
-                local sw = (pdata.slot_x or 1) * GRID_CELL_SIZE
-                local sh = (pdata.slot_y or 1) * GRID_CELL_SIZE
-                local draw_y = preview_y + (GRID_CELL_SIZE - sh)
-                pcall(function() pdata._img_scaled:draw(preview_x, draw_y) end)
-                -- CLAW 特殊處理：繪製額外部件
-                if part_id == "CLAW" then
-                    if pdata._arm_img then pcall(function() pdata._arm_img:draw(preview_x, draw_y) end) end
-                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(preview_x, draw_y) end) end
-                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(preview_x, draw_y) end) end
-                end
-                -- CANON 特殊處理：繪製底座
-                if part_id == "CANON1" or part_id == "CANON2" then
-                    if pdata._base_img then
-                        pcall(function() pdata._base_img:draw(preview_x, draw_y) end)
+            -- [[ G2b ]] 預覽畫進底圖「左側零件框」（螢幕座標，量自 hq_bg.png）：
+            -- 以「圖片中心點對齊該框中心點」繪製，不縮放、不裁切、不隨零件寬度位移。
+            -- 本區在機甲離屏畫布內作畫（稍後整張 drawScaled 貼上底圖），故需把螢幕框中心
+            -- 反算成畫布座標：screen = draw + canvas*scale，draw = mech_c - grid_c_local*scale。
+            local PREVIEW_BOX = HQ_LAYOUT.preview_box  -- 左框（螢幕像素，單一來源）
+            if pdata._img then
+                local scale = HQ_LAYOUT.mech_scale
+                local grid_cx_local = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE) / 2
+                local grid_cy_local = GRID_START_Y + (GRID_ROWS * GRID_CELL_SIZE) / 2
+                local box_scr_cx = PREVIEW_BOX.x + PREVIEW_BOX.w / 2
+                local box_scr_cy = PREVIEW_BOX.y + PREVIEW_BOX.h / 2
+                -- 框中心對應的畫布座標
+                local cu = (box_scr_cx - HQ_LAYOUT.mech_cx) / scale + grid_cx_local
+                local cv = (box_scr_cy - HQ_LAYOUT.mech_cy) / scale + grid_cy_local
+                if pdata.part_type == "CANON" and pdata._base_img then
+                    -- [[ 修正 ]] CANON 依機體上的形狀：砲座與砲管「底部＋左緣」對齊同一角
+                    -- （＝機體 rest pose，砲管由左緣向右伸出），整個形狀的中心置中於框。
+                    local okb, bw, bh = pcall(function() return pdata._img:getSize() end)       -- 砲管
+                    local okc, cbw, cbh = pcall(function() return pdata._base_img:getSize() end) -- 砲座
+                    bw = (okb and bw) or 0; bh = (okb and bh) or 0
+                    cbw = (okc and cbw) or 0; cbh = (okc and cbh) or 0
+                    local uw = math.max(bw, cbw)
+                    local uh = math.max(bh, cbh)
+                    local ox = math.floor(cu - uw / 2)
+                    local oy = math.floor(cv - uh / 2)
+                    local b_off = pdata.barrel_offset_y or 0
+                    pcall(function() pdata._base_img:draw(ox, oy + uh - cbh) end)          -- 砲座在下
+                    pcall(function() pdata._img:draw(ox, oy + uh - bh + b_off) end)        -- 砲管疊上並上移
+                else
+                    -- 一般零件：主圖中心對齊框中心
+                    local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
+                    local ix = ok and iw and math.floor(cu - iw / 2) or math.floor(cu)
+                    local iy = ok and ih and math.floor(cv - ih / 2) or math.floor(cv)
+                    pcall(function() pdata._img:draw(ix, iy) end)
+                    -- CLAW 疊件：與主圖同錨點（維持設計疊合關係）
+                    if part_id == "CLAW" then
+                        if pdata._arm_img   then pcall(function() pdata._arm_img:draw(ix, iy) end) end
+                        if pdata._upper_img then pcall(function() pdata._upper_img:draw(ix, iy) end) end
+                        if pdata._lower_img then pcall(function() pdata._lower_img:draw(ix, iy) end) end
                     end
-                end
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawRect(preview_x, draw_y, sw, sh)
-                -- 在選擇時繪製閃爍邊框
-                if blink_on then
-                    gfx.setLineWidth(3)
-                    gfx.drawRect(preview_x - 2, draw_y - 2, sw + 4, sh + 4)
-                    gfx.setLineWidth(1)
-                end
-            elseif pdata._img then
-                local iw, ih
-                local ok, a, b = pcall(function() return pdata._img:getSize() end)
-                if ok then iw, ih = a, b end
-                local draw_x = preview_x
-                local draw_y = preview_y
-                if iw and ih then
-                    draw_x = preview_x + math.floor((GRID_CELL_SIZE - iw) / 2)
-                    draw_y = preview_y + math.floor((GRID_CELL_SIZE - ih) / 2)
-                end
-                pcall(function() pdata._img:draw(draw_x, draw_y) end)
-                -- CLAW 特殊處理：繪製額外部件
-                if part_id == "CLAW" then
-                    if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
-                    if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
-                    if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
-                end
-                -- CANON 特殊處理：繪製底座（在砲管後繪製，這樣底座會顯示在上面）
-                if part_id == "CANON1" or part_id == "CANON2" then
-                    if pdata._base_img then
-                        local ok_base, base_width, base_height = pcall(function() return pdata._base_img:getSize() end)
-                        if ok_base and base_width and base_height then
-                            local base_draw_x = preview_x + math.floor((GRID_CELL_SIZE - base_width) / 2)
-                            local base_draw_y = preview_y + math.floor((GRID_CELL_SIZE - base_height) / 2)
-                            pcall(function() pdata._base_img:draw(base_draw_x, base_draw_y) end)
-                        else
-                            pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
-                        end
-                    end
-                end
-                gfx.setColor(gfx.kColorBlack)
-                gfx.drawRect(preview_x, preview_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
-                -- 在選擇時繪製閃爍邊框
-                if blink_on then
-                    gfx.setLineWidth(3)
-                    gfx.drawRect(preview_x - 2, preview_y - 2, GRID_CELL_SIZE + 4, GRID_CELL_SIZE + 4)
-                    gfx.setLineWidth(1)
                 end
             end
         end
@@ -1062,16 +1177,31 @@ function StateHQ.draw()
         gfx.setLineWidth(1)
     end
     
-    -- [[ P5 ]] 放置模式：不可作為放置位置的格子以 X 靜態標示（取代舊紅閃）。
-    -- 排限制 / 已佔用 / 槍口淨空全部走同一個 checkIfFits 判定，事前可見。
-    if is_placing_part and selected_category and selected_part_index then
+    -- [[ G2 ]] 標示「不可放置」的格子（圖：images/dither.png，2026-08-06 由 X.png 改為 dither）。
+    -- 這是**唯一**的不可放置標示——舊的「整排鋪 dither」預覽已於同日移除，避免兩層疊在一起。
+    -- 規則（修正舊的 per-origin 誤判）：
+    --   1. 不屬於此零件安裝排的整排 → 標示（例：CLAW/CANON 是上排零件，下排整排標）
+    --   2. 安裝排上、在合法原點範圍內、但該欄放不下（已佔用／槍口淨空）→ 標示
+    --   3. 安裝排上、超出原點範圍的欄（會被寬零件覆蓋，非可選原點）→ 不標示
+    -- 這樣就不會出現「上排 col3 因 2 格寬超界而標記、卻仍能安裝覆蓋該格」的矛盾。
+    if selected_category and selected_part_index and not is_unequip_mode then
         local parts_list = _G.GameState.parts_by_category[selected_category]
         local part_id = parts_list and parts_list[selected_part_index]
         local pdata = _G.PartsData and _G.PartsData[part_id]
         if pdata then
+            local vrow = rowForPart(pdata)
+            local max_origin = maxOriginCol(pdata)
             for r = 1, GRID_ROWS do
                 for c = 1, GRID_COLS do
-                    if not checkIfFits(pdata, c, r) then
+                    local blocked
+                    if r ~= vrow then
+                        blocked = true                       -- 規則 1
+                    elseif c <= max_origin then
+                        blocked = not checkIfFits(pdata, c, r) -- 規則 2
+                    else
+                        blocked = false                      -- 規則 3
+                    end
+                    if blocked then
                         local cx = GRID_START_X + (c - 1) * GRID_CELL_SIZE
                         local cy = GRID_START_Y + (GRID_ROWS - r) * GRID_CELL_SIZE
                         if x_marker_img then
@@ -1085,64 +1215,11 @@ function StateHQ.draw()
         end
     end
     
-    -- 4. 繪製零件清單 (左側) - 分類顯示
-    gfx.drawText("PARTS:", 5, 20)
-    local list_y = 50
-    local line_height = 15
-    
-    if not selected_category and not is_unequip_mode then
-        -- [[ P5 ]] 主選單：TOP PARTS / BOTTOM PARTS / REMOVE PART（SHOP 原型隱藏）
-        for i = 1, #MAIN_MENU do
-            local text = MAIN_MENU[i]
-            if i == main_menu_index and not cursor_on_start then
-                if blink_on then
-                    text = "> " .. text .. " <"
-                else
-                    text = "  " .. text .. "  "
-                end
-            end
-            gfx.drawText(text, 10, list_y + (i - 1) * line_height)
-        end
-    elseif selected_category then
-        -- 顯示選中分類的零件
-            gfx.drawText(selected_category .. " PARTS:", 10, list_y - 15)
-            local parts_list = _G.GameState.parts_by_category[selected_category]
-            for i, part_id in ipairs(parts_list) do
-                -- 檢查是否已安裝
-                local is_equipped = false
-                local eq = _G.GameState.mech_stats.equipped_parts or {}
-                for _, item in ipairs(eq) do
-                    if item.id == part_id then
-                        is_equipped = true
-                        break
-                    end
-                end
-                
-                local text = part_id
-                if i == selected_part_index and not cursor_on_start and not is_unequip_mode then
-                    if blink_on then
-                        text = "> " .. text .. " <"
-                    else
-                        text = "  " .. text .. "  "
-                    end
-                end
-                
-                local text_x = 10
-                local text_y = list_y + (i - 1) * line_height
-                gfx.drawText(text, text_x, text_y)
-                
-                -- 如果已安裝，繪製刪除線
-                if is_equipped then
-                    local text_width = gfx.getTextSize(text)
-                    gfx.setColor(gfx.kColorBlack)
-                    gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
-                end
-            end
-    end
-    
-    -- 5. 繪製零件詳細資訊 / 狀態 (右側)
-    local detail_x = 250
-    local detail_y = 30
+    -- （4. 零件選單／清單已移至機甲離屏區之後，避免被畫進畫布）
+
+    -- 5. [[ G2 ]] DATA 框內容座標（HP / WEIGHT）；框線由底圖提供
+    local detail_x = HQ_LAYOUT.data.x + 6
+    local detail_y = HQ_LAYOUT.data.y + 8
     
     -- 繪製格子格線（上下兩排都顯示）
     for r = 1, GRID_ROWS do
@@ -1153,42 +1230,31 @@ function StateHQ.draw()
             gfx.drawRect(cell_x, cell_y, GRID_CELL_SIZE, GRID_CELL_SIZE)
         end
     end
-    
-    -- 預覽模式：在組裝格子上顯示 dither.png（解除模式時不顯示預覽）
-    if selected_category and selected_part_index and not cursor_on_start and not is_placing_part and not is_unequip_mode then
-        local parts_list = _G.GameState.parts_by_category[selected_category]
-        local part_id = parts_list and parts_list[selected_part_index]
-        local pdata = _G.PartsData and _G.PartsData[part_id]
-        
-        if pdata and mech_controller and mech_controller.ui_images and mech_controller.ui_images.dither then
-            local placement_row = pdata.placement_row
-            
-            -- 找出第一個空格子（預覽位置）
-            local check_col, check_row = findFirstEmptyCell(pdata)
-            
-            if check_col and check_row then
-                -- 根據 placement_row 決定 dither 顯示在哪一排
-                local dither_row = nil
-                if placement_row == "TOP" or (check_row == 2) then
-                    -- TOP 零件安裝在上排，在下排（row=1）顯示 dither
-                    dither_row = 1
-                elseif placement_row == "BOTTOM" or (check_row == 1) then
-                    -- BOTTOM 零件安裝在下排，在上排（row=2）顯示 dither
-                    dither_row = 2
-                end
-                
-                -- 繪製 dither.png 在對應的排上（整排 3 格）
-                if dither_row then
-                    for c = 1, GRID_COLS do
-                        local dither_x = GRID_START_X + (c - 1) * GRID_CELL_SIZE
-                        local dither_y = GRID_START_Y + (GRID_ROWS - dither_row) * GRID_CELL_SIZE
-                        pcall(function() mech_controller.ui_images.dither:draw(dither_x, dither_y) end)
-                    end
-                end
-            end
+
+    -- [[ CORE ]] 核心：組裝格正中央，**畫在格線之上、零件之下**（GDD §8.05）。
+    -- 位置與大小都由圖尺寸自動算，換圖不必改程式（目前 core-table-32-16.png＝32×16 ×3 幀）。
+    -- 核心不佔格、不影響 GRID_MAP，純顯示；裝滿零件時會被蓋掉大半（刻意——「拼裝把核心包起來」）。
+    if core_imagetable and _G.CoreData then
+        local core = _G.CoreData.current and _G.CoreData.current() or nil
+        local cimg = core_imagetable:getImage((core and core.frame) or 1)
+        if cimg then
+            local ok, cw, ch = pcall(function() return cimg:getSize() end)
+            cw = (ok and cw) or GRID_CELL_SIZE
+            ch = (ok and ch) or GRID_CELL_SIZE
+            local ccx = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE) / 2
+            local ccy = GRID_START_Y + (GRID_ROWS * GRID_CELL_SIZE) / 2
+            pcall(function() cimg:draw(math.floor(ccx - cw / 2), math.floor(ccy - ch / 2)) end)
         end
     end
-    
+
+
+    -- [[ 2026-08-06 移除 ]] 舊的「整排鋪 dither」預覽已刪除：
+    --   不可安裝的標示改用 dither 之後，它與上方「不可放置格」那段畫的是同一張圖，
+    --   兩者疊在一起。上方那段用 checkIfFits 逐格判定（涵蓋不同排、已佔用、槍口淨空），
+    --   舊的這段只依 placement_row 把「另一排」整排鋪滿，是它的子集且較不精確，故整段移除。
+    --   （行為差異：游標停在 START 鈕時，舊段不畫、新段仍會畫標示。）
+
+
     -- 繪製已放置的零件，每個零件只繪製一次，佔據 w x h 格
     -- 分兩階段繪製：先下排(row=1)再上排(row=2)
                 local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts or {}
@@ -1218,23 +1284,16 @@ function StateHQ.draw()
                                     -- 預設：圖片底部對齊格子底部
                                     draw_y = py_top + (GRID_CELL_SIZE - ih)
                                 end
+                                -- [[ CLAW ]] 合成圖上下都超出格子時，底座不在圖的最底部，
+                                -- 用預先算好的位移把底座對回格子（其他零件為 0，不受影響）
+                                draw_y = draw_y + (pdata._scaled_offset_y or 0)
                                 pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
                             else
                                 pcall(function() pdata._img_scaled:draw(px, py_top) end)
                             end
                             
-                            -- 繪製 CLAW 的額外部件
-                            if pid == "CLAW" then
-                                if pdata._arm_img then
-                                    pcall(function() pdata._arm_img:draw(px, py_top) end)
-                                end
-                                if pdata._upper_img then
-                                    pcall(function() pdata._upper_img:draw(px, py_top) end)
-                                end
-                                if pdata._lower_img then
-                                    pcall(function() pdata._lower_img:draw(px, py_top) end)
-                                end
-                            end
+                            -- [[ 2026-08-08 移除 ]] 這裡原本又畫一次臂與爪（畫在 px,py_top ＝底座左上角），
+                            -- 但 _img_scaled 合成圖**已經含臂與爪**了 → 畫面上會多出一組疊在底座左邊。
                         elseif pdata and pdata._img then
                             -- fallback: draw original with bottom-left anchoring (no scaling)
                             local iw, ih
@@ -1249,7 +1308,16 @@ function StateHQ.draw()
                                 -- 預設：圖片底部對齊格子底部
                                 draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
                             end
-                            pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                            -- [[ BUGFIX 2026-08-08 ]] CANON 底座必須先畫，砲管才會在上層。
+                            -- 舊版把底座畫在最後 → 32px 寬的底座把 40px 砲管蓋掉一大半
+                            -- （砲管早期是 64×8 細長條，露在外面所以看不出來；改成 40×16 後就明顯了）。
+                            if pdata.part_type == "CANON" and pdata._base_img then
+                                pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
+                            end
+                            -- barrel_offset_y：砲管上移，底座留在原位（與機體上的畫法一致）
+                            -- 這個欄位只有 CANON 系列會設，其他零件取到 0，不必判斷 part_type
+                            local body_y = draw_y + (pdata.barrel_offset_y or 0)
+                            pcall(function() pdata._img:draw(draw_x, body_y) end)
                             
                             -- 繪製 CLAW 的額外部件
                             if pid == "CLAW" then
@@ -1261,12 +1329,6 @@ function StateHQ.draw()
                                 end
                                 if pdata._lower_img then
                                     pcall(function() pdata._lower_img:draw(draw_x, draw_y) end)
-                                end
-                            end
-                            -- 繪製 CANON 的底座
-                            if pid == "CANON1" or pid == "CANON2" then
-                                if pdata._base_img then
-                                    pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
                                 end
                             end
                         else
@@ -1302,29 +1364,16 @@ function StateHQ.draw()
                                     -- 預設：圖片底部對齊格子底部
                                     draw_y = py_top + (GRID_CELL_SIZE - ih)
                                 end
+                                -- [[ CLAW ]] 合成圖上下都超出格子時，底座不在圖的最底部，
+                                -- 用預先算好的位移把底座對回格子（其他零件為 0，不受影響）
+                                draw_y = draw_y + (pdata._scaled_offset_y or 0)
                                 pcall(function() pdata._img_scaled:draw(draw_x, draw_y) end)
                             else
                                 pcall(function() pdata._img_scaled:draw(px, py_top) end)
                             end
                             
-                            -- 繪製 CLAW 的額外部件
-                            if pid == "CLAW" then
-                                if pdata._arm_img then
-                                    pcall(function() pdata._arm_img:draw(px, py_top) end)
-                                end
-                                if pdata._upper_img then
-                                    pcall(function() pdata._upper_img:draw(px, py_top) end)
-                                end
-                                if pdata._lower_img then
-                                    pcall(function() pdata._lower_img:draw(px, py_top) end)
-                                end
-                            end
-                            -- 繪製 CANON 的底座
-                            if pid == "CANON1" or pid == "CANON2" then
-                                if pdata._base_img then
-                                    pcall(function() pdata._base_img:draw(px, py_top) end)
-                                end
-                            end
+                            -- [[ 2026-08-08 移除 ]] 這裡原本又畫一次臂與爪（畫在 px,py_top ＝底座左上角），
+                            -- 但 _img_scaled 合成圖**已經含臂與爪**了 → 畫面上會多出一組疊在底座左邊。
                         elseif pdata and pdata._img then
                             -- fallback: draw original with bottom-left anchoring (no scaling)
                             local iw, ih
@@ -1339,18 +1388,21 @@ function StateHQ.draw()
                                 -- 預設：圖片底部對齊格子底部
                                 draw_y = py_top + (GRID_CELL_SIZE - (ih or GRID_CELL_SIZE))
                             end
-                            pcall(function() pdata._img:draw(draw_x, draw_y) end)
+                            -- [[ BUGFIX 2026-08-08 ]] CANON 底座必須先畫，砲管才會在上層。
+                            -- 舊版把底座畫在最後 → 32px 寬的底座把 40px 砲管蓋掉一大半
+                            -- （砲管早期是 64×8 細長條，露在外面所以看不出來；改成 40×16 後就明顯了）。
+                            if pdata.part_type == "CANON" and pdata._base_img then
+                                pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
+                            end
+                            -- barrel_offset_y：砲管上移，底座留在原位（與機體上的畫法一致）
+                            -- 這個欄位只有 CANON 系列會設，其他零件取到 0，不必判斷 part_type
+                            local body_y = draw_y + (pdata.barrel_offset_y or 0)
+                            pcall(function() pdata._img:draw(draw_x, body_y) end)
                             -- CLAW 特殊處理：繪製額外部件
                             if pid == "CLAW" then
                                 if pdata._arm_img then pcall(function() pdata._arm_img:draw(draw_x, draw_y) end) end
                                 if pdata._upper_img then pcall(function() pdata._upper_img:draw(draw_x, draw_y) end) end
                                 if pdata._lower_img then pcall(function() pdata._lower_img:draw(draw_x, draw_y) end) end
-                            end
-                            -- CANON 特殊處理：繪製底座
-                            if pid == "CANON1" or pid == "CANON2" then
-                                if pdata._base_img then
-                                    pcall(function() pdata._base_img:draw(draw_x, draw_y) end)
-                                end
                             end
                         else
                             -- no image: draw text label at the origin cell
@@ -1360,18 +1412,19 @@ function StateHQ.draw()
                     end
                 end
 
-    -- 繪製置中的粗框（放置模式／拆卸模式），在零件圖上層
+    -- 繪製置中的粗框（選位置／拆卸模式），在零件圖上層
     if blink_on then
-        -- 放置模式：在組裝格中繪製粗邊框
-        if hq_mode == "EQUIP" and is_placing_part and selected_category and selected_part_index then
+        -- [[ G2 ]] 瀏覽清單時即顯示「目前選定安裝位置」的粗框
+        if hq_mode == "EQUIP" and selected_category and selected_part_index and not is_unequip_mode then
             local parts_list = _G.GameState.parts_by_category[selected_category]
             local part_id = parts_list and parts_list[selected_part_index]
             local pdata = _G.PartsData and _G.PartsData[part_id]
             if pdata then
                 local w = pdata.slot_x or 1
                 local h = pdata.slot_y or 1
+                local prow = rowForPart(pdata)
                 local fx = GRID_START_X + (cursor_col - 1) * GRID_CELL_SIZE
-                local fy = GRID_START_Y + (GRID_ROWS - cursor_row) * GRID_CELL_SIZE - (h - 1) * GRID_CELL_SIZE
+                local fy = GRID_START_Y + (GRID_ROWS - prow) * GRID_CELL_SIZE - (h - 1) * GRID_CELL_SIZE
                 local fw = w * GRID_CELL_SIZE
                 local fh = h * GRID_CELL_SIZE
                 gfx.setColor(gfx.kColorBlack)
@@ -1403,70 +1456,173 @@ function StateHQ.draw()
         end
     end
     
-    -- 6. 繪製機甲狀態
-    gfx.drawText("MECH STATS:", detail_x, detail_y)
+    -- [[ G2 機甲 2 倍放大 ]] 關閉離屏、放大置中畫到畫面。
+    -- 定位：讓「組裝格中心」（畫布內座標）放大後落在 HQ_LAYOUT.mech_cx/cy。
+    gfx.popContext()
+    do
+        local scale = HQ_LAYOUT.mech_scale or 2
+        local grid_cx_local = GRID_START_X + (GRID_COLS * GRID_CELL_SIZE) / 2
+        local grid_cy_local = GRID_START_Y + (GRID_ROWS * GRID_CELL_SIZE) / 2
+        local draw_x = HQ_LAYOUT.mech_cx - grid_cx_local * scale
+        local draw_y = HQ_LAYOUT.mech_cy - grid_cy_local * scale
+        pcall(function() mech_canvas:drawScaled(draw_x, draw_y, scale) end)
+    end
+
+    -- 4. [[ G2 ]] 零件選單 / 零件清單（底部中央；移至機甲離屏區之後繪製）
+    local list_x = HQ_LAYOUT.menu_x
+    local list_y = HQ_LAYOUT.menu_y
+    local line_height = 15
+    if not selected_category and not is_unequip_mode then
+        -- 主選單：反白選取
+        for i = 1, #MAIN_MENU do
+            local selected = (i == main_menu_index and not cursor_on_start and not cursor_on_shop)
+            drawSelectableText(MAIN_MENU[i], list_x, list_y + (i - 1) * line_height, selected)
+        end
+    elseif selected_category then
+        -- [[ G2 ]] 捲動視窗：底中框只放得下 LIST_VISIBLE 筆，超過時隨游標捲動，
+        -- 右側以 ▲▼ 指示上下還有項目。（分類標題已移除——反白選取已足夠指示）
+        local parts_list = _G.GameState.parts_by_category[selected_category] or {}
+        local total = #parts_list
+        local first = 1
+        if total > LIST_VISIBLE then
+            first = selected_part_index - math.floor(LIST_VISIBLE / 2)
+            first = math.max(1, math.min(first, total - LIST_VISIBLE + 1))
+        end
+
+        for slot = 1, math.min(LIST_VISIBLE, total) do
+            local i = first + slot - 1
+            local part_id = parts_list[i]
+            local is_equipped = false
+            local eq3 = _G.GameState.mech_stats.equipped_parts or {}
+            for _, item in ipairs(eq3) do
+                if item.id == part_id then is_equipped = true break end
+            end
+            local selected = (i == selected_part_index and not cursor_on_start and not is_unequip_mode)
+            local text_x = list_x
+            local text_y = list_y + (slot - 1) * line_height
+            drawSelectableText(part_id, text_x, text_y, selected)
+            if is_equipped then
+                local text_width = gfx.getTextSize(part_id)
+                gfx.setColor(selected and gfx.kColorWhite or gfx.kColorBlack)
+                gfx.drawLine(text_x, text_y + 7, text_x + text_width, text_y + 7)
+                gfx.setColor(gfx.kColorBlack)
+            end
+        end
+
+        -- ▲▼ 捲動指示（畫在框右側內緣）
+        local arrow_x = HQ_LAYOUT.menu_x + 130
+        gfx.setColor(gfx.kColorBlack)
+        if first > 1 then
+            gfx.fillTriangle(arrow_x, list_y + 5, arrow_x + 8, list_y + 5, arrow_x + 4, list_y)
+        end
+        if first + LIST_VISIBLE - 1 < total then
+            local by = list_y + (LIST_VISIBLE - 1) * line_height + 8
+            gfx.fillTriangle(arrow_x, by, arrow_x + 8, by, arrow_x + 4, by + 5)
+        end
+    elseif is_unequip_mode then
+        -- [[ G2 ]] 移除模式：底中框顯示目前選中的零件與操作提示（原本是空的）
+        local _, item = findEquippedPartAt(unequip_selected_col, unequip_selected_row)
+        gfx.setColor(gfx.kColorBlack)
+        if item then
+            gfx.drawText(item.id, list_x, list_y)
+            gfx.drawText("A:REMOVE", list_x, list_y + line_height)
+        else
+            gfx.drawText("(EMPTY)", list_x, list_y)
+        end
+        gfx.drawText("B:BACK", list_x, list_y + line_height * 2)
+    end
+
+    -- [[ 零件限制 ]] 缺必要零件的提示改畫在「零件預覽框」內（原本在 START 上方）。
+    -- 畫在框頂端的白底條上，避免蓋住框中央的零件預覽圖。
+    do
+        local missing = getMissingRequiredParts()
+        if missing then
+            local pb = HQ_LAYOUT.preview_box
+            local need_text = "NEED: " .. table.concat(missing, ",")
+            local ntw, nth = gfx.getTextSize(need_text)
+            local nx = pb.x + math.floor((pb.w - ntw) / 2)
+            local ny = pb.y + 3
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(nx - 3, ny - 2, ntw + 6, nth + 4)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawText(need_text, nx, ny)
+        end
+    end
+
+    -- 6. [[ G2 ]] 機甲狀態（畫在底圖的 DATA 框內）
     local stats = _G.GameState and _G.GameState.mech_stats or { total_hp = 0, total_weight = 0 }
-    gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y + 20)
-    gfx.drawText("Weight: " .. stats.total_weight, detail_x, detail_y + 40)
-    
-    -- [[ P5 ]] 7. 固定右下角 START 鈕（取代 READY/BACK 選項與 READY 彈窗）
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawText("HP: " .. stats.total_hp, detail_x, detail_y)
+    -- [[ CORE ]] 負重顯示成「目前/上限」，上限來自核心（GDD §8.05）
+    -- ★ 用 WT 不用 WEIGHT：DATA 框可用寬度只有 88px，
+    --   "WEIGHT: 34/34" 要 117px 會爆框；"WT: 34/34" 是 82px（最寬情況，CORE3 滿載）。
+    local cap = stats.weight_cap
+    local w_text = "WT: " .. tostring(stats.total_weight) .. (cap and ("/" .. cap) or "")
+    gfx.drawText(w_text, detail_x, detail_y + 16)
+
+    -- [[ CORE ]] 因超重被擋下時：WEIGHT 那行反白閃爍幾幀，讓玩家知道為什麼裝不上去
+    if overweight_flash > 0 then
+        overweight_flash = overweight_flash - 1
+        if (overweight_flash // 4) % 2 == 0 then
+            local tw, th = gfx.getTextSize(w_text)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(detail_x - 2, detail_y + 16 - 2, tw + 4, (th or 14) + 4)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText(w_text, detail_x, detail_y + 16)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        end
+    end
+
+
+    -- [[ P5/G2 ]] 7. START 正方形鈕（依 mockup；位置/邊長由 HQ_LAYOUT 控制）
     do
         local start_text = "START"
         local tw, th = gfx.getTextSize(start_text)
-        local pad_x, pad_y = 8, 4
-        local box_w = tw + pad_x * 2
-        local box_h = th + pad_y * 2
-        local box_x = SCREEN_WIDTH - box_w - 8
-        local box_y = GAME_HEIGHT - box_h - 22
+        local box_w = HQ_LAYOUT.start_size
+        local box_h = HQ_LAYOUT.start_size
+        local box_x = HQ_LAYOUT.start_x
+        local box_y = HQ_LAYOUT.start_y
+        local text_x = box_x + math.floor((box_w - tw) / 2)  -- 文字置中
+        local text_y = box_y + math.floor((box_h - th) / 2)
 
-        -- [[ 零件限制 ]] 缺必要零件：START 上方顯示 NEED 提示，按下會被擋
-        local missing = getMissingRequiredParts()
-        if missing then
-            local need_text = "NEED: " .. table.concat(missing, ",")
-            local ntw = gfx.getTextSize(need_text)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.drawText(need_text, SCREEN_WIDTH - ntw - 8, box_y - 16)
-        end
-
+        -- [[ G2 ]] 方框由底圖提供：選中＝整格反白（黑底白字），未選中＝只畫黑字
         if cursor_on_start then
-            -- 選中：黑底白字 + 閃爍粗框
             gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(box_x, box_y, box_w, box_h)
+            -- 左右外擴 4px 吃進底圖框線，避免反白時露出白邊
+            gfx.fillRect(box_x - 2, box_y, box_w + 4, box_h)
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-            gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
+            gfx.drawText(start_text, text_x, text_y)
             gfx.setImageDrawMode(gfx.kDrawModeCopy)
-            if blink_on then
-                gfx.setColor(gfx.kColorBlack)
-                gfx.setLineWidth(2)
-                gfx.drawRect(box_x - 3, box_y - 3, box_w + 6, box_h + 6)
-                gfx.setLineWidth(1)
-            end
         else
-            -- 未選中：白底黑字黑框
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(box_x, box_y, box_w, box_h)
             gfx.setColor(gfx.kColorBlack)
-            gfx.drawRect(box_x, box_y, box_w, box_h)
-            gfx.drawText(start_text, box_x + pad_x, box_y + pad_y)
+            gfx.drawText(start_text, text_x, text_y)
         end
     end
 
-    -- [[ P5 ]] 每層操作提示列（遊戲區底部一行，明示下一步）
+    -- [[ G2b ]] 7b. SHOP 正方形鈕（底圖左下方塊；選中＝整格反白）
     do
-        local hint
-        if is_unequip_mode then
-            hint = "A:REMOVE  B:BACK"
-        elseif is_placing_part then
-            hint = "A:PLACE  B:CANCEL"
-        elseif cursor_on_start then
-            hint = "A:START MISSION  <(B):BACK"
-        elseif selected_category then
-            hint = "A:PICK  B:BACK  >:START"
+        local shop_text = "SHOP"
+        local tw, th = gfx.getTextSize(shop_text)
+        local box_w = HQ_LAYOUT.shop_size
+        local box_h = HQ_LAYOUT.shop_size
+        local box_x = HQ_LAYOUT.shop_x
+        local box_y = HQ_LAYOUT.shop_y
+        local text_x = box_x + math.floor((box_w - tw) / 2)
+        local text_y = box_y + math.floor((box_h - th) / 2)
+        if cursor_on_shop then
+            gfx.setColor(gfx.kColorBlack)
+            -- 左右外擴 4px 吃進底圖框線，避免反白時露出白邊
+            gfx.fillRect(box_x - 2, box_y, box_w + 4, box_h)
+            gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+            gfx.drawText(shop_text, text_x, text_y)
+            gfx.setImageDrawMode(gfx.kDrawModeCopy)
         else
-            hint = "A:OK  B:MISSION LIST  >:START"
+            gfx.setColor(gfx.kColorBlack)
+            gfx.drawText(shop_text, text_x, text_y)
         end
-        gfx.drawText(hint, 5, GAME_HEIGHT - 16)
     end
+
+    -- [[ G2 ]] 操作提示列已移除（依使用者要求）
 
     -- 8. 繪製控制介面 UI（下半部）
     -- 繪製 3x2 控制格子
@@ -1556,28 +1712,71 @@ function StateHQ.draw()
 --       gfx.drawText("Select category", info_x, UI_START_Y)
 --    end
     
-    -- 9. 顯示關卡簡介（下半部右側）
+    -- 9. [[ G2 ]] 頂部任務資訊（框線由底圖提供，這裡只畫文字）
     local mission_id = (_G and _G.GameState and _G.GameState.current_mission) or "M001"
     if MissionData and MissionData[mission_id] then
         local mission = MissionData[mission_id]
-        local brief_x = UI_START_X + UI_GRID_COLS * UI_CELL_SIZE + 10
-        local brief_y = UI_START_Y 
-        
+        local mbox = HQ_LAYOUT.mission
+        -- [[ G2b ]] 上方黑色標籤：程式畫「寬度隨標題文字長度」的黑底＋白字。
+        -- （底圖左上原本的固定黑塊請移除，改由此處動態繪製以自動適應長度。）
+        local title = mission.name or "MISSION"
+        local ttw, tth = gfx.getTextSize(title)
+        local TAB_PAD_X = 8   -- 文字左右內距
+        local tab = { x = 4, y = 1, h = 18 }
+        tab.w = ttw + TAB_PAD_X * 2
         gfx.setColor(gfx.kColorBlack)
-        gfx.drawText("MISSION:", brief_x, brief_y)
-        gfx.drawText(mission.name or "Unknown", brief_x, brief_y + 12)
-
-        if mission.objective then
-            gfx.drawText("Objective:", brief_x, brief_y + 30)
-            gfx.drawText(mission.objective.description or "", brief_x, brief_y + 42)
-        end
-
-        -- [[ 零件限制 ]] 任務需求零件顯示在簡報右上（有宣告 required_parts 才顯示）
+        gfx.fillRect(tab.x, tab.y, tab.w, tab.h)
+        gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        gfx.drawText(title, tab.x + TAB_PAD_X, tab.y + 2 + math.floor((tab.h - tth) / 2))
+        gfx.setImageDrawMode(gfx.kDrawModeCopy)
+        -- [[ G2b ]] 說明框：說明文字（標題已移到黑色標籤）
+        -- [[ 2026-08-11 ]] 下一行加上**本關可獲得的資源**——出擊前就該看得到報酬，
+        -- 才有「這關值不值得帶這套裝備去打」的判斷依據（與結算畫面顯示的是同一組數字）。
+        gfx.setColor(gfx.kColorBlack)
+        local req_text = nil
         if mission.required_parts and #mission.required_parts > 0 then
-            local req_text = "REQ: " .. table.concat(mission.required_parts, ",")
-            gfx.drawText(req_text, brief_x + 160, brief_y)
+            req_text = "REQ: " .. table.concat(mission.required_parts, ",")
+        end
+        if mission.objective then
+            local desc = mission.objective.description or ""
+            local rs = mission.reward_steel or 0
+            local rc = mission.reward_copper or 0
+            local rr = mission.reward_rubber or 0
+            local reward_text = nil
+            if rs > 0 or rc > 0 or rr > 0 then
+                reward_text = string.format("REWARD  S:%d  C:%d  R:%d", rs, rc, rr)
+            end
+            local _, dth = gfx.getTextSize(desc)
+            dth = dth or 14
+            if reward_text then
+                -- 兩行一起垂直置中（行距 4px），不要各自置中
+                local gap = 4
+                local top = mbox.y + math.floor((mbox.h - (dth * 2 + gap)) / 2)
+                gfx.drawText(desc, mbox.x + 6, top)
+                local line2_y = top + dth + gap
+                gfx.drawText(reward_text, mbox.x + 6, line2_y)
+                -- ★ REQ 改畫在**第 2 行右側**（原本在第 1 行右側）。
+                --   說明文字最長 353px（"Deliver the stone to the target zone"），右緣到 365，
+                --   而 REQ 左緣在 301 —— 同一行會直接疊字（M002/M003/M005 三關就是這個組合）。
+                --   REWARD 只有 225px、右緣 237，放同一行才不會撞。
+                if req_text then
+                    local rtw = gfx.getTextSize(req_text)
+                    gfx.drawText(req_text, mbox.x + mbox.w - rtw - 6, line2_y)
+                    req_text = nil   -- 已畫，不要再走下面的單行後備
+                end
+            else
+                gfx.drawText(desc, mbox.x + 6, mbox.y + math.floor((mbox.h - dth) / 2))
+            end
+        end
+        -- [[ 零件限制 ]] 沒有 REWARD 那行時（理論上不會發生），REQ 退回原本的右上角
+        if req_text then
+            local rtw = gfx.getTextSize(req_text)
+            gfx.drawText(req_text, mbox.x + mbox.w - rtw - 6, mbox.y + 4)
         end
     end
+
+    -- [[ S10 ]] 教學覆蓋層（畫在最上層）
+    if _G.Tutorial and _G.Tutorial.draw then _G.Tutorial.draw() end
 end
 
 return StateHQ

@@ -14,6 +14,22 @@ local confirm_delete_mode = false  -- 是否顯示刪除確認對話框
 local confirm_choice = 1  -- 1 = OK, 2 = CANCEL
 local save_info = {}  -- 存檔資訊快取
 
+-- [[ 底圖 2026-08-11 ]] images/save_bg.png（400×240，暫用）
+-- ⚠️ 這張是**滿版細點陣場景圖**，不是 hq_bg 那種留白的框線底圖 —— 黑字直接疊上去會消失（HANDOFF §3-4）。
+-- 所以本畫面的所有文字都先鋪白底（白卡片 + 選中反黑），版面本身沒有動。
+-- 之後畫專屬底圖時請照 ArtAssets §6.5 A 的原則「框內留白」，那時就能把這些白卡片拿掉。
+local save_bg_img = nil
+
+-- 文字白底（同 state_mission.lua 的 drawTextOnWhite，這裡是本檔的局部複本）
+local function drawTextOnWhite(text, x, y, pad)
+    pad = pad or 3
+    local tw, th = gfx.getTextSize(text)
+    gfx.setColor(gfx.kColorWhite)
+    gfx.fillRect(x - pad, y - pad, tw + pad * 2, (th or 14) + pad * 2)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawText(text, x, y)
+end
+
 -- ==========================================
 -- 初始化
 -- ==========================================
@@ -135,7 +151,12 @@ function StateSaveSelect.update()
                         SaveManager.createNewSave(selected_slot)
                         SaveManager.loadSave(selected_slot)
                     end
-                    setState(_G.StateMissionSelect)
+                    -- [[ S9 ]] 新遊戲：先播開場過場，再進任務選擇
+                    if _G.StateIntro then
+                        setState(_G.StateIntro)
+                    else
+                        setState(_G.StateMissionSelect)
+                    end
                 end
             end
         elseif playdate.buttonJustPressed(playdate.kButtonB) then
@@ -155,15 +176,24 @@ end
 -- 繪製
 -- ==========================================
 function StateSaveSelect.draw()
-    gfx.clear(gfx.kColorWhite)
+    -- [[ 底圖 ]] 有 save_bg 就鋪滿全螢幕，否則退回白底
+    if not save_bg_img then
+        save_bg_img = gfx.image.new("images/save_bg")
+        if not save_bg_img then print("WARNING: failed to load images/save_bg.png") end
+    end
+    if save_bg_img then
+        pcall(function() save_bg_img:draw(0, 0) end)
+    else
+        gfx.clear(gfx.kColorWhite)
+    end
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
-    
+
     -- 標題
     local title = "SELECT SAVE FILE"
     local title_width = gfx.getTextSize(title)
-    gfx.drawText(title, (400 - title_width) / 2, 20)
-    
+    drawTextOnWhite(title, (400 - title_width) / 2, 20)
+
     -- 繪製存檔槽
     for i = 1, SAVE_SLOTS do
         local y = 70 + (i - 1) * 40
@@ -179,15 +209,17 @@ function StateSaveSelect.draw()
             info = "Empty"
         end
         
-        -- 選中時黑底白字（與任務選擇風格一致）
+        -- 選中時黑底白字（與任務選擇風格一致）；未選中時**鋪白底**，
+        -- 否則黑字疊在 save_bg 的點陣上會看不見（HANDOFF §3-4）
+        local band_x, band_y, band_w, band_h = 40, y - 6, 320, 34
         if i == selected_slot and not selected_back then
-            local band_x = 40
-            local band_y = y - 6
-            local band_w = 320
-            local band_h = 34
             gfx.setColor(gfx.kColorBlack)
             gfx.fillRect(band_x, band_y, band_w, band_h)
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+        else
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(band_x, band_y, band_w, band_h)
+            gfx.setColor(gfx.kColorBlack)
         end
         gfx.drawText(text, 50, y)
         gfx.drawText(info, 180, y)
@@ -219,46 +251,68 @@ function StateSaveSelect.draw()
         gfx.setImageDrawMode(gfx.kDrawModeCopy)
         gfx.setColor(gfx.kColorBlack)
     else
-        gfx.drawText(back_text, 50, back_y)
+        drawTextOnWhite(back_text, 50, back_y)
     end
-    
+
     -- 提示文字
     if not confirm_delete_mode then
-        gfx.drawText("A: LOAD, B: DELETE", 10, 220)
+        drawTextOnWhite("A: LOAD, B: DELETE", 10, 220)
     end
     
     -- 刪除確認對話框
+    -- [[ 統一風格 ]] 版面/邊框/按鈕與商店的購買確認框一致（state_shop.lua 的 shop_confirm_mode）：
+    --   214×104 置中、3px 粗外框、選中項＝黑底白字（非閃爍）。
     if confirm_delete_mode then
-        -- 繪製半透明背景
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(50, 90, 300, 80)
+        local dw, dh = 214, 104
+        local dx = (400 - dw) // 2
+        local dy = (240 - dh) // 2
         gfx.setColor(gfx.kColorWhite)
-        gfx.fillRect(52, 92, 296, 76)
+        gfx.fillRect(dx, dy, dw, dh)
+        -- 3px 粗外框（同購買確認）
         gfx.setColor(gfx.kColorBlack)
-        
-        -- 對話框文字
-        local msg = "Delete this save?"
-        local msg_width = gfx.getTextSize(msg)
-        gfx.drawText(msg, (400 - msg_width) / 2, 100)
-        
-        -- 選項（閃爍）
-        local option1
-        local option2
-        if confirm_choice == 1 then
-            option1 = blink_on and "> OK <" or "  OK  "
-        else
-            option1 = "OK"
+        gfx.setLineWidth(3)
+        gfx.drawRect(dx + 1, dy + 1, dw - 2, dh - 2)
+        gfx.setLineWidth(1)
+
+        -- 標題
+        local q = "Delete this save?"
+        local qtw = gfx.getTextSize(q)
+        gfx.drawText(q, dx + (dw - qtw) // 2, dy + 12)
+
+        -- 中段：標明是哪一個存檔槽（對應購買確認框的資源列位置）
+        local slot_text = "SLOT " .. tostring(selected_slot)
+        local stw, sth = gfx.getTextSize(slot_text)
+        local scx = dx + (dw - stw) // 2
+        local scy = dy + 44
+        gfx.drawText(slot_text, scx, scy)
+        gfx.setLineWidth(1)
+        gfx.drawRect(scx - 3, scy - 2, stw + 6, (sth or 14) + 4)
+
+        -- OK / CANCEL（左右切換；選中＝黑底白字，同購買確認）
+        local opt_y = dy + 74
+        local function boxOf(text, ox)
+            local tw, th = gfx.getTextSize(text)
+            return ox - 8, opt_y - 3, tw + 16, (th or 14) + 6
         end
-        if confirm_choice == 2 then
-            option2 = blink_on and "> CANCEL <" or "  CANCEL  "
-        else
-            option2 = "CANCEL"
+        -- 兩顆按鈕整組置中（OK 與 CANCEL 寬度差很多，寫死座標會歪）
+        local ok_w = gfx.getTextSize("OK") + 16
+        local cancel_w = gfx.getTextSize("CANCEL") + 16
+        local gap = 24
+        local run = dx + (dw - (ok_w + gap + cancel_w)) // 2 + 8
+        for i, label in ipairs({ "OK", "CANCEL" }) do
+            local bx, by, bw, bh = boxOf(label, run)
+            if confirm_choice == i then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.fillRect(bx, by, bw, bh)
+                gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+                gfx.drawText(label, run, opt_y)
+                gfx.setImageDrawMode(gfx.kDrawModeCopy)
+            else
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawText(label, run, opt_y)
+            end
+            run = run + bw + gap
         end
-        
-        gfx.drawText(option1, 120, 130)
-        gfx.drawText(option2, 230, 130)
-        
-        gfx.drawText("Left/Right: Select  A: Confirm", 60, 155)
     end
 end
 

@@ -1,0 +1,214 @@
+{
+  "id": "M001",
+  "name": "1 RESCUE MISSION ",
+  "description": "1 RESCUE MISSION ",
+  "prerequisite": 0,
+  "time_limit": 60,
+  "objective": {
+    "type": "REACH",
+    "description": "Reach the goal"
+  },
+  "reward_steel": 0,
+  "reward_copper": 0,
+  "reward_rubber": 0,
+  "scene": {
+    "width": 1200,
+    "ground_y": 220,
+    "sky": "images/bg_sky",
+    "backgrounds": [
+      {
+        "layer": 1,
+        "x": 205,
+        "y": 48,
+        "image": "images/bg_building1.png"
+      },
+      {
+        "layer": 0,
+        "x": 395,
+        "y": 96,
+        "image": "images/bg_building4.png"
+      },
+      {
+        "layer": 0,
+        "x": 132,
+        "y": 134,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 3,
+        "y": 124,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 263,
+        "y": 131,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 636,
+        "y": 137,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 511,
+        "y": 94,
+        "image": "images/bg_building6.png"
+      },
+      {
+        "layer": 0,
+        "x": 855,
+        "y": 130,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 764,
+        "y": 125,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 944,
+        "y": 131,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 1067,
+        "y": 136,
+        "image": "images/bg_building7.png"
+      }
+    ],
+    "terrain": [
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "up15",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": -17
+      },
+      {
+        "type": "flat",
+        "height_offset": -17
+      },
+      {
+        "type": "down15",
+        "height_offset": -17
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      }
+    ],
+    "obstacles": [],
+    "stones": [],
+    "enemies": [
+      {
+        "type": "SHIELD_ROBOT",
+        "x": 590,
+        "y": -13
+      },
+      {
+        "type": "BASIC_ENEMY",
+        "x": 462,
+        "y": -17
+      },
+      {
+        "type": "BASIC_ENEMY",
+        "x": 752,
+        "y": 0
+      },
+      {
+        "type": "BASIC_ENEMY",
+        "x": 1008,
+        "y": 0
+      },
+      {
+        "type": "SWORD_ENEMY",
+        "x": 333,
+        "y": 0
+      },
+      {
+        "type": "SWORD_ENEMY",
+        "x": 863,
+        "y": 0
+      }
+    ],
+    "delivery_targets": [],
+    "reach": {
+      "x": 1132
+    },
+    "objective": {
+      "type": "REACH",
+      "description": "Reach the goal"
+    },
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "I HIDE IN A SHELTER.",
+        "GO HERE AND RESCUE ME."
+      ]
+    }
+  }
+}

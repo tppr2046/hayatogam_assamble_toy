@@ -24,9 +24,45 @@ _G.SoundManager = sound or {}
 local pd = import "parts_data"
 _G.PartsData = pd or _G.PartsData or {}
 
--- 載入任務資料並設置為全域
-local md = import "mission_data"
-_G.MissionData = md or _G.MissionData or {}
+-- [[ S6 ]] 讀取 BOSS 資料
+local bd = import "boss_data"
+_G.BossData = bd or _G.BossData or {}
+
+-- [[ CORE ]] 核心資料（GDD §8.05）；目前只用於 HQ 顯示，數值尚未接進計算
+local cd = import "core_data"
+_G.CoreData = cd or _G.CoreData or {}
+
+-- [[ S8 ]] 系統選單（Menu 鍵）項目管理
+local mi = import "menu_items"
+_G.MenuItems = mi or _G.MenuItems or {}
+
+-- [[ S9 ]] 開場過場劇情資料
+local intro = import "intro_data"
+_G.IntroData = intro or _G.IntroData or {}
+
+-- [[ S11 ]] 結局過場劇情資料
+local outro = import "outro_data"
+_G.OutroData = outro or _G.OutroData or {}
+
+-- [[ S10 ]] 操作教學：文案與覆蓋層模組
+local tud = import "tutorial_data"
+_G.TutorialData = tud or _G.TutorialData or {}
+local tut = import "tutorial"
+_G.Tutorial = tut or _G.Tutorial or {}
+
+-- [[ 一關一檔 ]] 掃描 levels/ 資料夾的 JSON 組成任務資料。
+-- 新增關卡＝把編輯工具匯出的 .json 丟進 Source/levels/ 後重新編譯即可，無需改程式。
+local loadLevels = import "level_loader"
+local levels = loadLevels()
+local level_count = 0
+for _ in pairs(levels) do level_count = level_count + 1 end
+if level_count == 0 then
+    -- 安全網：levels/ 空的話回退到舊的 mission_data.lua（若仍存在）
+    print("LEVELS: 資料夾無關卡，回退 mission_data.lua")
+    local ok, md = pcall(function() return import "mission_data" end)
+    levels = (ok and md) or {}
+end
+_G.MissionData = levels
 
 -- 載入實體模組 (機甲與敵人邏輯)
 local me = import "module_entities"
@@ -36,6 +72,9 @@ _G.ModuleEntities = me or _G.ModuleEntities or {}
 _G.StateMenu = import "state_menu"
 _G.StateSaveSelect = import "state_save_select"
 _G.StateMissionSelect = import "state_mission_select"
+_G.StateIntro = import "state_intro"
+_G.StateOutro = import "state_outro"
+_G.StateCoreUpgrade = import "state_core_upgrade"
 _G.StateHQ = import "state_hq"
 _G.StateShop = import "state_shop"
 _G.StateMission = import "state_mission"
@@ -60,6 +99,9 @@ function setState(newState, ...)
         if s == _G.StateMenu then return "StateMenu" end
         if s == _G.StateSaveSelect then return "StateSaveSelect" end
         if s == _G.StateMissionSelect then return "StateMissionSelect" end
+        if s == _G.StateIntro then return "StateIntro" end
+        if s == _G.StateOutro then return "StateOutro" end
+        if s == _G.StateCoreUpgrade then return "StateCoreUpgrade" end
         if s == _G.StateHQ then return "StateHQ" end
         if s == _G.StateMission then return "StateMission" end
         if s == _G.StateResult then return "StateResult" end

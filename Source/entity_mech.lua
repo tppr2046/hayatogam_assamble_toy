@@ -9,7 +9,18 @@ local gfx = playdate.graphics
 
 MechController = {}
 
--- [[ P4 滑行 ]] 無輸入時移動速度的每幀衰減係數（0~1，越小停得越快；A2 可調）
+-- [[ 版面 ]] WHEEL/FEET 面板上滑塊的最大左右偏移（px）。
+-- 由「軌道寬 − 滑塊寬」推出：wheel_panel 64px、wheel_stick 18px → (64-18)/2 = 23。
+-- ★ 2026-08-08 面板由 3 格(96) 縮成 2 格(64) 時一併從 40 改成 23，否則滑塊會跑出軌道。
+local STICK_MAX_OFFSET = 23
+
+-- [[ 跳躍 ]] 重力（px/幀²）。★必須與 state_mission.lua 的 GRAVITY 一致，
+-- 因為跳躍初速度是由「想跳多高」反推出來的：v = sqrt(2 * g * h)。
+local MECH_GRAVITY = 0.5
+
+-- [[ P4 滑行 ]] 無輸入時移動速度的每幀衰減係數（0~1，越小停得越快；A2 可調）。
+-- 這是**預設值**；零件可用 parts_data 的 `coast_friction` 個別覆寫
+-- （2026-08-07：輪子該滑、腿該停得快，兩者不該共用同一個值）。
 MechController.COAST_FRICTION = 0.85
 
 -- [[ A3 ]] 切換焦點後的冷卻幀數（期間切換鍵不再觸發，避免連按視覺混亂；A2 可調）
@@ -31,12 +42,21 @@ function MechController:init()
         sword_last_attack_angle = nil,
         
         -- CANON 相關
-        canon_angle = 0,
+        -- [[ 修正 ]] CANON 角度改為「每個零件各自保存」（key = 零件 id）：
+        -- 兩門 CANON 不再共用角度；離開焦點時各自維持原本角度。
+        canon_angles = {},
+        canon_knob_angles = {},   -- 操作面板旋鈕角度（僅焦點中的零件會更新→非焦點面板不動作）
         canon_fire_timer = 0,
         canon_button_pressed = false,  -- 按鈕是否按下
+        -- [[ 跳躍 ]] 每幀由 handlePartOperation 更新
+        can_jump = false,              -- 目前焦點零件 × 核心加成後能不能跳（面板據此決定畫不畫跳躍鈕）
+        jump_button_pressed = false,   -- 跳躍鈕的按下狀態（面板顯示用）
         
         -- GUN 相關
-        gun_fire_timer = 0,
+        -- ★ 2026-08-11 改成**每個零件一個計時器**（key = 零件 id）。
+        --   舊版是單一 gun_fire_timer，GUN 與 GUN2(雷射) 併裝時會互搶冷卻。
+        gun_fire_timers = {},
+        gun_button_pressed = false,   -- 雷射槍(GUN2)的 A 鈕按下狀態，面板顯示用
         
         -- FEET 相關（跳躍）
         velocity_y = 0,  -- 垂直速度
@@ -155,14 +175,17 @@ function MechController:init()
         print("WARNING: Failed to load claw_control.png")
     end
     
-    -- 載入 CLAW 專用的 control_v 圖片表
-    local ok_claw_control_v, claw_control_v_table = pcall(function()
-        return playdate.graphics.imagetable.new("images/claw_control_v")
+    -- 載入 CLAW 開合開關的按鈕圖表
+    -- [[ 2026-08-10 ]] 由佔位的 claw_control_v（3 格，1=關/2=開）換成專屬圖
+    -- claw-button-table-32-32（2 格，**1=開 / 2=夾起**——注意順序與舊圖相反）。
+    -- 舊圖已刪除，不再有 fallback。
+    local ok_claw_button, claw_button_table = pcall(function()
+        return playdate.graphics.imagetable.new("images/claw-button")
     end)
-    if ok_claw_control_v and claw_control_v_table then
-        mc.ui_images.claw_control_v = claw_control_v_table
+    if ok_claw_button and claw_button_table then
+        mc.ui_images.claw_button = claw_button_table
     else
-        print("WARNING: Failed to load claw_control_v.pdt")
+        print("WARNING: Failed to load claw-button.pdt")
     end
     
     return mc
@@ -282,6 +305,32 @@ function MechController:getActivePartType()
     return pdata and pdata.part_type
 end
 
+-- [[ 跳躍 ]] 目前焦點零件的實際跳躍高度（px）＝ 零件 jump_height × 核心 jump_mult。
+-- 回傳 0 代表「不能跳」——可能是焦點不是移動零件，也可能是核心加成為 0（CORE1）。
+-- 操作面板的跳躍鈕也用這個值決定要不要顯示（0 就不畫）。
+function MechController:getJumpHeight()
+    local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
+    local base = (pdata and pdata.jump_height) or 0
+    if base <= 0 then return 0 end
+    local core = _G.CoreData and _G.CoreData.current and _G.CoreData.current()
+    local mult = (core and core.jump_mult) or 0
+    return base * mult
+end
+
+-- [[ 修正 ]] 取得某門 CANON 的仰角（每個零件各自保存；未設過則為 0）
+function MechController:getCanonAngle(part_id)
+    if not part_id then return 0 end
+    self.canon_angles = self.canon_angles or {}
+    return self.canon_angles[part_id] or 0
+end
+
+-- [[ 修正 ]] 取得某門 CANON 的面板旋鈕角度（僅焦點中的零件會更新→非焦點面板靜止）
+function MechController:getCanonKnobAngle(part_id)
+    if not part_id then return 0 end
+    self.canon_knob_angles = self.canon_knob_angles or {}
+    return self.canon_knob_angles[part_id] or 0
+end
+
 -- 檢查發射方向是否被已安裝的零件阻擋（不包括當前發射的零件）
 function MechController:isFiringDirectionBlocked(firing_direction, active_part_id)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
@@ -316,12 +365,29 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     -- [[ P4 ]] 不再於無焦點時提前 return——滑行衰減（函式尾）任何情況都要執行
     local part_type = self:getActivePartType()
 
+    -- [[ 跳躍 ]] 2026-08-07：跳躍不再是 FEET 專屬。凡是焦點停在「有 jump_height 的
+    -- 下層零件」（FEET/WHEEL）都能跳，各零件高度不同，再乘上核心的 jump_mult。
+    -- 放在分支之外統一處理，避免每個移動零件各寫一份。
+    -- ★ 仍然綁在「焦點」上：焦點在 CANON/CLAW 時 A 是發射/抓放，不會誤觸跳躍。
+    local jump_h = self:getJumpHeight()
+    self.can_jump = (jump_h > 0)          -- 供操作面板決定要不要畫跳躍鈕
+    if self.can_jump and playdate.buttonJustPressed(playdate.kButtonA) and self.is_grounded then
+        -- 由高度反推初速度：h = v² / (2g) → v = sqrt(2gh)
+        -- g 必須與 state_mission.lua 的 GRAVITY 一致（0.5 / 幀²）
+        self.velocity_y = -math.sqrt(2 * MECH_GRAVITY * jump_h)
+        self.is_grounded = false
+        self.jump_button_pressed = true
+    end
+    if not playdate.buttonIsPressed(playdate.kButtonA) then
+        self.jump_button_pressed = false
+    end
+
     if part_type == "WHEEL" then
         -- WHEEL：左右移動
         -- WHEEL 是 3x1 格，寬度 = 3*32 + 2*5 = 106 像素
         -- wheel_stick 可以從最左移動到最右，範圍大約是 panel 寬度的一半，減去 stick 寬度的一半
         -- 假設 panel 總寬 106，stick 寬 10，則最大偏移 = (106/2) - (10/2) = 48
-        local max_stick_offset = 40
+        local max_stick_offset = STICK_MAX_OFFSET
 
         if playdate.buttonIsPressed(playdate.kButtonLeft) then
             self.move_velocity = -MOVE_SPEED  -- [[ P4 ]] 改寫入速度，滑行統一在函式尾處理
@@ -364,19 +430,24 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         local angle_min = pdata and pdata.angle_min or -45  -- 預設 -45 度
         local angle_max = pdata and pdata.angle_max or 45  -- 預設 +45 度
         local crank_ratio = pdata and pdata.crank_degrees_per_rotation or 15  -- 預設 crank 轉 1 圈產生 15 度變化
-        
+
+        -- [[ 修正 ]] 只更新「焦點中」這門砲的角度與面板旋鈕；其他 CANON 維持原角度、面板不動
+        local cid = self.active_part_id
+        self.canon_knob_angles[cid] = playdate.getCrankPosition()
+
         local crankChange = playdate.getCrankChange()
         if crankChange and math.abs(crankChange) > 0 then
             -- crank 轉動量轉換為 canon 角度變化：crankChange 是度數，除以 360 得到圈數，乘以 crank_ratio 得到 canon 角度變化
             local canon_delta = (crankChange / 360.0) * crank_ratio
-            self.canon_angle = self.canon_angle + canon_delta
-            
+            local ang = self:getCanonAngle(cid) + canon_delta
+
             -- 限制角度在範圍內
-            if self.canon_angle > angle_max then
-                self.canon_angle = angle_max
-            elseif self.canon_angle < angle_min then
-                self.canon_angle = angle_min
+            if ang > angle_max then
+                ang = angle_max
+            elseif ang < angle_min then
+                ang = angle_min
             end
+            self.canon_angles[cid] = ang
         end
         
         -- 追蹤 A 按鈕狀態（用於顯示按鈕 UI）
@@ -392,24 +463,38 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                         local ipdata = _G.PartsData and _G.PartsData[item.id]
                         if ipdata and ipdata.part_type == "CANON" and item.id == self.active_part_id then
                             local cell_size = mech_grid.cell_size
-                            local canon_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
-                            local canon_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
-                            
+                            -- 樞紐＝格中心 + barrel_offset_y（砲管繞此旋轉，**必須與繪製一致**，
+                            -- 見 entity_mech_render.lua 的 drawActivePart；否則砲彈會從砲管下方飛出）
+                            local pivot_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                            local pivot_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+                                            + (pdata.barrel_offset_y or 0)
+
                             -- 使用與敵人相同的計算方式
                             local base_speed = entity_controller.player_move_speed or 2.0
                             local speed_mult = pdata.projectile_speed_mult or 1.0
                             local speed = base_speed * speed_mult
-                            
-                            local angle_rad = math.rad(self.canon_angle)
-                            local vx = math.cos(angle_rad) * speed
-                            local vy = -math.sin(angle_rad) * speed
+
+                            local angle_rad = math.rad(self:getCanonAngle(item.id))
+                            local dir_x = math.cos(angle_rad)
+                            local dir_y = -math.sin(angle_rad)
+                            local vx = dir_x * speed
+                            local vy = dir_y * speed
+
+                            -- [[ 修正 ]] 砲彈從砲口發射：樞紐 + 砲管方向 × 砲管長（格中心→砲口）
+                            local ok_iw, iw = pcall(function() return pdata._img:getSize() end)
+                            local barrel_len = ((ok_iw and iw) or (cell_size * 2)) - cell_size / 2
+                            if barrel_len < cell_size / 2 then barrel_len = cell_size / 2 end
+                            local canon_x = pivot_x + dir_x * barrel_len
+                            local canon_y = pivot_y + dir_y * barrel_len
                             local dmg = pdata.projectile_damage or 10
                             local grav_mult = pdata.projectile_grav_mult or 1.0
 
                             -- [[ 斜坡跟隨 ]] 砲口位置與發射方向套用機體傾斜
                             canon_x, canon_y, vx, vy = self:applyMechTilt(canon_x, canon_y, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
 
-                            entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult)
+                            -- [[ CANON3 ]] 有 blast_radius 的砲彈落地/命中時會範圍爆炸
+                            entity_controller:addPlayerProjectile(canon_x, canon_y, vx, vy, dmg, grav_mult,
+                                                                  nil, pdata.blast_radius, pdata.blast_damage)
                             self.canon_fire_timer = 0
                             -- 播放砲台發射音效
                             if _G.SoundManager and _G.SoundManager.playCanonFire then
@@ -423,13 +508,50 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         elseif playdate.buttonJustReleased(playdate.kButtonA) then
             self.canon_button_pressed = false
         end
+    elseif part_type == "GUN" then
+        -- [[ 雷射槍 GUN2 2026-08-11 ]] 手動：焦點在它身上時按 A 發射一道**會往前飛的貫穿光束**。
+        -- （全自動的 GUN 是 operable=false，根本不會成為焦點，不會走到這裡。）
+        -- ★ pdata 必須在這裡自己取——本函式沒有函式層級的 pdata，
+        --   漏掉的話它會是 nil、下面的守衛永遠 false，**按 A 完全沒反應且不會報錯**。
+        local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
+        if playdate.buttonJustPressed(playdate.kButtonA) then
+            self.gun_button_pressed = true
+            local tmr = self.gun_fire_timers[self.active_part_id] or 999
+            if pdata and tmr >= (pdata.fire_cooldown or 1.0)
+               and not self:isFiringDirectionBlocked("RIGHT", self.active_part_id) then
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    if item.id == self.active_part_id then
+                        local cell_size = mech_grid.cell_size
+                        -- ★ 槍口在圖的**右端**（量自 gun02.png：x=31, y=8），
+                        --   所以由零件左上角推算，不是格子中心 —— 否則光束會從機身中間長出來。
+                        local lx = mech_x + (item.col - 1) * cell_size + (pdata.muzzle_x or 0)
+                        local ly = mech_y + (mech_grid.rows - item.row) * cell_size + (pdata.muzzle_y or 8)
+                        local base_speed = entity_controller.player_move_speed or 2.0
+                        local speed = base_speed * (pdata.laser_speed_mult or 100)
+                        local vx, vy
+                        lx, ly, vx, vy = self:applyMechTilt(lx, ly, speed, 0, mech_x, mech_y, mech_grid, entity_controller)
+                        entity_controller:addPlayerLaser(lx, ly, vx, vy,
+                            pdata.laser_length, pdata.laser_thickness,
+                            pdata.projectile_damage, pdata.laser_range)
+                        self.gun_fire_timers[self.active_part_id] = 0
+                        if _G.SoundManager and _G.SoundManager.playCanonFire then
+                            _G.SoundManager.playCanonFire()
+                        end
+                        break
+                    end
+                end
+            end
+        elseif playdate.buttonJustReleased(playdate.kButtonA) then
+            self.gun_button_pressed = false
+        end
     elseif part_type == "FEET" then
         -- FEET：左右移動 + 跳躍
         local pdata = _G.PartsData and _G.PartsData["FEET"]
         local move_speed = (pdata and pdata.move_speed) or 3.0
         
         -- FEET 使用與 WHEEL 相同的 wheel_stick_offset 邏輯
-        local max_stick_offset = 40
+        local max_stick_offset = STICK_MAX_OFFSET
         
         local moving = false
         local direction = 0
@@ -461,13 +583,9 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         self.feet_is_moving = moving
         self.feet_move_direction = direction
         
-        -- A 鍵跳躍（只有在地面時才能跳）
-        if playdate.buttonJustPressed(playdate.kButtonA) and self.is_grounded then
-            local jump_vel = (pdata and pdata.jump_velocity) or -8.0
-            self.velocity_y = jump_vel
-            self.is_grounded = false
-        end
-        
+        -- [[ 跳躍 ]] 已移到分支之外（見 handlePartOperation 開頭），
+        -- 因為 WHEEL 也能跳，不再是 FEET 專屬。
+
     elseif part_type == "CLAW" then
         -- [[ P3 CLAW 改制（InputSpec 定稿 D4） ]]
         -- crank = 臂上下轉動；A = 抓/放切換（當幀執行）；爪子開合隨抓/放自動演出
@@ -543,9 +661,20 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
     end
 
     -- [[ P4 滑行（決策 #1）]] 無移動輸入（含焦點不在移動零件）時，
-    -- 速度按 COAST_FRICTION 逐幀衰減——切走焦點後機體滑行減速，而非急停
+    -- 速度按 coast_friction 逐幀衰減——切走焦點後機體滑行減速，而非急停。
+    -- 係數取「目前裝在機體上的移動零件」，找不到就用預設值。
     if not self.move_input_active then
-        self.move_velocity = self.move_velocity * MechController.COAST_FRICTION
+        local friction = MechController.COAST_FRICTION
+        local eq = _G.GameState and _G.GameState.mech_stats
+                   and _G.GameState.mech_stats.equipped_parts or {}
+        for _, item in ipairs(eq) do
+            local pd = _G.PartsData and _G.PartsData[item.id]
+            if pd and pd.coast_friction and (pd.part_type == "FEET" or pd.part_type == "WHEEL") then
+                friction = pd.coast_friction
+                break
+            end
+        end
+        self.move_velocity = self.move_velocity * friction
         if math.abs(self.move_velocity) < 0.05 then
             self.move_velocity = 0
             self.feet_is_moving = false  -- 滑行結束才停走路動畫
@@ -604,23 +733,32 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
     -- 更新 CANON 冷卻
     self.canon_fire_timer = self.canon_fire_timer + dt
     
-    -- GUN 自動發射
-    self.gun_fire_timer = self.gun_fire_timer + dt
+    -- GUN 類零件自動發射
+    -- ★ 2026-08-11：由寫死的 `item.id == "GUN"` 改成 **`pdata.part_type == "GUN"`**，
+    --   之後再加槍械變體（如雷射槍 GUN2）只要在 parts_data 宣告即可，不必回來改這裡。
+    -- ★ 冷卻計時器**所有槍都要累計**（含手動的雷射槍），只有「自動開火」這段跳過手動零件；
+    --   否則手動槍的計時器永遠不會前進，按 A 就再也打不出第二發。
+    self.gun_fire_timers = self.gun_fire_timers or {}
     local eq = _G.GameState.mech_stats.equipped_parts or {}
     for _, item in ipairs(eq) do
         local pdata = _G.PartsData and _G.PartsData[item.id]
-        if item.id == "GUN" and pdata and pdata.fire_cooldown then
-            if self.gun_fire_timer >= pdata.fire_cooldown then
-                -- 檢查右方發射方向是否被阻擋（不包括GUN本身）
-                if self:isFiringDirectionBlocked("RIGHT", "GUN") then
-                    -- 發射方向被阻擋，不發射
-                    break
-                end
-                
+        if pdata and pdata.part_type == "GUN" and pdata.fire_cooldown then
+            -- 每個零件各自累計冷卻（多把槍併裝時不會互搶）
+            -- ★ 首次見到這個零件時的初值：**手動槍給滿**（一進關卡按 A 就能打），
+            --   自動槍給 0（維持原本「等一個 CD 才開第一槍」的節奏，不改既有手感）。
+            if self.gun_fire_timers[item.id] == nil then
+                self.gun_fire_timers[item.id] = pdata.operable and pdata.fire_cooldown or 0
+            end
+            local tmr = self.gun_fire_timers[item.id] + dt
+            self.gun_fire_timers[item.id] = tmr
+            -- ★ operable=true 的槍是**手動**（雷射槍 GUN2），由 updateActivePart 按 A 發射，
+            --   不能在這裡自動打掉，否則會變成「自動 + 手動」兩邊都發。
+            if (not pdata.operable) and tmr >= pdata.fire_cooldown
+               and not self:isFiringDirectionBlocked("RIGHT", item.id) then
                 local cell_size = mech_grid.cell_size
                 local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
                 local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
-                
+
                 -- 使用與敵人相同的計算方式
                 local base_speed = entity_controller.player_move_speed or 2.0
                 local speed_mult = pdata.projectile_speed_mult or 1.0
@@ -633,8 +771,7 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
                 gun_x, gun_y, vx, vy = self:applyMechTilt(gun_x, gun_y, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
 
                 entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg, grav_mult)
-                self.gun_fire_timer = 0
-                break
+                self.gun_fire_timers[item.id] = 0
             end
         end
     end
@@ -666,10 +803,13 @@ function MechController:onHit()
 end
 
 -- 更新抓取的石頭位置（由 state_mission 調用）
+-- 傳進來的 claw_tip 已經是**夾持點**（鉸鏈軸再往前 grip_hold_dist），見 state_mission 的計算。
+-- 石頭以夾持點為中心對齊，才像被兩片爪咬住；只對齊 x、y 用左上角的話會偏下半個石頭。
 function MechController:updateGrabbedStone(claw_tip_x, claw_tip_y)
     if self.claw_grabbed_stone then
-        self.claw_grabbed_stone.x = claw_tip_x - self.claw_grabbed_stone.width / 2
-        self.claw_grabbed_stone.y = claw_tip_y
+        local s = self.claw_grabbed_stone
+        s.x = claw_tip_x - (s.width or 0) / 2
+        s.y = claw_tip_y - (s.height or 0) / 2
     end
 end
 

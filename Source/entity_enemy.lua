@@ -16,6 +16,12 @@ _G.EnemyData = EnemyData
 
 Enemy = {}
 
+-- [[ 演出 ]] BOSS 死亡爆炸的長度（秒）與連環爆的間隔（秒）。
+-- 一般敵人仍是 exploding_duration = 1.0，只有 BOSS 拉長。
+-- ★ 關卡的 BOSS_KILL 判定會等 is_exploding 結束，所以改這裡＝改「爆炸播完才過關」。
+local BOSS_DEATH_DURATION = 3.0
+local BOSS_DEATH_BURST_INTERVAL = 0.22
+
 function Enemy:init(x, y, type_id, ground_y)
     local data = EnemyData[type_id]
     
@@ -25,49 +31,27 @@ function Enemy:init(x, y, type_id, ground_y)
     local img_width = 24
     local img_height = 32
     if data.image then
-        -- JUMP_ENEMY: 嘗試載入imagetable
-        if type_id == "JUMP_ENEMY" then
-            local ok_table, imagetable = pcall(function()
-                return playdate.graphics.imagetable.new(data.image)
-            end)
-            if ok_table and imagetable then
-                enemy_imagetable = imagetable
-                -- 取得第一幀的大小
-                local frame1 = imagetable:getImage(1)
-                if frame1 then
-                    local ok_size, w, h = pcall(function() return frame1:getSize() end)
-                    if ok_size and w and h then
-                        img_width = w
-                        img_height = h
-                    end
-                end
-                enemy_img = imagetable:getImage(1)  -- 預設顯示第1幀
-            else
-                -- imagetable失敗，回退到普通image
-                local ok_img, img = pcall(function()
-                    return playdate.graphics.image.new(data.image)
-                end)
-                if ok_img and img then
-                    enemy_img = img
-                    local ok_size, w, h = pcall(function() return img:getSize() end)
-                    if ok_size and w and h then
-                        img_width = w
-                        img_height = h
-                    end
-                end
-            end
+        -- [[ 2026-08-09 ]] 一律「先試 imagetable、失敗才退回單張圖」。
+        -- 舊版寫死只有 JUMP_ENEMY 走 imagetable，DRONE 換成 6 幀動畫後就吃不到；
+        -- 改成這樣之後，之後任何敵人要動畫只要放 `-table-寬-高` 的圖即可，不必回來改程式。
+        local ok_table, imagetable = pcall(function()
+            return playdate.graphics.imagetable.new(data.image)
+        end)
+        if ok_table and imagetable then
+            enemy_imagetable = imagetable
+            enemy_img = imagetable:getImage(1)  -- 預設顯示第1幀
         else
-            -- 其他敵人: 使用普通image
-            local ok, img = pcall(function()
+            local ok_img, img = pcall(function()
                 return playdate.graphics.image.new(data.image)
             end)
-            if ok and img then
-                enemy_img = img
-                local ok_size, w, h = pcall(function() return img:getSize() end)
-                if ok_size and w and h then
-                    img_width = w
-                    img_height = h
-                end
+            if ok_img and img then enemy_img = img end
+        end
+        -- 尺寸一律讀「實際會畫出來的那張圖」
+        if enemy_img then
+            local ok_size, w, h = pcall(function() return enemy_img:getSize() end)
+            if ok_size and w and h then
+                img_width = w
+                img_height = h
             end
         end
     end
@@ -81,7 +65,9 @@ function Enemy:init(x, y, type_id, ground_y)
         width = img_width,
         height = img_height,
         image = enemy_img,  -- 儲存圖片
-        imagetable = enemy_imagetable,  -- JUMP_ENEMY 的 imagetable
+        imagetable = enemy_imagetable,  -- 動畫用（JUMP_ENEMY 依狀態指定幀；其餘看 anim_fps）
+        anim_fps = data.anim_fps,       -- 設了就循環播放 imagetable（見 update）
+        anim_frame = 1, anim_timer = 0,
         ground_y = ground_y,
         vx = 1.0, -- 基礎水平速度
         vy = 0,   -- 垂直速度（跳躍用）
@@ -96,6 +82,14 @@ function Enemy:init(x, y, type_id, ground_y)
         -- 子彈發射位置偏移
         bullet_offset_x = data.bullet_offset_x or (img_width / 2),
         bullet_offset_y = data.bullet_offset_y or (img_height / 2),
+        -- [[ WALKER 2026-08-12 ]] 走走停停（move_type = "MOVE_PAUSE"）
+        move_duration = data.move_duration or 1.5,
+        pause_duration = data.pause_duration or 1.5,
+        walk_fps = data.walk_fps or 8,
+        is_paused = false,        -- 只有停下時才開火（見 fire_only_when_stopped）
+        phase_timer = 0,
+        walk_timer = 0,
+        flip_x = data.flip_x or false,   -- 原圖朝右時整張水平鏡射
         -- 移動參數
         move_probability = data.move_probability or 0.5,
         move_range = data.move_range or 50,
@@ -177,6 +171,14 @@ function Enemy:init(x, y, type_id, ground_y)
     -- 從敵人資料讀取砲彈 multiplier（可在 enemy_data.lua 調整）
     e.projectile_speed_mult = (data and data.projectile_speed_mult) or 1.0
     e.projectile_grav_mult = (data and data.projectile_grav_mult) or 1.0
+    -- 載入盾牌圖片（若有提供；沒有就退回程式繪製的黑底白框）
+    if data and data.shield_image then
+        local ok_shield, shield_img = pcall(function()
+            return playdate.graphics.image.new(data.shield_image)
+        end)
+        if ok_shield and shield_img then e.shield_image = shield_img end
+    end
+
     -- 載入劍圖片（若有提供）
     if data and data.sword_image then
         local ok_sword, sword_img = pcall(function()
@@ -190,6 +192,10 @@ function Enemy:init(x, y, type_id, ground_y)
 end
 
 function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    -- [[ S6 ]] BOSS 走專屬階段控制器
+    if self.is_boss then
+        return self:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    end
     -- 如果正在爆炸，更新爆炸動畫
     if self.is_exploding then
         self.exploding_frame_timer = self.exploding_frame_timer + dt
@@ -202,7 +208,25 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     end
     
     if not self.is_alive then return end
-    
+
+    -- [[ 2026-08-09 ]] 通用待機動畫：敵人資料設了 anim_fps 就循環播放 imagetable。
+    -- JUMP_ENEMY 是自己依跳躍狀態指定幀（不設 anim_fps），所以不受影響。
+    if self.anim_fps and self.imagetable then
+        self.anim_timer = (self.anim_timer or 0) + dt
+        local step = 1 / self.anim_fps
+        if self.anim_timer >= step then
+            self.anim_timer = self.anim_timer - step
+            local n = self.imagetable:getLength() or 1
+            self.anim_frame = ((self.anim_frame or 1) % n) + 1
+            self.image = self.imagetable:getImage(self.anim_frame)
+        end
+    end
+
+    -- [[ S5 護送戰 ]] 若場景有存活的 NPC → 敵人改為朝 NPC 移動並攻擊它（護送戰模式）
+    if controller and controller.npc and (controller.npc.hp or 0) > 0 and not controller.npc.reached_goal then
+        return self:updateAttackNPC(dt, controller)
+    end
+
     self.move_timer = self.move_timer + dt
     self.fire_timer = self.fire_timer + dt
     
@@ -247,6 +271,50 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self.move_dir = self.move_dir * -1
         end
         
+    elseif self.move_type == "MOVE_PAUSE" then
+        -- [[ WALKER ]] 走一段 → 停一段，循環。**只有停下時會開火**（見下方攻擊段）。
+        self.phase_timer = self.phase_timer + dt
+        if self.is_paused then
+            if self.phase_timer >= self.pause_duration then
+                self.is_paused = false
+                self.phase_timer = 0
+            end
+        else
+            if self.phase_timer >= self.move_duration then
+                self.is_paused = true
+                self.phase_timer = 0
+            else
+                -- 移動邏輯與 BASIC 相同：超出範圍或遇到斜坡就換方向
+                local new_x = self.x + self.move_dir * self.move_speed * dt
+                if math.abs(new_x - self.origin_x) < self.move_range then
+                    if controller and controller:getTerrainType(new_x) ~= "flat" then
+                        self.move_dir = self.move_dir * -1
+                    else
+                        self.x = new_x
+                    end
+                else
+                    self.move_dir = self.move_dir * -1
+                end
+            end
+        end
+        -- 走路動畫：停下＝第 1 格（站立），移動＝第 2 格之後循環。
+        -- ★ 這裡自己控制換幀，所以 enemy_data **不要**設 anim_fps（那個是無條件循環）。
+        if self.imagetable then
+            local n = self.imagetable:getLength() or 1
+            if self.is_paused then
+                self.anim_frame = 1
+            elseif n > 1 then
+                self.walk_timer = self.walk_timer + dt
+                local step = 1 / (self.walk_fps or 8)
+                if self.walk_timer >= step then
+                    self.walk_timer = self.walk_timer - step
+                    self.anim_frame = (self.anim_frame or 1) + 1
+                    if self.anim_frame < 2 or self.anim_frame > n then self.anim_frame = 2 end
+                end
+            end
+            self.image = self.imagetable:getImage(self.anim_frame or 1)
+        end
+
     elseif self.move_type == "JUMP" then
         -- 跳躍敵人
         self.jump_timer = self.jump_timer + dt
@@ -353,9 +421,21 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         self.drone_vertical_offset = math.sin(self.drone_vertical_time * self.vertical_speed) * self.vertical_oscillation
     end
 
+    -- [[ 交戰範圍 2026-08-11 ]] 離畫面太遠就不攻擊。
+    -- ★ 與 EntityController:isEngageable 是**同一個判定**（那邊同時決定「打不打得到它」），
+    --   兩邊必須一致，否則會變成「看不到卻被打」或「明明在打卻扣不到血」。
+    -- 移動照常，只是不開火 —— 巡邏中的敵人入畫時才不會像剛被生出來一樣。
+    if controller and controller.isEngageable and not controller:isEngageable(self.x, self.width) then
+        self.fire_timer = 0     -- 重置節奏，重新入畫時從頭數冷卻（同 BOSS 的作法）
+        return
+    end
+
     -- 根據 attack_type 處理攻擊
     if self.attack_type == "FIRE BULLET" then
-        if self.fire_timer >= self.fire_cooldown then
+        -- [[ WALKER ]] fire_only_when_stopped：移動中不開火，停下才打
+        local ed = EnemyData[self.type_id] or {}
+        local can_fire = (not ed.fire_only_when_stopped) or self.is_paused
+        if can_fire and self.fire_timer >= self.fire_cooldown then
             self:fire(mech_x, controller)
             self.fire_timer = 0
         end
@@ -451,8 +531,10 @@ end
 -- 發射拋物線砲彈 (擊向機甲)
 function Enemy:fire(target_x, controller)
     -- 使用敵人資料中定義的子彈發射位置
+    -- ★ 要加上 drone_vertical_offset：無人機的上下浮動是在**繪製時**才套用的
+    --   （見 Enemy:draw 的 draw_y），發射點不加就會從偏離機身的高度射出。
     local start_x = self.x + self.bullet_offset_x
-    local start_y = self.y + self.bullet_offset_y
+    local start_y = self.y + (self.drone_vertical_offset or 0) + self.bullet_offset_y
     local target_dist = target_x - start_x
     -- 使砲彈水平方向速度接近玩家的移動速度（尊重敵人定義的 multiplier）
     local base_vx = (controller and controller.player_move_speed) or 2.0
@@ -480,6 +562,515 @@ function Enemy:fire(target_x, controller)
     table.insert(controller.projectiles, projectile)
 end
 
+-- [[ S5 護送戰 ]] 敵人朝 NPC 移動並接觸攻擊（有 NPC 時取代一般巡邏/射擊）
+function Enemy:updateAttackNPC(dt, controller)
+    local npc = controller.npc
+    local dir = (npc.x > self.x) and 1 or -1
+    self.move_dir = dir
+    self.x = self.x + dir * (self.move_speed or 20) * dt
+    self.npc_attack_timer = (self.npc_attack_timer or 0) + dt
+    if math.abs(self.x - npc.x) < (self.width or 24) then
+        if self.npc_attack_timer >= 0.6 then
+            self.npc_attack_timer = 0
+            npc.hp = npc.hp - (self.attack or 5)
+            if _G.SoundManager and _G.SoundManager.playHit then _G.SoundManager.playHit() end
+        end
+    end
+end
+
+-- ==========================================================================
+-- [[ S6 BOSS ]] BOSS = 核心 + 依序外掛可破壞武器零件；一次只露出一個弱點
+-- ==========================================================================
+
+-- 建立 BOSS（特殊敵人）。edata = { type="BOSS", boss_id, x, y }
+function Enemy:initBoss(edata, ground_y)
+    local bd = (_G.BossData or {})[edata.boss_id]
+    if not bd or not bd.parts or #bd.parts == 0 then
+        print("ERROR: BossData missing for " .. tostring(edata.boss_id))
+        return Enemy:init(edata.x, edata.y or 0, "BASIC_ENEMY", ground_y)  -- 安全回退
+    end
+    local body_w = bd.body_w or 56
+    local body_h = bd.body_h or 64
+    local e = {
+        is_boss = true, type_id = "BOSS", boss_id = edata.boss_id,
+        boss_data = bd, boss_parts = bd.parts, boss_phase = 1,
+        boss_x = edata.x, boss_y = ground_y - body_h,
+        boss_body_w = body_w, boss_body_h = body_h,
+        boss_ground_y = ground_y, origin_x = edata.x,
+        boss_speed = bd.move_speed or 16, boss_range = bd.move_range or 90,
+        boss_trans_time = bd.trans_time or 1.0, boss_invuln = 0,
+        move_dir = -1,
+        -- 傷害/碰撞管線需要的欄位
+        hp = bd.parts[1].hp, attack = (bd.parts[1].attack and bd.parts[1].attack.damage) or 5,
+        ground_y = ground_y, is_alive = true, is_exploding = false,
+        exploding_frame_timer = 0, exploding_duration = BOSS_DEATH_DURATION, exploding_frame_index = 0,
+        exploding_image_table = nil, fire_timer = 0,
+        projectile_speed_mult = 30, projectile_grav_mult = 18,   -- 同一般敵人尺度（拋物線）
+        bullet_offset_x = 0, bullet_offset_y = 0, hit_shake_offset_x = 0,
+        x = edata.x, y = ground_y - body_h, width = 26, height = 26,
+    }
+    setmetatable(e, { __index = Enemy })
+
+    -- [[ 美術 ]] 載入 72x72 sprite（imagetable，各格原位對齊）
+    if bd.sprite then
+        local ok, tbl = pcall(function() return playdate.graphics.imagetable.new(bd.sprite) end)
+        if ok and tbl then
+            e.boss_sheet = tbl
+            -- [[ 2026-08-11 ]] 舊版這裡把「後輪／前輪」兩格各裁成小圖再 drawRotated。
+            -- 新圖第 3 格是一整條 72×16 的**履帶**，不能旋轉 → 裁切與旋轉都已移除，改成原位貼上。
+
+            -- 可旋轉瞄準的武器：裁成「軸心置中」的小圖，之後用 drawRotated 繞軸心轉
+            e.aim_imgs = {}
+            for _, p in ipairs(bd.parts) do
+                if p.aim and p.cell and p.pivot_x and p.pivot_y then
+                    local src = tbl:getImage(p.cell)
+                    if src then
+                        local size = 96   -- 足夠涵蓋軸心到最遠端（含砲管）
+                        local okc, buf = pcall(function() return playdate.graphics.image.new(size, size) end)
+                        if okc and buf then
+                            playdate.graphics.pushContext(buf)
+                            playdate.graphics.clear(playdate.graphics.kColorClear)
+                            src:draw(-(p.pivot_x - size / 2), -(p.pivot_y - size / 2))
+                            playdate.graphics.popContext()
+                            e.aim_imgs[p.id] = buf
+                        end
+                    end
+                end
+            end
+        else
+            print("WARNING: failed to load boss sprite " .. tostring(bd.sprite))
+        end
+    end
+    e:bossPositionHitbox()
+    print("LOG: Created BOSS " .. tostring(edata.boss_id) .. " at " .. edata.x)
+    return e
+end
+
+-- 把命中框（x/y/width/height、子彈發射點、攻擊力）對齊「當前露出的零件」
+function Enemy:bossPositionHitbox()
+    local part = self.boss_parts[self.boss_phase]
+    self.width = part.w; self.height = part.h
+    self.x = self.boss_x + part.dx
+    self.y = self.boss_y + part.dy
+    -- [[ 美術 ]] 子彈由槍口射出：muzzle 為 72x72 內座標，換算成相對命中框原點的偏移
+    if part.muzzle_x and part.muzzle_y then
+        self.bullet_offset_x = part.muzzle_x - part.dx
+        self.bullet_offset_y = part.muzzle_y - part.dy
+    else
+        self.bullet_offset_x = part.w / 2
+        self.bullet_offset_y = part.h / 2
+    end
+    self.attack = (part.attack and part.attack.damage) or 5
+    self.projectile_speed_mult = (part.attack and part.attack.speed_mult) or 30
+    self.projectile_grav_mult = (part.attack and part.attack.grav_mult) or 18
+end
+
+-- [[ 美術 ]] 武器瞄準：回傳「相對靜止方向(朝左)的旋轉角度」與朝玩家的單位向量。
+-- 圖的靜止方向為朝左（180°），故旋轉量 = 目標角度 − 180°。
+function Enemy:bossAimFor(part)
+    local px = self.boss_x + (part.pivot_x or 0)
+    local py = self.boss_y + (part.pivot_y or 0)
+    local tx = self.aim_mx or (px - 100)
+    local ty = self.aim_my or py
+    local dx, dy = tx - px, ty - py
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len < 0.001 then dx, dy, len = -1, 0, 1 end
+    local deg = math.deg(math.atan(dy, dx))
+    return (deg - 180), (dx / len), (dy / len), px, py
+end
+
+-- [[ 演出 ]] 武器目前的顯示角度（相對靜止方向的旋轉量；0＝維持原圖朝左）
+function Enemy:bossWeaponAngle(part)
+    return (self.weapon_angles and self.weapon_angles[part.id]) or 0
+end
+
+-- 依「目前顯示角度」求砲管方向與軸心世界座標（發射點＝軸心 + 方向 × 砲管長）
+function Enemy:bossWeaponDir(part)
+    local rad = math.rad(180 + self:bossWeaponAngle(part))
+    return math.cos(rad), math.sin(rad),
+           self.boss_x + (part.pivot_x or 0), self.boss_y + (part.pivot_y or 0)
+end
+
+-- [[ 演出 ]] 發射前先轉動瞄準：在冷卻結束前 aim_time 秒開始以固定角速度轉向玩家，
+-- 讓玩家看見「那是會動的武器、而且正在對準我」，之後才開火。
+function Enemy:bossUpdateAim(part, dt)
+    if not (part and part.aim) then return end
+    self.weapon_angles = self.weapon_angles or {}
+    local atk = part.attack or {}
+    local aim_time = atk.aim_time or 0.8
+    local cooldown = atk.cooldown or 2.0
+    if self.fire_timer < math.max(0, cooldown - aim_time) then return end  -- 尚未到瞄準時段：保持不動
+    local target = self:bossAimFor(part)
+    local cur = self.weapon_angles[part.id] or 0
+    local diff = ((target - cur + 180) % 360) - 180
+    local step = (atk.aim_speed or 200) * dt
+    if math.abs(diff) <= step then cur = target
+    else cur = cur + (diff > 0 and step or -step) end
+    self.weapon_angles[part.id] = cur
+end
+
+-- 以出生點為中心左右巡邏（速度 ≈ 一般敵人）
+function Enemy:bossMove(dt)
+    -- [[ 2026-08-11 ]] 舊版在這裡把移動距離換算成輪子轉角（wheel_angle）。
+    -- 新圖第 3 格是整條履帶、不旋轉，該計算已移除。
+    self.boss_x = self.boss_x + self.move_dir * self.boss_speed * dt
+    if self.boss_x > self.origin_x + self.boss_range then
+        self.boss_x = self.origin_x + self.boss_range; self.move_dir = -1
+    elseif self.boss_x < self.origin_x - self.boss_range then
+        self.boss_x = self.origin_x - self.boss_range; self.move_dir = 1
+    end
+end
+
+-- 發射當前零件的 VOLLEY（n 發，spread 為散射）
+function Enemy:bossVolley(atk, mech_x, controller)
+    local n = atk.n or 1
+    self.attack = atk.damage or 5
+    -- 與一般敵人同尺度：速度倍率 25~35、重力倍率 15~20（提供拋物線）
+    self.projectile_speed_mult = atk.speed_mult or 30
+    self.projectile_grav_mult = atk.grav_mult or 18
+
+    -- [[ 美術 ]] 會旋轉瞄準的武器：發射點取「旋轉後的槍口」（軸心 + 瞄準方向 × 砲管長）
+    local part = self.boss_parts[self.boss_phase]
+    if part and part.aim and part.pivot_x then
+        local ux, uy, pxw, pyw = self:bossWeaponDir(part)   -- 依「目前顯示角度」而非瞬時瞄準
+        local bl = math.sqrt(((part.muzzle_x or 0) - part.pivot_x) ^ 2 +
+                             ((part.muzzle_y or 0) - (part.pivot_y or 0)) ^ 2)
+        self.bullet_offset_x = (pxw + ux * bl) - self.x
+        self.bullet_offset_y = (pyw + uy * bl) - self.y
+    end
+    for i = 1, n do
+        local off = 0
+        if atk.spread and n > 1 then off = (i - (n + 1) / 2) * 60 end
+        self:fire(mech_x + off, controller)
+    end
+end
+
+function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    -- [[ 美術 ]] 記住玩家中心，供武器旋轉瞄準與雷射鏡射判斷使用
+    if mech_x then
+        self.aim_mx = mech_x + (mech_width or 48) / 2
+        self.aim_my = mech_y and (mech_y + (mech_height or 32) / 2) or self.aim_my
+    end
+
+    -- [[ 演出 ]] 零件爆炸特效計時（在轉場無敵期間播放）
+    if self.part_explode_timer then
+        self.part_explode_timer = self.part_explode_timer + dt
+        if self.part_explode_timer >= (self.part_explode_duration or 0.8) then
+            self.part_explode_timer = nil
+        end
+    end
+
+    -- [[ 演出 ]] 受擊震動（命中時由 controller 設 hit_shake_timer=0.3，與一般敵人同一套）
+    if self.hit_shake_timer and self.hit_shake_timer > 0 then
+        self.hit_shake_timer = self.hit_shake_timer - dt
+        self.hit_shake_offset_x = math.sin(self.hit_shake_timer * 80) * 5
+    else
+        self.hit_shake_offset_x = 0
+    end
+    -- 零件被打爆（管線把 hp 打到 0 → 設 is_exploding）
+    if self.is_exploding then
+        if self.boss_phase < #self.boss_parts then
+            -- 還有零件 → 攔截爆炸，推進階段 + 無敵轉場
+            self.is_exploding = false
+            -- [[ 演出 ]] 被打爆的零件在原位播放爆炸特效（沿用 mine_explode 動畫表）
+            local dead = self.boss_parts[self.boss_phase]
+            if dead then
+                self.part_explode_x = self.boss_x + dead.dx + dead.w / 2
+                self.part_explode_y = self.boss_y + dead.dy + dead.h / 2
+                self.part_explode_timer = 0
+                self.part_explode_duration = 0.8
+            end
+            self.boss_phase = self.boss_phase + 1
+            self.boss_invuln = self.boss_trans_time or 1.0
+            self.hp = self.boss_parts[self.boss_phase].hp
+            self:bossPositionHitbox()
+            self.fire_timer = 0
+            if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+            print("LOG: Boss part destroyed -> phase " .. self.boss_phase .. "/" .. #self.boss_parts)
+            return
+        else
+            -- 最後零件 → 真正死亡。
+            -- [[ 演出 2026-08-08 ]] BOSS 的死亡爆炸拉長到 BOSS_DEATH_DURATION（3 秒），
+            -- 期間在**機體各處連續炸開**（每 BOSS_DEATH_BURST_INTERVAL 秒隨機一發）。
+            -- ★ 不是把單一動畫放慢 —— 那只會變成 1 秒 1 幀的投影片；
+            --   連環爆才撐得住 3 秒，也才像一台大機器逐塊解體。
+            -- 關卡端本來就會等 is_exploding 結束才過關（state_mission 的 BOSS_KILL 判定），
+            -- 所以拉長這裡＝爆炸播完關卡才結束，不需要另外改。
+            self.exploding_frame_timer = self.exploding_frame_timer + dt
+
+            self.boss_burst_timer = (self.boss_burst_timer or 0) + dt
+            if controller and controller.addBlastVisual
+               and self.boss_burst_timer >= BOSS_DEATH_BURST_INTERVAL then
+                self.boss_burst_timer = 0
+                -- 在 BOSS 身體範圍內隨機取點
+                local bx = self.boss_x + math.random(0, math.max(1, self.boss_body_w))
+                local by = self.boss_y + math.random(0, math.max(1, self.boss_body_h))
+                controller:addBlastVisual(bx, by)
+                if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+            end
+
+            if self.exploding_frame_timer >= self.exploding_duration then
+                self.is_alive = false; self.is_exploding = false
+                print("LOG: BOSS defeated")
+            end
+            return
+        end
+    end
+    if not self.is_alive then return end
+
+    -- 轉場無敵：閃爍、不攻擊、免傷（把 hp 釘在當前零件滿血）
+    if self.boss_invuln and self.boss_invuln > 0 then
+        self.boss_invuln = self.boss_invuln - dt
+        self.hp = self.boss_parts[self.boss_phase].hp
+        self:bossMove(dt); self:bossPositionHitbox()
+        return
+    end
+
+    -- 正常階段：移動 + 依冷卻發射當前零件武器
+    self:bossMove(dt); self:bossPositionHitbox()
+
+    -- [[ 演出 ]] BOSS 與玩家「同時在畫面上」才開始瞄準與攻擊（畫面外不偷打）
+    local cam = (controller and controller.camera_x) or 0
+    local SCREEN_W = 400
+    local boss_on = (self.boss_x + (self.boss_body_w or 72) > cam) and (self.boss_x < cam + SCREEN_W)
+    local mech_on = mech_x and (mech_x + (mech_width or 48) > cam) and (mech_x < cam + SCREEN_W)
+    if not (boss_on and mech_on) then
+        self.fire_timer = 0     -- 離開畫面時重置節奏，下次入畫重新從瞄準開始
+        return
+    end
+
+    self.fire_timer = self.fire_timer + dt
+    -- [[ 演出 ]] 發射前先轉動瞄準（讓玩家看懂那是武器）
+    self:bossUpdateAim(self.boss_parts[self.boss_phase], dt)
+    local atk = self.boss_parts[self.boss_phase].attack
+    if atk and atk.type == "LASER" then
+        self:bossLaser(atk, dt, mech_x, mech_y, mech_width, mech_height)
+    elseif atk and self.fire_timer >= (atk.cooldown or 2.0) then
+        self.fire_timer = 0
+        if atk.type == "VOLLEY" then self:bossVolley(atk, mech_x, controller) end
+    end
+end
+
+-- [[ S6 ]] 雷射（內部武器）：cooldown → charge 充能預告 → beam 開火（矩形命中一次）
+-- 光束為水平橫向，從零件中心朝機體所在方向射出，貫穿整個畫面寬度。
+function Enemy:bossLaser(atk, dt, mech_x, mech_y, mech_width, mech_height)
+    self.laser_phase = self.laser_phase or "cooldown"
+    self.laser_timer = (self.laser_timer or 0) + dt
+
+    if self.laser_phase == "cooldown" then
+        if self.laser_timer >= (atk.cooldown or 1.6) then
+            self.laser_phase = "charge"
+            self.laser_timer = 0
+            -- 充能時鎖定方向與高度（之後開火不再追蹤，玩家可以閃開）
+            -- [[ 美術 ]] 由雷射槍槍口射出
+            local part = self.boss_parts[self.boss_phase]
+            self.laser_dir = (mech_x + (mech_width or 0) / 2 < self.x) and -1 or 1
+            if part and part.muzzle_x and part.muzzle_y then
+                local mx = part.muzzle_x
+                -- 玩家在右側且此零件會鏡射（雷射槍）：槍口位置也要水平鏡射
+                if part.mirror_when_right and self.laser_dir > 0 then
+                    mx = (self.boss_body_w or 72) - part.muzzle_x
+                end
+                self.laser_x = self.boss_x + mx
+                self.laser_y = self.boss_y + part.muzzle_y
+            else
+                self.laser_x = self.x
+                self.laser_y = self.y + (self.height or 28) / 2
+            end
+            self.laser_hit_applied = false
+        end
+    elseif self.laser_phase == "charge" then
+        if self.laser_timer >= (atk.charge or 0.9) then
+            self.laser_phase = "beam"
+            self.laser_timer = 0
+            if _G.SoundManager and _G.SoundManager.playCanonFire then _G.SoundManager.playCanonFire() end
+        end
+    elseif self.laser_phase == "beam" then
+        -- 命中判定：機體矩形是否與光束（水平帶）相交；一次光束只扣一次
+        if not self.laser_hit_applied and mech_x and mech_y then
+            local half = (atk.thickness or 8) / 2
+            local top, bot = self.laser_y - half, self.laser_y + half
+            local mech_top, mech_bot = mech_y, mech_y + (mech_height or 32)
+            local beam_x0, beam_x1
+            if self.laser_dir < 0 then beam_x0, beam_x1 = self.x - 1000, self.x
+            else beam_x0, beam_x1 = self.x, self.x + 1000 end
+            local mech_left, mech_right = mech_x, mech_x + (mech_width or 48)
+            if bot >= mech_top and top <= mech_bot and mech_right >= beam_x0 and mech_left <= beam_x1 then
+                self.pending_mech_damage = (self.pending_mech_damage or 0) + (atk.damage or 15)
+                self.laser_hit_applied = true
+            end
+        end
+        if self.laser_timer >= (atk.beam_time or 0.4) then
+            self.laser_phase = "cooldown"
+            self.laser_timer = 0
+        end
+    end
+end
+
+function Enemy:drawBoss(camera_x)
+    local g = playdate.graphics
+    -- [[ 演出 ]] 受擊震動：整台 BOSS 水平抖動
+    local bx = self.boss_x - camera_x + (self.hit_shake_offset_x or 0)
+    local by = self.boss_y
+    local bd = self.boss_data
+    local sheet = self.boss_sheet
+    local invuln = self.boss_invuln and self.boss_invuln > 0
+    local blink = (math.floor(playdate.getCurrentTimeMilliseconds() / 100) % 2 == 0)
+
+    if sheet then
+        -- [[ 美術 ]] 以 72x72 sprite 合成：各格原位對齊，直接疊畫於同一原點
+        local function drawCell(idx, ox, oy)
+            if not idx then return end
+            local img = sheet:getImage(idx)
+            if img then pcall(function() img:draw(bx + (ox or 0), by + (oy or 0)) end) end
+        end
+
+        -- 履帶：整條原位貼上（不旋轉）。先畫＝在本體之下
+        drawCell(bd.cell_track)
+
+        -- [[ 2026-08-11 ]] 最終階段（雷射槍）**本體與管子都隱藏**，畫面只剩履帶＋雷射槍
+        local final_phase = (self.boss_phase >= #self.boss_parts)
+        if not (final_phase and bd.hide_body_on_final) then
+            drawCell(bd.cell_body)
+        end
+
+        -- 管子：未進入最終階段才顯示，並上下移動
+        if not final_phase then
+            local amp = bd.pipe_vibrate or 2
+            local vib = math.floor(math.sin(playdate.getCurrentTimeMilliseconds() / 70) * amp + 0.5)
+            drawCell(bd.cell_pipe, 0, vib)
+        end
+
+        -- 武器零件：已破壞→不畫；當前弱點→轉場時閃爍；內部武器僅最終階段顯示
+        for i, part in ipairs(self.boss_parts) do
+            local is_current = (i == self.boss_phase)
+            local destroyed = (i < self.boss_phase)
+            local hidden_internal = (part.reveal == "internal") and (i > self.boss_phase)
+            if (not destroyed) and (not hidden_internal) then
+                if not (is_current and invuln and blink) then
+                    local aim_img = self.aim_imgs and self.aim_imgs[part.id]
+                    if part.aim and aim_img then
+                        -- 旋轉瞄準的武器：繞軸心轉（角度為瞄準演出的當前值）
+                        local rot = self:bossWeaponAngle(part)
+                        pcall(function()
+                            aim_img:drawRotated(bx + part.pivot_x, by + part.pivot_y, rot)
+                        end)
+                    elseif part.mirror_when_right and (self.aim_mx or 0) > (self.boss_x + (bd.body_w or 72) / 2) then
+                        -- 玩家在右側：雷射槍水平鏡射（本體不鏡射）
+                        local img = sheet:getImage(part.cell)
+                        if img then
+                            pcall(function() img:draw(bx, by, playdate.graphics.kImageFlippedX) end)
+                        end
+                    else
+                        drawCell(part.cell)
+                    end
+                end
+                -- [[ 演出 ]] 弱點提示：當前零件上方的向下箭頭，上下微幅浮動（取代舊的方框）
+                if is_current and not invuln then
+                    local ax = bx + part.dx + part.w / 2
+                    local bob = math.sin(playdate.getCurrentTimeMilliseconds() / 180) * 3
+                    local ay = by + part.dy - 12 + bob
+                    -- 先畫白色外廓，1-bit 下在深色處也看得見
+                    g.setColor(g.kColorWhite)
+                    g.fillTriangle(ax - 8, ay - 10, ax + 8, ay - 10, ax, ay + 2)
+                    g.setColor(g.kColorBlack)
+                    g.fillTriangle(ax - 6, ay - 8, ax + 6, ay - 8, ax, ay)
+                end
+            end
+        end
+    else
+        -- 佔位圖形（sprite 載入失敗時的備援）
+        g.setColor(g.kColorWhite); g.fillRect(bx, by, self.boss_body_w, self.boss_body_h)
+        g.setColor(g.kColorBlack); g.drawRect(bx, by, self.boss_body_w, self.boss_body_h)
+        for i, part in ipairs(self.boss_parts) do
+            local px, py = bx + part.dx, by + part.dy
+            if i == self.boss_phase then
+                if not (invuln and blink) then
+                    g.setColor(g.kColorBlack); g.fillRect(px, py, part.w, part.h)
+                end
+                if not invuln then
+                    g.setColor(g.kColorBlack); g.setLineWidth(1)
+                    g.drawRect(px - 3, py - 3, part.w + 6, part.h + 6)
+                end
+            elseif i > self.boss_phase and part.reveal ~= "internal" then
+                g.setColor(g.kColorBlack); g.drawRect(px, py, part.w, part.h)
+            end
+        end
+    end
+
+    -- [[ 演出 ]] 零件被打爆的爆炸特效（沿用 mine_explode 動畫表，與敵人死亡共用）
+    if self.part_explode_timer then
+        if not self.part_explode_table then
+            local okt, tbl = pcall(function() return playdate.graphics.imagetable.new("images/mine_explode") end)
+            if okt and tbl then self.part_explode_table = tbl end
+        end
+        if self.part_explode_table then
+            local dur = self.part_explode_duration or 0.8
+            local n = self.part_explode_table:getLength() or 3
+            local idx = math.floor((self.part_explode_timer / dur) * n) + 1
+            if idx < 1 then idx = 1 elseif idx > n then idx = n end
+            local frame = self.part_explode_table:getImage(idx)
+            if frame then
+                local fw, fh = frame:getSize()
+                pcall(function()
+                    frame:draw((self.part_explode_x or self.boss_x) - camera_x - fw / 2,
+                               (self.part_explode_y or self.boss_y) - fh / 2)
+                end)
+            end
+        end
+    end
+
+    -- [[ S6 ]] 雷射：充能＝細虛線警告（閃爍）；開火＝粗光束（含外圈白邊更醒目）
+    if self.laser_phase == "charge" or self.laser_phase == "beam" then
+        local ly = self.laser_y or (self.y + 14)
+        local sx = (self.laser_x or self.x) - camera_x
+        local ex = (self.laser_dir or 1) < 0 and -20 or 420
+        if self.laser_phase == "charge" then
+            if (math.floor(playdate.getCurrentTimeMilliseconds() / 60) % 2) == 0 then
+                g.setColor(g.kColorBlack); g.setLineWidth(1)
+                g.drawLine(sx, ly, ex, ly)
+            end
+        else
+            local atk = self.boss_parts[self.boss_phase].attack
+            local th = (atk and atk.thickness) or 8
+            g.setColor(g.kColorWhite); g.setLineWidth(th + 4)
+            g.drawLine(sx, ly, ex, ly)
+            g.setColor(g.kColorBlack); g.setLineWidth(th)
+            g.drawLine(sx, ly, ex, ly)
+        end
+        g.setLineWidth(1)
+    end
+
+    self:drawBossHpBar()
+end
+
+-- 螢幕上方固定：BOSS 名稱、階段進度、當前零件血條
+function Enemy:drawBossHpBar()
+    local g = playdate.graphics
+    local part = self.boss_parts[self.boss_phase]
+    local ratio = math.max(0, math.min(1, self.hp / (part.hp or 1)))
+    local bw, bh = 220, 8
+    local bx = (400 - bw) / 2
+    local by = 22
+    local title = (self.boss_data.name or "BOSS") .. "  [" .. (part.label or "?") ..
+        "  " .. self.boss_phase .. "/" .. #self.boss_parts .. "]"
+
+    -- [[ 可讀性 ]] 先鋪白底再畫：BOSS 血條在畫面上方，會被天空層的黑雲吃掉
+    -- （同 state_mission 的 HUD 白底處理）。白底範圍涵蓋標題與血條，寬度取兩者較大值。
+    local tw = g.getTextSize(title)
+    local pad = 3
+    local top = by - 16
+    local block_w = math.max(tw, bw) + pad * 2
+    local block_h = (by + bh) - top + pad * 2
+    g.setColor(g.kColorWhite)
+    g.fillRect(bx - pad, top - pad, block_w, block_h)
+
+    g.setColor(g.kColorBlack)
+    g.drawText(title, bx, top)
+    g.drawRect(bx, by, bw, bh)
+    g.fillRect(bx, by, math.floor(bw * ratio), bh)
+end
+
 function Enemy:drawMineExplosion(screen_x)
     if self.is_exploded and self.explode_image_table then
         -- Get frame with 1-based indexing (Playdate imagetable uses 1-based indexing)
@@ -503,11 +1094,24 @@ function Enemy:drawMineExplosion(screen_x)
             playdate.graphics.setColor(playdate.graphics.kColorWhite)
             playdate.graphics.drawRect(draw_x, draw_y, anim_size, anim_size)
         end
-        -- 調試：顯示當前爆炸影格
-        playdate.graphics.drawText("EXP:" .. tostring(current_frame) .. "/" .. tostring(frame_count), draw_x, draw_y - 10)
     elseif self.is_triggered and not self.is_exploded then
-        local blink_speed = 10
-        if math.floor(self.explode_timer * blink_speed) % 2 == 0 then
+        -- [[ 2026-08-10 ]] 觸發後的警示燈：mine 的 imagetable 第 2/3 格交替閃爍。
+        -- 警示燈與本體（第 1 格）畫在同一張 32×16 畫布的上下兩段，
+        -- 所以用「和本體完全相同的座標」疊畫就會對位，不要另外加偏移。
+        -- 本體是由 Enemy:draw() 的一般路徑畫的（self.image = 第 1 格），這裡只負責疊燈。
+        local ed = EnemyData[self.type_id] or {}
+        local speed = ed.warn_blink_speed or 10
+        local on = (math.floor(self.explode_timer * speed) % 2 == 0)
+        local frame_idx = on and (ed.warn_frame_a or 2) or (ed.warn_frame_b or 3)
+        local lamp = nil
+        if self.imagetable then
+            local ok, img = pcall(function() return self.imagetable:getImage(frame_idx) end)
+            if ok then lamp = img end
+        end
+        if lamp then
+            lamp:draw(screen_x, self.y)
+        elseif on then
+            -- 後備：沒有警示燈圖時沿用舊的白框閃爍
             playdate.graphics.setColor(playdate.graphics.kColorWhite)
             playdate.graphics.fillRect(screen_x - 2, self.y - 2, self.width + 4, self.height + 4)
         end
@@ -515,6 +1119,14 @@ function Enemy:drawMineExplosion(screen_x)
 end
 
 function Enemy:draw(camera_x)
+    -- [[ S6 ]] BOSS 專屬繪製（爆炸中則落到下方沿用死亡爆炸動畫）
+    -- [[ 演出 2026-08-08 ]] BOSS **爆炸期間也照畫機體**。
+    -- 連環爆是由 controller 畫在它身上的（見 updateBoss 的 addBlastVisual），
+    -- 機體要等 is_alive 變 false 才消失 —— 這樣才有「一台大機器被逐塊炸開」的感覺。
+    -- 若沿用下方的通用爆炸繪製，3 秒 ÷ 3 幀 = 1 秒 1 幀，會變成投影片。
+    if self.is_boss then
+        return self:drawBoss(camera_x)
+    end
     -- 敌人死亡爆炸动画
     if self.is_exploding then
         local screen_x = self.x - camera_x + (self.hit_shake_offset_x or 0)
@@ -572,7 +1184,9 @@ function Enemy:draw(camera_x)
     
     -- 繪製敵人圖片或方塊
     if self.image then
-        pcall(function() self.image:draw(screen_x, draw_y) end)
+        -- flip_x：原圖朝右的敵人整張水平鏡射（本作敵人一律面向左）
+        local fmode = self.flip_x and gfx.kImageFlippedX or gfx.kImageUnflipped
+        pcall(function() self.image:draw(screen_x, draw_y, fmode) end)
     else
         gfx.setColor(gfx.kColorBlack)
         gfx.fillRect(screen_x, draw_y, self.width, self.height)
@@ -582,10 +1196,17 @@ function Enemy:draw(camera_x)
     if self.type_id == "SHIELD_ROBOT" and self.shield_raised then
         local shield_x = screen_x + self.shield_offset_x
         local shield_y = draw_y + self.shield_offset_y
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(shield_x, shield_y, self.shield_width, self.shield_height)
-        gfx.setColor(gfx.kColorWhite)
-        gfx.drawRect(shield_x, shield_y, self.shield_width, self.shield_height)
+        -- [[ 2026-08-12 ]] 有 shield.png 就畫圖，否則退回舊的黑底白框。
+        -- ★ 位置與尺寸都來自 enemy_data 的 shield_* —— **擋子彈的判定用的是同一組**，
+        --   所以畫出來的框就是擋得住的範圍，不會有視覺與判定不一致的問題。
+        if self.shield_image then
+            pcall(function() self.shield_image:draw(shield_x, shield_y) end)
+        else
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(shield_x, shield_y, self.shield_width, self.shield_height)
+            gfx.setColor(gfx.kColorWhite)
+            gfx.drawRect(shield_x, shield_y, self.shield_width, self.shield_height)
+        end
     end
     
     -- 繪製 HP 條
@@ -621,7 +1242,7 @@ function Enemy:draw(camera_x)
             end)
         else
             -- 預設：直線繪制
-            local sword_length = 30
+            local sword_length = enemy_data.sword_length or 30
             local end_x = pivot_x + math.cos(angle_rad) * sword_length
             local end_y = pivot_y + math.sin(angle_rad) * sword_length
             

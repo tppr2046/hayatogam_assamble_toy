@@ -15,10 +15,13 @@ local items = {
     "DEDICATED TO: HAYATO",
 }
 local selected_index = 1 -- 只用於 Back 選項
+-- [[ S11 ]] 是否由結局過場進來（true＝標題顯示 THE END，而非 CREDITS）
+local from_ending = false
 
-function StateCredits.setup()
+function StateCredits.setup(is_from_ending)
     gfx.setFont(font)
     selected_index = 1
+    from_ending = is_from_ending or false
     -- 播放標題/一般介面 BGM（循環）
     if _G.SoundManager and _G.SoundManager.playTitleBGM then
         _G.SoundManager.playTitleBGM()
@@ -39,7 +42,7 @@ function StateCredits.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
 
-    local title = "CREDITS"
+    local title = from_ending and "THE END" or "CREDITS"
     local title_w = gfx.getTextSize(title)
     gfx.drawText(title, (400 - title_w) / 2, 20)
 
