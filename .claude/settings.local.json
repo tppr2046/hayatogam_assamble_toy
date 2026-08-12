@@ -37,7 +37,13 @@
       "Bash(git rev-list *)",
       "Bash(echo \"落後/領先 origin: $\\(git rev-list --left-right --count origin/feat/g2-hq-layout...HEAD\\)\")",
       "Bash(awk '{print \"  main 獨有 \"$1\" 筆 / 本分支領先 \"$2\" 筆\"}')",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(echo \"同步狀態: $\\(git rev-list --left-right --count origin/main...HEAD\\)\")",
+      "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\" && echo \"=== ~/ 裡面有什麼 ===\" && find '~' -type f 2>/dev/null | head -20 && echo \"檔案數: $\\(find '~' -type f 2>/dev/null | wc -l\\)\" && echo \"有被 git 追蹤嗎: $\\(git ls-files '~' | wc -l\\) 個\" && echo && echo \"=== game-proto-planning 追蹤中的檔 ===\" && git ls-files game-proto-planning/ && echo && echo \"=== 使用者 skills 目錄有沒有同一份 ===\" && ls \"C:/Users/aaaaa/.claude/skills/\" 2>/dev/null)",
+      "Bash(gh repo *)",
+      "Bash(git rm *)",
+      "Bash(printf '\\\\n# 誤建的家目錄複本（曾有 ~/.ssh/config 被誤加入版控）\\\\n~/\\\\n\\\\n# Claude skill 檔案，不屬於本專案（正確位置是 ~/.claude/skills/）\\\\ngame-proto-planning/\\\\n')",
+      "Bash(xargs -I{} echo \"未提交: {}\")"
     ],
     "additionalDirectories": [
       "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"

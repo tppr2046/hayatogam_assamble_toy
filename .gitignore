@@ -5,3 +5,9 @@ Builds/hayatogam_assamble_toy.pdx.zip
 
 # pdc 每次編譯都會更新 buildtime，導致此檔一直顯示為已修改
 Builds/hayatogam_assamble_toy.pdx/pdxinfo
+
+# 誤建的家目錄複本（曾有 ~/.ssh/config 被誤加入版控）
+~/
+
+# Claude skill 檔案，不屬於本專案（正確位置是 ~/.claude/skills/）
+game-proto-planning/
