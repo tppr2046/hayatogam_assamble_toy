@@ -48,7 +48,17 @@
       "Bash(sed -n '/local half = L.thickness \\\\/ 2/,/local x1 = math.max/p' Source/entity_controller.lua)",
       "Bash(sed -n '/雷射槍 ]] 玩家光束/,/setLineWidth\\(1\\)/p' Source/entity_controller.lua)",
       "Bash(sed -n '/if self.move_type == \"MOVE FORWARD\\\\/BACK\"/,/elseif self.move_type == \"JUMP\"/p' Source/entity_enemy.lua)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Read(//c/Users/aaaaa/.claude/skills/game-production-planning/**)",
+      "Bash(sed -n '/範圍現實性/,/^## /p' references/production-playbook.md)",
+      "Bash(awk '$6>=\"2026-07-28\"{print $6, $7}')",
+      "Bash(awk '{print}')",
+      "Bash(awk '$6>=\"2026-07-28\"')",
+      "Bash(awk '$6>=\"2026-07-28\"{print $6}')",
+      "Bash(awk '{printf \"  %s  %2d 張  %s\\\\n\",$2,$1,substr\\(\"##################################\",1,$1\\)}')",
+      "Bash(xargs -I{} echo \"美術實際動工天數: {} 天\")",
+      "Bash(python -c \"print\\(round\\(62/12,1\\)\\)\")",
+      "Bash(echo \"平均: $\\(python -c \"print\\(round\\(62/12,1\\)\\)\"\\) 張/天\")"
     ],
     "additionalDirectories": [
       "e:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source\\images",

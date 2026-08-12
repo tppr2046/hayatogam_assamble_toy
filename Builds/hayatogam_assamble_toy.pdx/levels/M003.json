@@ -175,6 +175,11 @@
           "type": "JUMP_ENEMY",
           "x": 891,
           "y": -64
+        },
+        {
+          "type": "WALKER_ENEMY",
+          "x": 751,
+          "y": -64
         }
       ],
       "delivery_targets": [],
