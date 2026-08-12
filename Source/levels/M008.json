@@ -2,7 +2,6 @@
   "id": "M008",
   "final": true,
   "name": "Escort Test",
-  "category": "ELIMINATION",
   "description": "S5 demo: reach / protect(hold) / escort(move).",
   "prerequisite": 0,
   "time_limit": -1,

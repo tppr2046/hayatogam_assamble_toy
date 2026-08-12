@@ -1,185 +1,212 @@
 {
-  "dialog": {
-    "image": "images/dialog_bg",
-    "lines": [
-      "There are many obstacles and rocks out there,",
-      "Remove all of the obstacles and put them to the target zone.",
-      "Good luck, Pilot!"
-    ]
-  },
-  "description": "Eliminate all incoming trainer units and learn movement controls.",
-  "required_parts": [
-    "CLAW"
-  ],
-  "name": "Delivery Mission",
-  "objective": {
-    "description": "Deliver the stone to the target zone",
-    "type": "DELIVER_STONE"
-  },
   "id": "M002",
-  "reward_rubber": 15,
-  "category": "DELIVER_STONE",
-  "reward_copper": 20,
+  "name": " 2 WALK WITH ME",
+  "description": " 2 WALK WITH ME",
   "prerequisite": "M001",
   "time_limit": -1,
+  "objective": {
+    "type": "PROTECT",
+    "description": "Protect the escort"
+  },
+  "reward_steel": 30,
+  "reward_copper": 20,
+  "reward_rubber": 15,
   "scene": {
+    "width": 1500,
     "ground_y": 220,
     "sky": "images/bg_sky",
-    "delivery_targets": [
+    "backgrounds": [
       {
-        "x": 350,
-        "image": "images/target",
-        "y": 0,
-        "id": "target1"
+        "layer": 1,
+        "x": 60,
+        "y": 69,
+        "image": "images/bg_building2.png"
       },
       {
-        "x": 600,
-        "image": "images/target",
-        "y": 90,
-        "id": "target2"
+        "layer": 1,
+        "x": 268,
+        "y": 109,
+        "image": "images/bg_building4.png"
+      },
+      {
+        "layer": 1,
+        "x": 989,
+        "y": -18,
+        "image": "images/bg_building1.png"
+      },
+      {
+        "layer": 0,
+        "x": 523,
+        "y": 54,
+        "image": "images/bg_building5.png"
+      },
+      {
+        "layer": 0,
+        "x": 17,
+        "y": 131,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 386,
+        "y": 128,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 732,
+        "y": 115,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 577,
+        "y": 56,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 238,
+        "y": 141,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 876,
+        "y": 64,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 1033,
+        "y": 72,
+        "image": "images/bg_building7.png"
       }
     ],
     "terrain": [
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "up30",
+        "height_offset": 0
       },
       {
-        "height_offset": 0,
-        "type": "up30"
+        "type": "up30",
+        "height_offset": -37
       },
       {
-        "height_offset": -35,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -74
       },
       {
-        "height_offset": -35,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -74
       },
       {
-        "height_offset": -35,
-        "type": "down30"
+        "type": "down45",
+        "height_offset": -74
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -10
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "up45",
+        "height_offset": -10
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -74
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "down15",
+        "height_offset": -74
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -57
       },
       {
-        "height_offset": 0,
-        "type": "up15"
+        "type": "up15",
+        "height_offset": -57
       },
       {
-        "height_offset": -17,
-        "type": "flat"
+        "type": "up15",
+        "height_offset": -74
       },
       {
-        "height_offset": -17,
-        "type": "flat"
+        "type": "down30",
+        "height_offset": -91
       },
       {
-        "height_offset": -17,
-        "type": "down15"
+        "type": "flat",
+        "height_offset": -54
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -54
       },
       {
-        "height_offset": 0,
-        "type": "flat"
+        "type": "flat",
+        "height_offset": -54
       },
       {
-        "height_offset": 0,
-        "type": "flat"
-      }
-    ],
-    "width": 1200,
-    "backgrounds": [
-      {
-        "x": 30,
-        "image": "images/bg_building2.png",
-        "layer": 0,
-        "y": 40
-      },
-      {
-        "x": 160,
-        "image": "images/bg_building3.png",
-        "layer": 1,
-        "y": 70
-      },
-      {
-        "x": 200,
-        "image": "images/bg_building1.png",
-        "layer": 1,
-        "y": 60
-      },
-      {
-        "x": 420,
-        "image": "images/bg_building4.png",
-        "layer": 0,
-        "y": 60
+        "type": "flat",
+        "height_offset": -54
       }
     ],
     "obstacles": [],
+    "stones": [],
     "enemies": [],
-    "stones": [
-      {
-        "x": 200,
-        "image": "images/crate",
-        "target_id": "target1",
-        "y": -5
-      },
-      {
-        "x": 410,
-        "image": "images/crate",
-        "target_id": "target2",
-        "y": -5
-      }
-    ]
-  },
-  "reward_steel": 30
+    "delivery_targets": [],
+    "bunker": {
+      "x": 1387
+    },
+    "npc": {
+      "x": 162,
+      "y": 0,
+      "hp": 80,
+      "mode": "HOLD",
+      "speed": 12,
+      "range": 40,
+      "duration": 20
+    },
+    "objective": {
+      "type": "PROTECT",
+      "description": "Protect the escort"
+    },
+    "dialog": {
+      "image": "images/dialog_bg",
+      "lines": [
+        "WALK WITH ME TO THE SHELTER.",
+        "GET NEW PARTS, MAKE YOU STRONG."
+      ]
+    }
+  }
 }

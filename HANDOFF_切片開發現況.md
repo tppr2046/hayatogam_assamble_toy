@@ -396,12 +396,18 @@ for f in sorted(glob.glob('Source/levels/*.json')):
 **現行規則**:
 - 「本場景目標」不再有空值,一律有值(預設 `ELIMINATE_ALL`)
 - **頂層 `objective` ＝ 第 1 個場景的目標**
-- `category` 由目標推導後照舊輸出(只為與既有檔案格式一致)
+- ★ **`category` 已完全移除**(2026-08-12):8 個關卡檔都拿掉了,編輯器也不再輸出。
+  確認方式:`grep -rn "\.category" Source/ --include=*.lua` 只會命中 `state_hq` 的
+  `parts_by_category` / `selected_category`(那是**零件**的 TOP/BOTTOM 分類,與任務無關)
 - 目標描述表抽成共用的 `OBJECTIVE_DESC`,`sceneToJSON` 與 `buildMissionObject` 共用一份
 
 ⚠️ **載入舊檔的陷阱**:場景沒有自己的 objective 時,預設值**必須取「整關的 objective」**,
-不能寫死 `ELIMINATE_ALL` —— 否則 M002/M003/M005 這些 DELIVER 關會被讀成清敵。
+不能寫死 `ELIMINATE_ALL` —— 否則 DELIVER 類的關卡會被讀成清敵。
 (已用真實的 8 個關卡檔模擬「載入 → 匯出」對照過,7 關完全一致。)
+
+★ **新增關卡時的自我檢查**:目標與場景物件要對得起來 ——
+`REACH` 需要 `reach`、`PROTECT` 需要 `npc`、`DELIVER_STONE` 需要 `delivery_targets`、
+`BOSS_KILL` 需要 `enemies` 裡有 `type: "BOSS"`。缺了不會報錯,但那關**永遠過不了**。
 
 ### ★ 6-5. 頂層 objective 與場景 objective 要對得起來
 

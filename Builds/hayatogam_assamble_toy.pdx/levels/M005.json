@@ -9,7 +9,6 @@
     "type": "DELIVER_STONE"
   },
   "id": "M005",
-  "category": "DELIVER_STONE",
   "prerequisite": "M003",
   "scene": {
     "dialog": {

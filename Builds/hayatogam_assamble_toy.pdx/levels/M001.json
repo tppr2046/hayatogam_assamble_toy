@@ -1,17 +1,16 @@
 {
   "id": "M001",
-  "name": "MISSION 1",
-  "category": "ELIMINATION",
-  "description": "MISSION 1",
+  "name": "1 RESCUE MISSION ",
+  "description": "1 RESCUE MISSION ",
   "prerequisite": 0,
   "time_limit": 60,
   "objective": {
-    "type": "ELIMINATE_ALL",
-    "description": "Defeat all enemies"
+    "type": "REACH",
+    "description": "Reach the goal"
   },
-  "reward_steel": 35,
-  "reward_copper": 10,
-  "reward_rubber": 15,
+  "reward_steel": 0,
+  "reward_copper": 0,
+  "reward_rubber": 0,
   "scene": {
     "width": 1200,
     "ground_y": 220,
@@ -167,42 +166,48 @@
     "enemies": [
       {
         "type": "SHIELD_ROBOT",
-        "x": 324,
-        "y": 0
+        "x": 590,
+        "y": -13
       },
       {
         "type": "BASIC_ENEMY",
-        "x": 550,
+        "x": 462,
         "y": -17
       },
       {
         "type": "BASIC_ENEMY",
-        "x": 726,
+        "x": 752,
         "y": 0
       },
       {
         "type": "BASIC_ENEMY",
-        "x": 1068,
+        "x": 1008,
         "y": 0
       },
       {
         "type": "SWORD_ENEMY",
-        "x": 466,
-        "y": -17
+        "x": 333,
+        "y": 0
       },
       {
         "type": "SWORD_ENEMY",
-        "x": 839,
+        "x": 863,
         "y": 0
       }
     ],
     "delivery_targets": [],
+    "reach": {
+      "x": 1132
+    },
+    "objective": {
+      "type": "REACH",
+      "description": "Reach the goal"
+    },
     "dialog": {
       "image": "images/dialog_bg",
       "lines": [
-        "Please...Pilot, the world is counting on you!",
-        "Choose your parts to operate your parts.",
-        "Defeat the enemies to complete the mission."
+        "I HIDE IN A SHELTER.",
+        "GO HERE AND RESCUE ME."
       ]
     }
   }

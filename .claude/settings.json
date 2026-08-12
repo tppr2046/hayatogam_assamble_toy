@@ -41,7 +41,9 @@
       "Bash(awk '/^    \\(else\\)?if part_type ==/{branch=$0; haspd=0} /local pdata/{haspd=1} /pdata\\\\./{if\\(branch!=\"\" && haspd==0\\) print NR\": \"branch\" → 用了 pdata 但分支內沒 local\"}' Source/entity_mech.lua)",
       "Bash(cd \"E:/game_develop/2025_1207_hayatojam_playdate/hayatogam_assamble_toy\" && grep -n \"enemy:update\\\\|for _, enemy in ipairs\\(self.enemies\\)\\\\|is_alive\" Source/entity_controller.lua | head -20 && echo \"=== updateAll 敵人迴圈 ===\" && sed -n '/-- 更新敵人/,/^    end/p' Source/entity_controller.lua | head -40)",
       "Bash(sed -n '/\\\\[\"SHIELD_ROBOT\"\\\\]/,/^    },/p' Source/enemy_data.lua)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(python - __TRACKED_VAR__/level_editor.html __TRACKED_VAR__/editor_check.js)",
+      "Bash(node --check __TRACKED_VAR__/editor_check.js)"
     ],
     "additionalDirectories": [
       "e:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source\\images",

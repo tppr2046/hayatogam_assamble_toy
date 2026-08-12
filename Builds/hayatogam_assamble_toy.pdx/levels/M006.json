@@ -193,7 +193,6 @@
     "reward_steel": 10
   },
   "prerequisite": "M004",
-  "category": "ELIMINATION",
   "time_limit": -1,
   "name": "MORE ENEMIES",
   "objective": {
