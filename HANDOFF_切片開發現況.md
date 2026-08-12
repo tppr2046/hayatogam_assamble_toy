@@ -378,6 +378,53 @@ for f in sorted(glob.glob('Source/levels/*.json')):
 ```
 ★ 新增關卡後跑一次 —— **少了天空層畫面不會報錯,只是變空,很容易漏掉**。
 
+
+### ★ 6-4. 目標(objective)是唯一來源,`category` 已不再手動選(2026-08-12)
+
+編輯器原本有「類型」與「本場景目標」**兩個**下拉,已移除「類型」。
+
+**為什麼不能只是拔掉選單**:`category` 雖然**遊戲完全沒讀**
+(`grep -rn category Source/*.lua` 只會命中 `state_hq` 的 `parts_by_category`,那是零件分類、無關),
+但它原本**驅動著頂層 `objective`** —— 而頂層 objective 遊戲**有讀三處**:
+
+| 讀取點 | 用途 |
+|---|---|
+| `state_mission_select.lua` | 選關列表顯示的目標文字 |
+| `state_hq.lua` | 出擊前的任務說明 |
+| `state_mission.lua` | **場景沒帶 objective 時的後備**(`scene.objective or mission.objective`) |
+
+**現行規則**:
+- 「本場景目標」不再有空值,一律有值(預設 `ELIMINATE_ALL`)
+- **頂層 `objective` ＝ 第 1 個場景的目標**
+- `category` 由目標推導後照舊輸出(只為與既有檔案格式一致)
+- 目標描述表抽成共用的 `OBJECTIVE_DESC`,`sceneToJSON` 與 `buildMissionObject` 共用一份
+
+⚠️ **載入舊檔的陷阱**:場景沒有自己的 objective 時,預設值**必須取「整關的 objective」**,
+不能寫死 `ELIMINATE_ALL` —— 否則 M002/M003/M005 這些 DELIVER 關會被讀成清敵。
+(已用真實的 8 個關卡檔模擬「載入 → 匯出」對照過,7 關完全一致。)
+
+### ★ 6-5. 頂層 objective 與場景 objective 要對得起來
+
+2026-08-12 因為上面那項而發現:**M008 的頂層 objective 是錯的** ——
+三個場景都是 `PROTECT`,頂層卻寫 `ELIMINATE_ALL` + `description: "demo"`,
+所以選關列表與 HQ 把那關的說明顯示成 `demo`。玩法不受影響(場景各自有 objective 會覆寫),純粹是顯示錯。已修正。
+
+**盤點指令**(改完關卡跑一次):
+```bash
+python -c "
+import json,glob
+for f in sorted(glob.glob('Source/levels/*.json')):
+    m=json.load(open(f,encoding='utf-8'))
+    top=(m.get('objective') or {}).get('type')
+    sc=m.get('scenes') or ([m['scene']] if 'scene' in m else [])
+    types=[(s.get('objective') or {}).get('type') for s in sc]
+    first=types[0] if types else None
+    print('%-5s 頂層=%-14s 場景=%s%s'%(m['id'],top,types,
+          '' if (first is None or first==top) else '  ★不一致'))
+"
+```
+★ 場景是 `None` 代表它沿用頂層,那是正常的;**只有「場景 1 有值且與頂層不同」才要修**。
+
 ---
 
 ## 7. 使用者偏好(從協作觀察)

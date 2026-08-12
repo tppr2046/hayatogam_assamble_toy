@@ -7,8 +7,8 @@
   "prerequisite": 0,
   "time_limit": -1,
   "objective": {
-    "type": "ELIMINATE_ALL",
-    "description": "demo"
+    "type": "PROTECT",
+    "description": "Protect the escort"
   },
   "reward_steel": 20,
   "reward_copper": 20,
