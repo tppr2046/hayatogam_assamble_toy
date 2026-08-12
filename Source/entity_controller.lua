@@ -440,11 +440,43 @@ local LASER_OFFSCREEN_MARGIN = 240
 -- 每道光束記著自己打過誰（`hit` 集合），所以同一發不會對同一隻重複扣血，
 -- 但會沿路把碰到的每一隻都打一次。
 -- ★ 與 BOSS 雷射的差別：BOSS 是「瞬間一整條到畫面邊緣」，這裡是**會飛的短線段**。
+-- 線段(P → P+D) vs 矩形 的相交判定（slab method）。
+-- ★ 雷射在斜坡上是**斜的**，不能再用「水平帶」判定，否則會出現
+--   「畫面上明明穿過去卻沒扣血」。
+local function segIntersectsRect(px, py, dx, dy, minx, miny, maxx, maxy)
+    local t0, t1 = 0, 1
+    local p = { px, py }
+    local d = { dx, dy }
+    local lo = { minx, miny }
+    local hi = { maxx, maxy }
+    for i = 1, 2 do
+        if math.abs(d[i]) < 1e-9 then
+            if p[i] < lo[i] or p[i] > hi[i] then return false end
+        else
+            local inv = 1 / d[i]
+            local ta = (lo[i] - p[i]) * inv
+            local tb = (hi[i] - p[i]) * inv
+            if ta > tb then ta, tb = tb, ta end
+            if ta > t0 then t0 = ta end
+            if tb < t1 then t1 = tb end
+            if t0 > t1 then return false end
+        end
+    end
+    return true
+end
+
 function EntityController:addPlayerLaser(x, y, vx, vy, length, thickness, damage, max_range)
     self.player_lasers = self.player_lasers or {}
+    vx = vx or 300
+    vy = vy or 0
+    -- ★ 單位方向：光束的**線段方向必須跟著發射方向**（斜坡上槍口是斜的）。
+    --   速度已由 MechController:applyMechTilt 依地形角度旋轉過。
+    local sp = math.sqrt(vx * vx + vy * vy)
+    if sp < 1e-6 then sp = 1 end
     table.insert(self.player_lasers, {
         x = x, y = y,
-        vx = vx or 300, vy = vy or 0,
+        vx = vx, vy = vy,
+        dx = vx / sp, dy = vy / sp,
         length = length or 40,
         thickness = thickness or 3,
         damage = damage or 0,
@@ -464,16 +496,16 @@ function EntityController:updatePlayerLasers(dt)
         L.y = L.y + L.vy * dt
         L.travelled = L.travelled + step
 
-        -- 命中：線段 [x, x+length] × [y ± 厚度/2] 與敵人矩形相交
+        -- 命中：光束線段（沿發射方向）與敵人矩形相交。
+        -- 厚度用「把矩形往外脹半個厚度」來近似，等同於粗線段。
         local half = L.thickness / 2
-        local top, bot = L.y - half, L.y + half
-        local x0 = math.min(L.x, L.x + L.length)
-        local x1 = math.max(L.x, L.x + L.length)
+        local segdx, segdy = L.dx * L.length, L.dy * L.length
         for _, enemy in ipairs(self.enemies or {}) do
             if enemy.is_alive and not L.hit[enemy] and self:isEngageable(enemy.x, enemy.width) then
                 local ex1 = enemy.x + (enemy.width or 0)
                 local ey1 = enemy.y + (enemy.height or 0)
-                if ex1 >= x0 and enemy.x <= x1 and ey1 >= top and enemy.y <= bot then
+                if segIntersectsRect(L.x, L.y, segdx, segdy,
+                                     enemy.x - half, enemy.y - half, ex1 + half, ey1 + half) then
                     L.hit[enemy] = true      -- ★ 標記後就不再對這隻扣血（貫穿但不重複傷害）
                     -- 地雷：沿用既有的觸發機制（不是直接扣血）
                     if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
@@ -485,16 +517,26 @@ function EntityController:updatePlayerLasers(dt)
                         if enemy.type_id == "SHIELD_ROBOT" and enemy.shield_raised and L.vx > 0 then
                             local sx = enemy.x + (enemy.shield_offset_x or 0)
                             local st = enemy.y + (enemy.shield_offset_y or 0)
-                            if bot >= st and top <= st + (enemy.shield_height or 0) then
+                            local sw = enemy.shield_width or 0
+                            local shh = enemy.shield_height or 0
+                            if segIntersectsRect(L.x, L.y, segdx, segdy,
+                                                 sx - half, st - half, sx + sw + half, st + shh + half) then
                                 blocked = true
-                                self:addHitSpark(sx + (enemy.shield_width or 0), L.y)
+                                self:addHitSpark(sx + sw, st + shh / 2)
                             end
                         end
                         if not blocked then
                             enemy.hp = enemy.hp - L.damage
                             enemy.hit_shake_timer = 0.3
                             enemy.hit_shake_offset_x = 0
-                            self:addHitSpark(math.max(x0, math.min(enemy.x, x1)), L.y)
+                            -- 命中點：把敵人中心投影到光束線段上（夾在 0~1），
+                            -- 斜射時火花才會落在光束上而不是水平推算的位置
+                            local cx = (enemy.x + ex1) / 2 - L.x
+                            local cy = (enemy.y + ey1) / 2 - L.y
+                            local len2 = segdx * segdx + segdy * segdy
+                            local tt = (len2 > 0) and ((cx * segdx + cy * segdy) / len2) or 0
+                            tt = math.max(0, math.min(1, tt))
+                            self:addHitSpark(L.x + segdx * tt, L.y + segdy * tt)
                             if enemy.hp <= 0 and not enemy.is_exploding then
                                 enemy.is_exploding = true
                                 enemy.exploding_frame_index = 0
@@ -513,7 +555,10 @@ function EntityController:updatePlayerLasers(dt)
         local screen_x = L.x - (self.camera_x or 0)
         if L.travelled >= L.max_range
            or screen_x > 400 + LASER_OFFSCREEN_MARGIN
-           or screen_x + L.length < -LASER_OFFSCREEN_MARGIN then
+           or screen_x + L.length < -LASER_OFFSCREEN_MARGIN
+           -- 斜射（斜坡上）會往上下飛出畫面，垂直方向也要回收
+           or L.y < -LASER_OFFSCREEN_MARGIN
+           or L.y > 240 + LASER_OFFSCREEN_MARGIN then
             table.remove(self.player_lasers, i)
         end
     end
@@ -1384,12 +1429,13 @@ function EntityController:draw(camera_x)
 
     -- [[ 雷射槍 ]] 玩家光束：白外框 + 黑芯（與 BOSS 雷射同一套畫法，只是短很多）
     for _, L in ipairs(self.player_lasers or {}) do
-        local sx = L.x - camera_x
-        local ex = sx + L.length
+        -- ★ 沿發射方向畫（斜坡上槍口是斜的），不是固定水平
+        local sx, sy = L.x - camera_x, L.y
+        local ex, ey = sx + L.dx * L.length, sy + L.dy * L.length
         gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(L.thickness + 4)
-        gfx.drawLine(sx, L.y, ex, L.y)
+        gfx.drawLine(sx, sy, ex, ey)
         gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(L.thickness)
-        gfx.drawLine(sx, L.y, ex, L.y)
+        gfx.drawLine(sx, sy, ex, ey)
         gfx.setLineWidth(1)
     end
 
