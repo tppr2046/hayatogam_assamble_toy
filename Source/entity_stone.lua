@@ -31,9 +31,18 @@ function Stone:init(x, y, ground_y, target_id, image_path)
         end
     else
         -- 預設圖片
-        pcall(function()
-            stone_img = playdate.graphics.image.new("images/stone")
+        -- [[ 2026-08-09 ]] 運送物由 stone 改為 crate（24×19）。尺寸一律讀圖，改圖不必改程式。
+        local ok, img = pcall(function()
+            return playdate.graphics.image.new("images/crate")
         end)
+        if ok and img then
+            stone_img = img
+            local ok_size, w, h = pcall(function() return img:getSize() end)
+            if ok_size and w and h then
+                img_width = w
+                img_height = h
+            end
+        end
     end
     
     local stone = {
@@ -81,10 +90,13 @@ function Stone:update(dt, gravity, entity_controller)
 end
 
 function Stone:draw(camera_x)
-    if self.is_placed then
-        return  -- 已放置的石頭不顯示
+    -- [[ 2026-08-09 ]] 判斷改用 is_hidden，不再是 is_placed ——
+    -- 放上目標後箱子要**跟著目標一起飛走**，所以那段期間仍需繪製；
+    -- 等目標飛完消失時才由 entity_controller 設 is_hidden。
+    if self.is_hidden then
+        return
     end
-    
+
     local screen_x = self.x - camera_x
     if self.image then
         pcall(function() self.image:draw(screen_x, self.y) end)

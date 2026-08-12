@@ -276,11 +276,12 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
                 pcall(function() pdata._base_img:draw(px, py_top) end)
             end
         end
-        -- 繪製砲管（旋轉）
+        -- 繪製砲管（旋轉）；barrel_offset_y 讓砲管坐在底座上方（底座不動）
+        local barrel_y = part_y + (pdata.barrel_offset_y or 0)
         if rotation_angle ~= 0 then
-            pcall(function() pdata._img:drawRotated(px + iw/2, part_y + ih/2, rotation_angle) end)
+            pcall(function() pdata._img:drawRotated(px + iw/2, barrel_y + ih/2, rotation_angle) end)
         else
-            pcall(function() pdata._img:draw(px, part_y) end)
+            pcall(function() pdata._img:draw(px, barrel_y) end)
         end
     else
         -- 使用靜態圖片
@@ -302,10 +303,14 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
         pcall(function() pdata._img:draw(px, part_y) end)
     end
     
-    -- 計算底座中心點
-    local pivot_x = px + iw / 2
-    local pivot_y = part_y + ih / 2
-    
+    -- [[ 支點 2026-08-08 ]] 臂的旋轉中心＝底座**右邊那顆齒輪**的圓心，
+    -- 不再用「底座圖的正中央」——底座有兩顆齒輪，正中央落在兩顆之間，臂會裝錯位置。
+    -- 座標全部從 parts_data 讀（量自圖片像素），換圖只要重量、不必改程式。
+    local mount_x = pdata.arm_mount_x or (iw / 2)
+    local mount_y = pdata.arm_mount_y or (ih / 2)
+    local pivot_x = px + mount_x
+    local pivot_y = part_y + mount_y
+
     -- 繪製臂和爪子
     if pdata._arm_img then
         local arm_ok, arm_w, arm_h = pcall(function() return pdata._arm_img:getSize() end)
@@ -313,31 +318,46 @@ function MechController:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
             local angle_rad = math.rad(-self.claw_arm_angle)
             local cos_a = math.cos(angle_rad)
             local sin_a = math.sin(angle_rad)
-            local arm_center_offset_x = arm_w / 2
-            local rotated_dx = arm_center_offset_x * cos_a
-            local rotated_dy = arm_center_offset_x * sin_a
-            local arm_center_x = pivot_x + rotated_dx
-            local arm_center_y = pivot_y + rotated_dy
-            
+
+            -- 臂圖內的旋轉中心（預設沿用舊行為：左緣中點）
+            local apx = pdata.arm_pivot_x or 0
+            local apy = pdata.arm_pivot_y or (arm_h / 2)
+            -- 把「圖心相對旋轉中心」的向量轉一次，得到 drawRotated 要的圖心位置
+            local dcx = arm_w / 2 - apx
+            local dcy = arm_h / 2 - apy
+            local arm_center_x = pivot_x + dcx * cos_a - dcy * sin_a
+            local arm_center_y = pivot_y + dcx * sin_a + dcy * cos_a
+
             pcall(function() pdata._arm_img:drawRotated(arm_center_x, arm_center_y, -self.claw_arm_angle) end)
+
+            -- 爪子的開合軸＝臂右端圓盤的圓心（不是圖的右邊緣），同樣繞旋轉中心轉
+            local cpx = (pdata.claw_pivot_x or arm_w) - apx
+            local cpy = (pdata.claw_pivot_y or (arm_h / 2)) - apy
+            local claw_pivot_x = pivot_x + cpx * cos_a - cpy * sin_a
+            local claw_pivot_y = pivot_y + cpx * sin_a + cpy * cos_a
             
-            -- 計算臂末端位置（爪子軸心）
-            local arm_end_rotated_dx = arm_w * cos_a
-            local arm_end_rotated_dy = arm_w * sin_a
-            local claw_pivot_x = pivot_x + arm_end_rotated_dx
-            local claw_pivot_y = pivot_y + arm_end_rotated_dy
-            
-            -- 繪製上爪
-            if pdata._upper_img then
-                local total_angle = -self.claw_arm_angle - self.claw_grip_angle + rotation_angle
-                pcall(function() pdata._upper_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
+            -- [[ 支點 2026-08-08 ]] 上下爪各自繞**自己的鉸鏈點**旋轉（上爪左下角、下爪左上角），
+            -- 不是繞圖心。drawRotated 的軸心固定是圖心，所以要自己把圖心擺到
+            -- 「開合軸 + (圖心−鉸鏈點) 轉過角度後」的位置。
+            local function drawJaw(img, gx, gy, total_angle)
+                if not img then return end
+                local ok, jw, jh = pcall(function() return img:getSize() end)
+                if not (ok and jw and jh) then return end
+                -- ★ 這裡的角度必須與傳給 drawRotated 的**完全相同**（含正負），
+                --   否則圖心會被擺到鏡射的位置＝支點看起來跑掉。
+                --   對照上方臂的寫法：angle_rad 與 drawRotated 都用 -claw_arm_angle。
+                local r = math.rad(total_angle)
+                local c, s = math.cos(r), math.sin(r)
+                local dx, dy = jw / 2 - gx, jh / 2 - gy
+                pcall(function()
+                    img:drawRotated(claw_pivot_x + dx * c - dy * s,
+                                    claw_pivot_y + dx * s + dy * c, total_angle)
+                end)
             end
-            
-            -- 繪製下爪
-            if pdata._lower_img then
-                local total_angle = -self.claw_arm_angle + self.claw_grip_angle + rotation_angle
-                pcall(function() pdata._lower_img:drawRotated(claw_pivot_x, claw_pivot_y, total_angle) end)
-            end
+            drawJaw(pdata._upper_img, pdata.upper_pivot_x or 0, pdata.upper_pivot_y or 12,
+                    -self.claw_arm_angle - self.claw_grip_angle + rotation_angle)
+            drawJaw(pdata._lower_img, pdata.lower_pivot_x or 0, pdata.lower_pivot_y or 0,
+                    -self.claw_arm_angle + self.claw_grip_angle + rotation_angle)
         end
     end
 end
@@ -397,13 +417,17 @@ function MechController:drawActivePart(item, draw_x, body_draw_y, mech_grid, fee
         
         -- 繪製砲管（旋轉）
         if pdata._img then
+            -- barrel_offset_y：砲管與其旋轉軸心一起上移（底座不動）。
+            -- ★ 軸心必須跟著移，否則砲管會繞著自己下方的點擺動；
+            --   發射點也用同一個偏移（entity_mech.lua 的 pivot_y），兩邊要一致。
+            local b_off = pdata.barrel_offset_y or 0
             local pivot_x = draw_x + cx + cell_size / 2
-            local pivot_y = body_draw_y + cy + cell_size / 2
-            
+            local pivot_y = body_draw_y + cy + cell_size / 2 + b_off
+
             local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
             if ok and iw and ih then
                 local original_x = draw_x + cx
-                local original_y = body_draw_y + cy + cell_size - ih
+                local original_y = body_draw_y + cy + cell_size - ih + b_off
                 local img_center_x = original_x + iw / 2
                 local img_center_y = original_y + ih / 2
                 local dx_from_pivot = img_center_x - pivot_x
@@ -581,12 +605,17 @@ function MechController:drawPartUI(part_id, x, y, size)
             -- 檢查是否為當前激活的零件
             local is_active = (self.active_part_id == part_id)
             
-            -- 繪製 claw_control_v（左邊控制器）
-            -- [[ A3 ]] 舊制此圖回應上下鍵（當時上下鍵控臂）；新制上下鍵=切換焦點、
-            -- crank 控臂，故固定顯示預設 frame，避免誤導
-            local control_v_table = ui.claw_control_v
-            if control_v_table then
-                local control_img = control_v_table:getImage(1)
+            -- [[ 2026-08-08 ]] 左格＝**爪子開合的開關**，反映 claw_is_closed。
+            -- [[ 2026-08-10 ]] 換成專屬圖 claw-button-table-32-32（2 格）：
+            --   **第 1 格＝開、第 2 格＝夾起**
+            -- ★ 順序與已刪除的舊佔位圖 claw_control_v 相反（舊圖 1=關 / 2=開），
+            --   之後若再換圖，先確認新圖的格順序再改這一行。
+            local button_table = ui.claw_button
+            if button_table then
+                local frame = self.claw_is_closed and 2 or 1
+                local n = button_table:getLength() or 1
+                if frame > n then frame = 1 end
+                local control_img = button_table:getImage(frame)
                 if control_img then
                     -- 左對齊繪製
                     pcall(function() control_img:draw(x, y) end)
@@ -605,6 +634,49 @@ function MechController:drawPartUI(part_id, x, y, size)
                     local control_x = x + panel_w - rw
                     pcall(function() rotated_control:draw(control_x, y + (size - rh)/2) end)
                 end
+            end
+        elseif part_type == "GUN" then
+            -- [[ 雷射槍 GUN2 2026-08-11 ]] 手動槍（operable）＝ 面板 + 右格 A 鈕。
+            -- 全自動的 GUN（operable=false）沒有操作，只畫面板。
+            pcall(function() panel_img:draw(x, y) end)
+            if pdata.operable then
+                local panel_w = panel_img:getSize()   -- A 鈕接在面板右邊（同 WHEEL/FEET 的作法）
+                local button_table = ui.canon_button  -- 共用 canon_button-table-32-32（1=放開 / 2=按下）
+                if button_table then
+                    -- 按下狀態只在焦點是自己時才反映（同 CANON）
+                    local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
+                    local button_img = button_table:getImage(pressed and 2 or 1)
+                    if button_img then
+                        pcall(function() button_img:draw(x + panel_w, y) end)
+                    end
+                end
+            end
+        elseif part_type == "WHEEL" or part_type == "FEET" then
+            -- [[ 版面 ]] 2026-08-08：wheel_panel 由 3 格（96px）縮成 **2 格（64px）**，
+            -- 空出來的第 3 格放跳躍鈕。零件本身仍佔 3 格，所以第 3 格一定存在。
+            pcall(function() panel_img:draw(x, y) end)
+            local panel_w = panel_img:getSize()   -- 第 3 格的起點，由圖寬決定（換圖自動跟上）
+
+            -- [[ 跳躍 ]] 第 3 格的內容取決於「能不能跳」：
+            --   能跳（核心加成 > 0）→ A 鈕（1=放開 / 2=按下）
+            --   不能跳（CORE1 的 jump_mult = 0）→ empty 面板，讓格子看起來是空的而不是缺一塊
+            -- ⚠️ 目前沿用 CANON 的 canon_button 當佔位圖，日後換成專屬跳躍鈕即可。
+            local is_active = (self.active_part_id == part_id)
+            local drew_button = false
+            if self.can_jump then
+                local button_table = ui.canon_button
+                if button_table then
+                    -- 按下狀態只在焦點是自己時才反映（同 CANON 的作法）
+                    local pressed = is_active and self.jump_button_pressed
+                    local button_img = button_table:getImage(pressed and 2 or 1)
+                    if button_img then
+                        pcall(function() button_img:draw(x + panel_w, y) end)
+                        drew_button = true
+                    end
+                end
+            end
+            if not drew_button and ui.empty then
+                pcall(function() ui.empty:draw(x + panel_w, y) end)
             end
         else
             -- 其他零件直接繪製
@@ -628,9 +700,9 @@ function MechController:drawPartUI(part_id, x, y, size)
                 pcall(function() rotated_img:draw(center_x - rw/2, center_y - rh/2) end)
             end
         elseif part_type == "WHEEL" or part_type == "FEET" then
-            -- WHEEL/FEET 的 stick 左右移動
-            -- 假設 panel 是 96 像素寬（3 格）
-            local panel_img_width = 96
+            -- WHEEL/FEET 的 stick 在 panel 上左右移動。
+            -- ★ 寬度改讀實際圖寬（2026-08-08 panel 由 96 縮成 64；寫死 96 會讓 stick 偏右 16px）
+            local panel_img_width = (panel_img and panel_img:getSize()) or 64
             local center_x = x + panel_img_width / 2 + self.wheel_stick_offset
             local center_y = y + size / 2
             local sw, sh = stick_img:getSize()

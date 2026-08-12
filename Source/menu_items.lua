@@ -7,6 +7,26 @@
 
 local MenuItems = {}
 
+-- ⚠️ [[ 暫時：測試用 ]] 2026-08-07 加入的核心切換，**正式版要移除**。
+-- 核心的取得時機（幕別解鎖）與更換介面都還沒做（GDD §8.05），
+-- 但 CORE1 的 jump_mult = 0 代表預設狀態完全不能跳，沒有東西可以測。
+-- 這個選項讓你在 HQ 與關卡中隨時切 CORE1/2/3，驗證 HP、負重上限、跳躍高度。
+-- 移除時：刪掉 addCoreSwitcher() 與下方兩處呼叫即可。
+local function addCoreSwitcher(menu)
+    if not (menu and _G.CoreData and _G.CoreData.order) then return end
+    local order = _G.CoreData.order
+    menu:addOptionsMenuItem("CORE(test)", order, _G.GameState and _G.GameState.core_id or order[1],
+        function(value)
+            _G.GameState = _G.GameState or {}
+            _G.GameState.core_id = value
+            local c = _G.CoreData.get(value)
+            print(string.format("LOG: [test] core -> %s  hp=%d cap=%d jump x%.1f",
+                                value, c.base_hp, c.weight_cap, c.jump_mult))
+            -- HP / 負重上限要立刻反映（recalcMechStats 是 state_hq 掛在 _G 的全域函式）
+            if _G.recalcMechStats then _G.recalcMechStats() end
+        end)
+end
+
 -- 清除所有自訂選單項目（切換狀態時呼叫，避免殘留）
 function MenuItems.clear()
     local menu = playdate.getSystemMenu()
@@ -26,11 +46,13 @@ function MenuItems.installForMission()
         print("LOG: menu Mission Select")
         setState(_G.StateMissionSelect)
     end)
+    addCoreSwitcher(menu)   -- ⚠️ 暫時：測試用，正式版移除
 end
 
--- 前端（HQ / 選關）：目前無自訂項目，僅清除任務選單的殘留
+-- 前端（HQ / 選關）：僅清除任務選單的殘留
 function MenuItems.installForFrontend()
     MenuItems.clear()
+    addCoreSwitcher(playdate.getSystemMenu())   -- ⚠️ 暫時：測試用，正式版移除
 end
 
 return MenuItems

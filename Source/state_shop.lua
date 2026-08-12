@@ -223,17 +223,23 @@ local function drawPartImage(part_id, part_data, bx, by, bw, bh, scale)
     local cy = by + bh / 2
     local img_x = cx - iw * scale / 2
     local img_y = cy - ih * scale / 2
-    if part_id == "CANON1" or part_id == "CANON2" then
+    if part_data.part_type == "CANON" then
         local ok_b, bw2, bh2 = false, nil, nil
         if part_data._base_img then
             ok_b, bw2, bh2 = pcall(function() return part_data._base_img:getSize() end)
         end
         if ok_b and bw2 and bh2 then
-            local base_x = cx - bw2 * scale / 2
-            local base_y = cy - bh2 * scale / 2
-            pcall(function() part_data._base_img:drawScaled(base_x, base_y, scale) end)
-            -- 砲管最左側對齊底座中心點
-            pcall(function() part_data._img:drawScaled(cx, img_y, scale) end)
+            -- [[ BUGFIX 2026-08-08 ]] 砲座與砲管**左緣對齊、底部對齊**，整組置中於框內。
+            -- 與機體上（entity_mech_render 的 drawPart）和 HQ 預覽框的畫法一致。
+            -- 舊版是「砲管最左側對齊底座中心點」——那是為 64×8 細長砲管設計的，
+            -- 砲管改成 40×16 之後會整根往右偏半個底座，跟裝在機體上的樣子對不起來。
+            local uw = math.max(bw2, iw)          -- 整組寬度（砲管 40 > 底座 32）
+            local uh = math.max(bh2, ih)
+            local ox = cx - uw * scale / 2
+            local oy = cy - uh * scale / 2
+            pcall(function() part_data._base_img:drawScaled(ox, oy + (uh - bh2) * scale, scale) end)
+            local b_off = (part_data.barrel_offset_y or 0) * scale
+            pcall(function() part_data._img:drawScaled(ox, oy + (uh - ih) * scale + b_off, scale) end)
         else
             pcall(function() part_data._img:drawScaled(img_x, img_y, scale) end)
         end

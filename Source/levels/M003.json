@@ -23,13 +23,13 @@
     "delivery_targets": [
       {
         "x": 350,
-        "image": "images/target_box",
+        "image": "images/target",
         "y": 0,
         "id": "target1"
       },
       {
         "x": 900,
-        "image": "images/target_box",
+        "image": "images/target",
         "y": 0,
         "id": "target2"
       }
@@ -70,6 +70,7 @@
     "obstacles": [],
     "reward_copper": 40,
     "ground_y": 220,
+    "sky": "images/bg_sky",
     "terrain": [
       {
         "height_offset": 0,
@@ -179,13 +180,13 @@
     "stones": [
       {
         "x": 200,
-        "image": "images/stone.png",
+        "image": "images/crate",
         "target_id": "target1",
         "y": -5
       },
       {
         "x": 510,
-        "image": "images/stone.png",
+        "image": "images/crate",
         "target_id": "target2",
         "y": -5
       }

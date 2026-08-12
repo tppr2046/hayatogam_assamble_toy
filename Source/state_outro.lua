@@ -1,7 +1,12 @@
--- state_intro.lua
--- [[ S9 開場過場 ]] 新遊戲開始的劇情：多頁（每頁一張圖 + 數句文字），
--- 呈現形式與關卡開始前的劇情畫面一致（上方靜圖 + 下方打字機文字框）。
--- A：加速/下一句/下一頁　B：跳過整段。結束後進入任務選擇。
+-- state_outro.lua
+-- [[ S11 結局過場 ]] 打倒最終 BOSS 後的結局劇情：多頁（每頁一張圖 + 數句文字），
+-- 呈現形式與開場過場（state_intro）完全一致：上方靜圖 + 下方打字機文字框。
+-- A：加速/下一句/下一頁　B：跳過整段。結束後進入 CREDITS（帶 THE END 標題）。
+--
+-- 與 state_intro 的差異只有三點：
+--   1. 讀 _G.OutroData 而非 _G.IntroData
+--   2. 圖片載不到時退回 images/dialog_bg（正式過場圖尚未產出）
+--   3. finish() 記錄 game_cleared 並進 StateCredits，而非任務選擇
 
 import "CoreLibs/graphics"
 
@@ -15,38 +20,45 @@ local SCREEN_HEIGHT = 240
 -- 三處必須一致：state_intro / state_outro / state_mission 的對話框。
 local DIALOG_Y = 163
 
-StateIntro = {}
+local FALLBACK_IMAGE = "images/dialog_bg"   -- 正式過場圖未就位時的暫代
+
+StateOutro = {}
 
 local pages = {}
 local page_index = 1
 local line_index = 1
 local typewriter_progress = 0
-local typewriter_speed = 30      -- 字/秒（與任務對話一致）
+local typewriter_speed = 30      -- 字/秒（與開場、任務對話一致）
 local page_image = nil
 
+local function tryLoad(path)
+    if not path then return nil end
+    local ok, img = pcall(function() return gfx.image.new(path) end)
+    if ok and img then return img end
+    return nil
+end
+
 local function loadPageImage()
-    page_image = nil
     local p = pages[page_index]
-    if p and p.image then
-        local ok, img = pcall(function() return gfx.image.new(p.image) end)
-        if ok and img then page_image = img end
-    end
+    page_image = tryLoad(p and p.image) or tryLoad(FALLBACK_IMAGE)
 end
 
 local function finish()
-    -- 記錄開場已看過（存檔保存；S10 教學亦使用 tutorial 表）
+    -- 記錄通關（存於 tutorial 表，save_manager 已會持久化，不必改存檔結構）
     _G.GameState = _G.GameState or {}
     _G.GameState.tutorial = _G.GameState.tutorial or {}
-    _G.GameState.tutorial.intro_done = true
+    _G.GameState.tutorial.outro_done = true
+    _G.GameState.tutorial.game_cleared = true
     if _G.SaveManager and _G.SaveManager.saveCurrent and _G.GameState.current_save_slot then
         _G.SaveManager.saveCurrent()
     end
-    setState(_G.StateMissionSelect)
+    print("LOG: outro finished -> credits")
+    setState(_G.StateCredits, true)   -- true＝從結局進來，credits 顯示 THE END
 end
 
-function StateIntro.setup()
+function StateOutro.setup()
     gfx.setFont(font)
-    local data = _G.IntroData or {}
+    local data = _G.OutroData or {}
     pages = data.pages or {}
     page_index = 1
     line_index = 1
@@ -57,12 +69,12 @@ function StateIntro.setup()
     end
     if _G.MenuItems and _G.MenuItems.clear then _G.MenuItems.clear() end
     if #pages == 0 then
-        print("LOG: intro has no pages, skipping")
+        print("LOG: outro has no pages, skipping")
         finish()
     end
 end
 
-function StateIntro.update()
+function StateOutro.update()
     local page = pages[page_index]
     if not page then finish() return end
     local lines = page.lines or {}
@@ -70,9 +82,9 @@ function StateIntro.update()
 
     typewriter_progress = typewriter_progress + typewriter_speed * (1 / 30)
 
-    -- B：跳過整段開場
+    -- B：跳過整段結局
     if playdate.buttonJustPressed(playdate.kButtonB) then
-        print("LOG: intro skipped")
+        print("LOG: outro skipped")
         finish()
         return
     end
@@ -96,18 +108,17 @@ function StateIntro.update()
     end
 end
 
-function StateIntro.draw()
+function StateOutro.draw()
     gfx.clear(gfx.kColorWhite)
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
 
-    -- 上方靜圖
+    -- 上方靜圖（實際可視區只有上方 136px，以下會被文字框蓋住）
     if page_image then
         pcall(function() page_image:draw(0, 0) end)
     end
 
-    -- 下方文字框（滿版寬度，與任務對話同樣式）
-    -- ★ 插圖可視區＝y < DIALOG_Y；以下整塊鋪白，所以圖在 163 以下畫什麼都不會被看到
+    -- 下方文字框（滿版寬度，與開場、任務對話同樣式；版面理由見 state_intro）
     local box_x, box_y, box_w, box_h = 0, DIALOG_Y, SCREEN_WIDTH, SCREEN_HEIGHT - DIALOG_Y
     gfx.setColor(gfx.kColorWhite)
     gfx.fillRect(box_x, box_y, box_w, box_h)
@@ -127,4 +138,4 @@ function StateIntro.draw()
     gfx.drawText(page_index .. "/" .. #pages, box_x + box_w - 40, SCREEN_HEIGHT - 20)
 end
 
-return StateIntro
+return StateOutro

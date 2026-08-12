@@ -21,9 +21,20 @@ StateMission = {}
 local SCREEN_WIDTH = 400
 local SCREEN_HEIGHT = 240
 local UI_HEIGHT = 64  -- 操作介面高度
+
+-- [[ S3 ]] 接管砲台時，機體站到砲台左側這麼遠的地方（機體中心 ↔ 砲台中心，px）。
+-- 目的:讓機體不要壓在砲台上，擋住上方的 B:exit 提示。
+-- ★ 必須 < weaponNear 的 range(44)，否則按 B 解除後機體會落在可接管範圍外、按不回 A。
+local TURRET_STAND_OFFSET = 40
+
+-- [[ 版面 ]] 場景對話框上緣。以上＝插圖可視區（400 × 163），以下＝滿版白底文字框。
+-- 三處必須一致：state_intro / state_outro / 本檔的場景對話。
+local DIALOG_Y = 163
 local GAME_HEIGHT = SCREEN_HEIGHT - UI_HEIGHT  -- 實際遊戲畫面高度
 local GRAVITY = 0.5
-local JUMP_VELOCITY = -10.0
+-- [[ 2026-08-07 移除 ]] 原本這裡有 `JUMP_VELOCITY = -10.0`，但**從來沒有被使用**
+-- （實際跳躍在 entity_mech.lua，由零件 jump_height × 核心 jump_mult 反推初速度）。
+-- 留著會讓人誤以為跳躍高度是 100px，實際上不是。已刪除。
 local MOVE_SPEED = 2.0
 local MECH_WIDTH = 24
 local MECH_HEIGHT = 32
@@ -45,8 +56,11 @@ local mech_draw_h = MECH_HEIGHT
 -- FEET 動畫相關
 local feet_imagetable = nil
 local feet_current_frame = 1  -- 當前幀 (1-based)
-local feet_frame_timer = 0    -- 計時器（毫秒）
-local feet_frame_delay = 100  -- 每幀延遲（毫秒）
+local feet_frame_timer = 0    -- 位移累加器（像素；舊版是毫秒計時器）
+-- [[ 手感 ]] 機體每水平移動這麼多像素，走路動畫換一幀。
+-- 越小＝步頻越快。要對準腳的「跨步距離」才不會有滑步感：
+-- 4 幀 × 8px = 一個完整循環走 32px，約等於 FEET 圖寬（48px）的 2/3。
+local FEET_STRIDE_PX = 8
 
 -- 任務狀態的局部變數
 local is_paused = false
@@ -398,14 +412,18 @@ function StateMission.update()
     mech_y_old = mech_y
     
     -- 0.1 更新 FEET 動畫
+    -- [[ 手感 ]] 2026-08-07：改為「依實際移動距離換幀」，不再用固定計時。
+    -- 原本每 100ms 換一幀，與機體實際位移無關 → 速度一改就對不上，產生滑步感
+    -- （腳在踏、地面卻沒跟著跑相同距離）。現在每移動 FEET_STRIDE_PX 換一幀，
+    -- 之後不論調 move_speed 或換幀數，腳步都會自動同步。
     if feet_imagetable and mech_controller then
         if mech_controller.feet_is_moving then
-            -- 移動時播放動畫
-            feet_frame_timer = feet_frame_timer + (1000 / 30)  -- 假設 30 FPS，每幀約 33ms
-            
-            if feet_frame_timer >= feet_frame_delay then
-                feet_frame_timer = 0
-                
+            -- 累加本幀的實際水平位移（像素）
+            feet_frame_timer = feet_frame_timer + math.abs(mech_controller.move_velocity or 0)
+
+            if feet_frame_timer >= FEET_STRIDE_PX then
+                feet_frame_timer = feet_frame_timer - FEET_STRIDE_PX   -- 保留餘數，避免累積誤差
+
                 local frame_count = feet_imagetable:getLength()
                 if mech_controller.feet_move_direction < 0 then
                     -- 向左：倒帶播放 (3 -> 2 -> 1 -> 3 ...)
@@ -453,6 +471,10 @@ function StateMission.update()
         if near and playdate.buttonJustPressed(playdate.kButtonA) then
             controlling_weapon = near
             weapon_fire_timer = 0
+            -- [[ S3 ]] 接管時把機體挪到砲台左側的固定位置，避免擋住上方的 B:exit 提示。
+            -- 以「機體中心」對齊 w.x - TURRET_STAND_OFFSET（中心＝mech_x + 24，與 weaponNear 同慣例）。
+            -- ★ 40 必須 < weaponNear 的 range(44)，否則按 B 解除後會立刻掉出可接管範圍、按不回 A。
+            mech_x = near.x - TURRET_STAND_OFFSET - 24
             if _G.SoundManager and _G.SoundManager.playSelect then _G.SoundManager.playSelect() end
         end
     end
@@ -632,15 +654,23 @@ function StateMission.update()
                     
                     if ok and base_w and base_h and arm_ok and arm_w and arm_h then
                         local base_y = base_y_top + (cell_size - base_h)
-                        local pivot_x = base_x + base_w / 2
-                        local pivot_y = base_y + base_h / 2
-                        
-                        -- 計算臂末端（爪子位置）
+                        -- [[ 支點 2026-08-08 ]] 與繪製端（drawClaw）用同一組座標：
+                        -- 旋轉中心＝底座右齒輪圓心、爪尖＝臂右端圓盤圓心。
+                        -- ★ 這裡是「抓取判定」的爪尖，必須跟畫面上的爪子同一點，
+                        --   否則會出現「看起來夾到了卻抓不到」。
+                        local pivot_x = base_x + (pdata.arm_mount_x or base_w / 2)
+                        local pivot_y = base_y + (pdata.arm_mount_y or base_h / 2)
+
                         local angle_rad = math.rad(-mech_controller.claw_arm_angle)
                         local cos_a = math.cos(angle_rad)
                         local sin_a = math.sin(angle_rad)
-                        local claw_tip_x = pivot_x + arm_w * cos_a
-                        local claw_tip_y = pivot_y + arm_w * sin_a
+                        -- ★ 再沿臂的方向往前 grip_hold_dist，落在**兩片爪的夾持凹口**上。
+                        --   只算到鉸鏈軸的話，石頭會黏在關節上，看起來像卡住而不是夾住。
+                        local cpx = (pdata.claw_pivot_x or arm_w) - (pdata.arm_pivot_x or 0)
+                                    + (pdata.grip_hold_dist or 0)
+                        local cpy = (pdata.claw_pivot_y or arm_h / 2) - (pdata.arm_pivot_y or arm_h / 2)
+                        local claw_tip_x = pivot_x + cpx * cos_a - cpy * sin_a
+                        local claw_tip_y = pivot_y + cpx * sin_a + cpy * cos_a
 
                         -- [[ 斜坡跟隨 ]] 繪製端（drawMechTilted）把整台機體繞
                         -- 「底部中心」旋轉 terrain_angle；爪尖的邏輯座標必須做
@@ -861,7 +891,9 @@ function StateMission.update()
                         if not stone.is_placed and stone.target_id then
                             -- 找到該石頭對應的目標
                             for _, target in ipairs(entity_controller.delivery_targets) do
-                                if target.id == stone.target_id and not target.is_completed then
+                                -- 排除「已飛走」與「飛行中」的目標，後者不能再接箱子
+                                if target.id == stone.target_id
+                                   and not target.is_completed and not target.fly_timer then
                                     -- 檢查石頭是否與目標物件碰撞
                                     if stone.x and stone.y and target.x and target.y then
                                         local stone_right = stone.x + stone.width
@@ -882,21 +914,25 @@ function StateMission.update()
                                                 _G.SoundManager.playTarget()
                                             end
 
-                                            -- [[ 放置成功特效 ]] 觸發擴散圓環特效（繪製在 entity_controller:draw；
-                                            -- 特效播完才允許過關，見下方勝利判定）
-                                            target.success_effect_duration = 0.8
-                                            target.success_effect_timer = target.success_effect_duration
-                                            
                                             -- 釋放爪子的引用
                                             if mech_controller and mech_controller.claw_grabbed_stone == stone then
                                                 mech_controller.claw_grabbed_stone = nil
                                                 print("LOG: Released claw grip on placed stone")
                                             end
-                                            
-                                            -- 檢查該目標是否完成
+
+                                            -- [[ 2026-08-09 ]] 收滿箱子 → **帶著箱子往左上飛走**
+                                            -- （取代舊的擴散圓環）。飛行與消失在
+                                            -- entity_controller:updateAll 處理。
+                                            -- ★ is_completed 由「飛完」時才設 —— 這裡不能設，
+                                            --   繪製迴圈會跳過 is_completed 的目標，
+                                            --   當幀設下去就等於目標與箱子瞬間消失、看不到飛走。
                                             if #target.placed_stones >= target.required_count then
-                                                target.is_completed = true
-                                                print("LOG: Target " .. target.id .. " completed!")
+                                                -- 先把所有箱子擺到平台上（與飛行途中同一個算法）
+                                                for _, s in ipairs(target.placed_stones) do
+                                                    s.x, s.y = entity_controller:stoneRestPos(target, s)
+                                                end
+                                                target.fly_timer = 0
+                                                print("LOG: Target " .. target.id .. " full -> flying away")
                                             end
                                             break
                                         end
@@ -915,10 +951,10 @@ function StateMission.update()
                         end
                     end
 
-                    -- [[ 放置成功特效 ]] 特效還在播就先不過關（與敵人爆炸同一模式）
+                    -- [[ 2026-08-09 ]] 目標還在往左上飛就先不過關（與 BOSS 爆炸同一模式：演出播完才結束）
                     local effect_playing = false
                     for _, target in ipairs(entity_controller.delivery_targets or {}) do
-                        if target.success_effect_timer and target.success_effect_timer > 0 then
+                        if target.fly_timer then
                             effect_playing = true
                             break
                         end
@@ -976,8 +1012,19 @@ function StateMission.update()
     end
 end
 
+-- [[ 可讀性 ]] 畫在遊戲世界之上的黑字（提示、HUD）一律先鋪白底，
+-- 否則會被深色背景（尤其天空層的黑雲、黑色地面）吃掉。
+local function drawTextOnWhite(text, x, y, pad)
+    pad = pad or 3
+    local tw, th = gfx.getTextSize(text)
+    gfx.setColor(gfx.kColorWhite)
+    gfx.fillRect(x - pad, y - pad, tw + pad * 2, (th or 14) + pad * 2)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawText(text, x, y)
+end
+
 function StateMission.draw()
-    gfx.clear(gfx.kColorWhite) 
+    gfx.clear(gfx.kColorWhite)
     gfx.setColor(gfx.kColorBlack)
     gfx.setFont(font)
     
@@ -996,7 +1043,8 @@ function StateMission.draw()
             pcall(function() dialog_image:draw(0, 0) end)
         end
         -- 下方對話框
-        local box_x, box_y, box_w, box_h = 10, SCREEN_HEIGHT - UI_HEIGHT - 40, SCREEN_WIDTH - 20, 80
+        -- 滿版文字框；插圖可視區＝y < DIALOG_Y（版面理由見 state_intro.lua）
+        local box_x, box_y, box_w, box_h = 0, DIALOG_Y, SCREEN_WIDTH, SCREEN_HEIGHT - DIALOG_Y
         gfx.setColor(gfx.kColorWhite)
         gfx.fillRect(box_x, box_y, box_w, box_h)
         gfx.setColor(gfx.kColorBlack)
@@ -1032,10 +1080,21 @@ function StateMission.draw()
         end
         
         if mech_explode_image_table then
-            local frame_count = mech_explode_image_table:getLength() or 1
-            local frame = mech_explode_image_table:getImage(mech_explode_frame_index + 1) or mech_explode_image_table:getImage(1)
+            local frame = mech_explode_image_table:getImage(mech_explode_frame_index + 1)
+                          or mech_explode_image_table:getImage(1)
             if frame then
-                pcall(function() frame:draw(mech_x - 25 + shake_offset, mech_y - 25) end)
+                -- ★ [[ BUGFIX 2026-08-08 ]] 原本是 frame:draw(mech_x - 25, mech_y - 25)，
+                --   **漏扣 camera_x**。mech_x 是世界座標，這裡要的是螢幕座標
+                --   （drawMech 會在內部扣掉，見 entity_mech_render.lua:23）。
+                --   結果是鏡頭捲得越遠、爆炸偏得越遠；關卡開頭 camera_x=0 時才剛好正確，
+                --   所以症狀是「有時候差很遠」。
+                -- 順帶把錨點從「機體左上角」改成「機體中心」，並用實際幀尺寸算，不寫死 25。
+                local ok, fw, fh = pcall(function() return frame:getSize() end)
+                fw = (ok and fw) or 50
+                fh = (ok and fh) or 50
+                local cx = mech_x + mech_draw_w / 2 - camera_x + shake_offset
+                local cy = mech_y + mech_draw_h / 2
+                pcall(function() frame:draw(cx - fw / 2, cy - fh / 2) end)
             end
         end
     elseif mech_controller then
@@ -1047,26 +1106,28 @@ function StateMission.draw()
         entity_controller:drawForeground(camera_x + shake_offset)
     end
 
-    -- 3. 繪製 HUD (HP 條)
-    local hp_bar_x = 10
-    local hp_text_y = 3               -- 數字位置維持不變
-    local hp_bar_y = 14               -- 血條往下 3px，避免與上方數字重疊
-    local hp_bar_width = 100
-    local hp_bar_height = 10
+    -- 3. [[ 版面 ]] 玩家血條已移到下方操作面板右側，成為面板的一部分
+    --    （見「4. 繪製控制介面 UI」）。原本在左上角，會與 BOSS 血條的白底重疊
+    --    （BOSS 那塊是 x=87~368、y=3~33）。這裡只算比例，繪製全部在第 4 段。
     local hp_percent = current_hp / max_hp
 
-    gfx.drawText("HP: " .. math.floor(current_hp) .. "/" .. max_hp, hp_bar_x, hp_text_y)
-    gfx.drawRect(hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height)
-
     -- [[ S3 場景武器接管 ]] 提示 / 操作指示
+    -- 位置：砲台**正下方的地面**（原本在砲台上方，會被機體擋住）。
+    -- 地面是純黑填充，黑字本來會看不見（見 HANDOFF §3-4），但 drawTextOnWhite 會鋪白底，
+    -- 反而在黑地面上對比最強。
+    -- 垂直空間：ground_y(156) ~ UI 上緣(176) 共 20px。
+    -- gy+3 讓白底剛好是 156~176：上緣貼齊地面線、下緣貼齊 UI，一格不多一格不少。
+    local function drawWeaponPrompt(text, world_x)
+        local gy = (entity_controller and entity_controller.ground_y) or 156
+        local tw = gfx.getTextSize(text)
+        drawTextOnWhite(text, world_x - camera_x - tw / 2, gy + 3)
+    end
     if controlling_weapon then
-        -- 與未接管時的「Press A」同位置：砲台正上方
-        gfx.drawText("B:exit", controlling_weapon.x - camera_x - 18,
-                     ((entity_controller and entity_controller.ground_y) or 156) - 46)
+        drawWeaponPrompt("B:exit", controlling_weapon.x)
     elseif entity_controller then
         local near = entity_controller:weaponNear(mech_x + 24, 44)
         if near then
-            gfx.drawText("Press A", near.x - camera_x - 18, (entity_controller.ground_y or 156) - 46)
+            drawWeaponPrompt("Press A", near.x)
         end
     end
     
@@ -1079,15 +1140,15 @@ function StateMission.draw()
         local time_x = (SCREEN_WIDTH - time_text_width) / 2
         local time_y = 5
         
-        -- 如果時間少於10秒，閃爍警告
-        if remaining_time <= 10 then
-            if math.floor(mission_elapsed_time * 2) % 2 == 0 then
-                gfx.setColor(gfx.kColorBlack)
-            else
-                gfx.setColor(gfx.kColorWhite)
-            end
-            gfx.fillRect(time_x - 5, time_y - 2, time_text_width + 10, 15)
-            gfx.setColor(gfx.kColorBlack)
+        -- [[ 可讀性 ]] 一律鋪底（否則黑字會被天空的黑雲吃掉）；
+        -- 剩 10 秒內改為「黑底白字 ↔ 白底黑字」反相閃爍。
+        -- （舊版閃爍在白底時仍用 FillWhite 畫字＝白字白底，有一半的幀文字整個消失。）
+        local warn = (remaining_time <= 10)
+        local invert = warn and (math.floor(mission_elapsed_time * 2) % 2 == 0)
+        gfx.setColor(invert and gfx.kColorBlack or gfx.kColorWhite)
+        gfx.fillRect(time_x - 5, time_y - 2, time_text_width + 10, 15)
+        gfx.setColor(gfx.kColorBlack)
+        if invert then
             gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
             gfx.drawText(time_text, time_x, time_y)
             gfx.setImageDrawMode(gfx.kDrawModeCopy)
@@ -1096,20 +1157,38 @@ function StateMission.draw()
         end
     end
     
-    if current_hp > 0 then
-        gfx.setColor(gfx.kColorBlack) 
-        gfx.fillRect(hp_bar_x + 1, hp_bar_y + 1, (hp_bar_width - 2) * hp_percent, hp_bar_height - 2)
-    end
-
     -- 4. 繪製控制介面 UI（使用 MechController）
     if mech_controller then
         -- 在操作介面下方畫白色背景方塊（略大於介面）
         local ui_w = UI_GRID_COLS * UI_CELL_SIZE
         local ui_h = UI_GRID_ROWS * UI_CELL_SIZE
         local bg_margin = 6
+
+        -- [[ 版面 ]] 玩家血條：面板右側，與面板共用同一塊白底＝視覺上是面板的一部分。
+        -- 移到這裡是因為左上角會被 BOSS 血條的白底蓋住（BOSS 塊 x=87~368）。
+        local hp_text = "HP" .. math.floor(current_hp) .. "/" .. max_hp
+        local hp_text_w = gfx.getTextSize(hp_text)
+        local hp_bar_width, hp_bar_height = 70, 10
+        local hp_gap = 10                                   -- 面板與血條之間的留白
+        local hp_right_pad = 3                              -- 白底右緣的留白（比左側 bg_margin 窄）
+        local hp_x = UI_START_X + ui_w + hp_gap
+        local hp_text_y = UI_START_Y + 4
+        local hp_bar_y = hp_text_y + 18
+        -- 白底右緣由「文字」決定：最長是 HP285/285＝82px，仍比血條 70px 寬
+        local hp_block_w = math.max(hp_text_w, hp_bar_width)
+
+        -- 白底一次畫完（面板 + 血條），中間不留縫
         gfx.setColor(gfx.kColorWhite)
-        gfx.fillRect(UI_START_X - bg_margin, UI_START_Y - bg_margin, ui_w + bg_margin*2, ui_h + bg_margin*2)
+        gfx.fillRect(UI_START_X - bg_margin, UI_START_Y - bg_margin,
+                     (hp_x + hp_block_w + hp_right_pad) - (UI_START_X - bg_margin),
+                     ui_h + bg_margin * 2)
         gfx.setColor(gfx.kColorBlack)
+
+        gfx.drawText(hp_text, hp_x, hp_text_y)
+        gfx.drawRect(hp_x, hp_bar_y, hp_bar_width, hp_bar_height)
+        if current_hp > 0 then
+            gfx.fillRect(hp_x + 1, hp_bar_y + 1, (hp_bar_width - 2) * hp_percent, hp_bar_height - 2)
+        end
         if controlling_weapon then
             -- [[ S3/美術 ]] 接管砲台的操作面板：其餘格 empty、左上 turret_control（隨 crank 轉）、
             -- 其右 canon_button（A 發射的按下/放開兩幀）。與機體面板同為 3x2、每格 32x32。

@@ -16,6 +16,12 @@ _G.EnemyData = EnemyData
 
 Enemy = {}
 
+-- [[ 演出 ]] BOSS 死亡爆炸的長度（秒）與連環爆的間隔（秒）。
+-- 一般敵人仍是 exploding_duration = 1.0，只有 BOSS 拉長。
+-- ★ 關卡的 BOSS_KILL 判定會等 is_exploding 結束，所以改這裡＝改「爆炸播完才過關」。
+local BOSS_DEATH_DURATION = 3.0
+local BOSS_DEATH_BURST_INTERVAL = 0.22
+
 function Enemy:init(x, y, type_id, ground_y)
     local data = EnemyData[type_id]
     
@@ -25,49 +31,27 @@ function Enemy:init(x, y, type_id, ground_y)
     local img_width = 24
     local img_height = 32
     if data.image then
-        -- JUMP_ENEMY: 嘗試載入imagetable
-        if type_id == "JUMP_ENEMY" then
-            local ok_table, imagetable = pcall(function()
-                return playdate.graphics.imagetable.new(data.image)
-            end)
-            if ok_table and imagetable then
-                enemy_imagetable = imagetable
-                -- 取得第一幀的大小
-                local frame1 = imagetable:getImage(1)
-                if frame1 then
-                    local ok_size, w, h = pcall(function() return frame1:getSize() end)
-                    if ok_size and w and h then
-                        img_width = w
-                        img_height = h
-                    end
-                end
-                enemy_img = imagetable:getImage(1)  -- 預設顯示第1幀
-            else
-                -- imagetable失敗，回退到普通image
-                local ok_img, img = pcall(function()
-                    return playdate.graphics.image.new(data.image)
-                end)
-                if ok_img and img then
-                    enemy_img = img
-                    local ok_size, w, h = pcall(function() return img:getSize() end)
-                    if ok_size and w and h then
-                        img_width = w
-                        img_height = h
-                    end
-                end
-            end
+        -- [[ 2026-08-09 ]] 一律「先試 imagetable、失敗才退回單張圖」。
+        -- 舊版寫死只有 JUMP_ENEMY 走 imagetable，DRONE 換成 6 幀動畫後就吃不到；
+        -- 改成這樣之後，之後任何敵人要動畫只要放 `-table-寬-高` 的圖即可，不必回來改程式。
+        local ok_table, imagetable = pcall(function()
+            return playdate.graphics.imagetable.new(data.image)
+        end)
+        if ok_table and imagetable then
+            enemy_imagetable = imagetable
+            enemy_img = imagetable:getImage(1)  -- 預設顯示第1幀
         else
-            -- 其他敵人: 使用普通image
-            local ok, img = pcall(function()
+            local ok_img, img = pcall(function()
                 return playdate.graphics.image.new(data.image)
             end)
-            if ok and img then
-                enemy_img = img
-                local ok_size, w, h = pcall(function() return img:getSize() end)
-                if ok_size and w and h then
-                    img_width = w
-                    img_height = h
-                end
+            if ok_img and img then enemy_img = img end
+        end
+        -- 尺寸一律讀「實際會畫出來的那張圖」
+        if enemy_img then
+            local ok_size, w, h = pcall(function() return enemy_img:getSize() end)
+            if ok_size and w and h then
+                img_width = w
+                img_height = h
             end
         end
     end
@@ -81,7 +65,9 @@ function Enemy:init(x, y, type_id, ground_y)
         width = img_width,
         height = img_height,
         image = enemy_img,  -- 儲存圖片
-        imagetable = enemy_imagetable,  -- JUMP_ENEMY 的 imagetable
+        imagetable = enemy_imagetable,  -- 動畫用（JUMP_ENEMY 依狀態指定幀；其餘看 anim_fps）
+        anim_fps = data.anim_fps,       -- 設了就循環播放 imagetable（見 update）
+        anim_frame = 1, anim_timer = 0,
         ground_y = ground_y,
         vx = 1.0, -- 基礎水平速度
         vy = 0,   -- 垂直速度（跳躍用）
@@ -206,6 +192,19 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     end
     
     if not self.is_alive then return end
+
+    -- [[ 2026-08-09 ]] 通用待機動畫：敵人資料設了 anim_fps 就循環播放 imagetable。
+    -- JUMP_ENEMY 是自己依跳躍狀態指定幀（不設 anim_fps），所以不受影響。
+    if self.anim_fps and self.imagetable then
+        self.anim_timer = (self.anim_timer or 0) + dt
+        local step = 1 / self.anim_fps
+        if self.anim_timer >= step then
+            self.anim_timer = self.anim_timer - step
+            local n = self.imagetable:getLength() or 1
+            self.anim_frame = ((self.anim_frame or 1) % n) + 1
+            self.image = self.imagetable:getImage(self.anim_frame)
+        end
+    end
 
     -- [[ S5 護送戰 ]] 若場景有存活的 NPC → 敵人改為朝 NPC 移動並攻擊它（護送戰模式）
     if controller and controller.npc and (controller.npc.hp or 0) > 0 and not controller.npc.reached_goal then
@@ -460,8 +459,10 @@ end
 -- 發射拋物線砲彈 (擊向機甲)
 function Enemy:fire(target_x, controller)
     -- 使用敵人資料中定義的子彈發射位置
+    -- ★ 要加上 drone_vertical_offset：無人機的上下浮動是在**繪製時**才套用的
+    --   （見 Enemy:draw 的 draw_y），發射點不加就會從偏離機身的高度射出。
     local start_x = self.x + self.bullet_offset_x
-    local start_y = self.y + self.bullet_offset_y
+    local start_y = self.y + (self.drone_vertical_offset or 0) + self.bullet_offset_y
     local target_dist = target_x - start_x
     -- 使砲彈水平方向速度接近玩家的移動速度（尊重敵人定義的 multiplier）
     local base_vx = (controller and controller.player_move_speed) or 2.0
@@ -530,7 +531,7 @@ function Enemy:initBoss(edata, ground_y)
         -- 傷害/碰撞管線需要的欄位
         hp = bd.parts[1].hp, attack = (bd.parts[1].attack and bd.parts[1].attack.damage) or 5,
         ground_y = ground_y, is_alive = true, is_exploding = false,
-        exploding_frame_timer = 0, exploding_duration = 1.0, exploding_frame_index = 0,
+        exploding_frame_timer = 0, exploding_duration = BOSS_DEATH_DURATION, exploding_frame_index = 0,
         exploding_image_table = nil, fire_timer = 0,
         projectile_speed_mult = 30, projectile_grav_mult = 18,   -- 同一般敵人尺度（拋物線）
         bullet_offset_x = 0, bullet_offset_y = 0, hit_shake_offset_x = 0,
@@ -543,24 +544,8 @@ function Enemy:initBoss(edata, ground_y)
         local ok, tbl = pcall(function() return playdate.graphics.imagetable.new(bd.sprite) end)
         if ok and tbl then
             e.boss_sheet = tbl
-            -- 輪子要繞自己的中心旋轉 → 先裁成獨立小圖
-            e.wheel_imgs = {}
-            local function cropWheel(cell_index, spec)
-                if not (cell_index and spec) then return nil end
-                local src = tbl:getImage(cell_index)
-                if not src then return nil end
-                local size = math.max(4, math.floor((spec.r or 8) * 2 + 2))
-                local okc, buf = pcall(function() return playdate.graphics.image.new(size, size) end)
-                if not (okc and buf) then return nil end
-                playdate.graphics.pushContext(buf)
-                playdate.graphics.clear(playdate.graphics.kColorClear)
-                -- 把 72x72 圖平移，使輪心落在小圖中心
-                src:draw(-(spec.cx - size / 2), -(spec.cy - size / 2))
-                playdate.graphics.popContext()
-                return buf
-            end
-            e.wheel_imgs.rear  = cropWheel(bd.cell_wheel_rear,  bd.wheel_rear)
-            e.wheel_imgs.front = cropWheel(bd.cell_wheel_front, bd.wheel_front)
+            -- [[ 2026-08-11 ]] 舊版這裡把「後輪／前輪」兩格各裁成小圖再 drawRotated。
+            -- 新圖第 3 格是一整條 72×16 的**履帶**，不能旋轉 → 裁切與旋轉都已移除，改成原位貼上。
 
             -- 可旋轉瞄準的武器：裁成「軸心置中」的小圖，之後用 drawRotated 繞軸心轉
             e.aim_imgs = {}
@@ -584,8 +569,6 @@ function Enemy:initBoss(edata, ground_y)
             print("WARNING: failed to load boss sprite " .. tostring(bd.sprite))
         end
     end
-    e.wheel_angle = 0
-
     e:bossPositionHitbox()
     print("LOG: Created BOSS " .. tostring(edata.boss_id) .. " at " .. edata.x)
     return e
@@ -656,11 +639,8 @@ end
 
 -- 以出生點為中心左右巡邏（速度 ≈ 一般敵人）
 function Enemy:bossMove(dt)
-    local dist = self.boss_speed * dt
-    -- [[ 美術 ]] 輪子隨移動距離轉動（以後輪半徑換算：360° / 圓周長）
-    local r = (self.boss_data.wheel_rear and self.boss_data.wheel_rear.r) or 9
-    local deg_per_px = 360 / (2 * math.pi * r)
-    self.wheel_angle = ((self.wheel_angle or 0) + self.move_dir * dist * deg_per_px) % 360
+    -- [[ 2026-08-11 ]] 舊版在這裡把移動距離換算成輪子轉角（wheel_angle）。
+    -- 新圖第 3 格是整條履帶、不旋轉，該計算已移除。
     self.boss_x = self.boss_x + self.move_dir * self.boss_speed * dt
     if self.boss_x > self.origin_x + self.boss_range then
         self.boss_x = self.origin_x + self.boss_range; self.move_dir = -1
@@ -737,8 +717,26 @@ function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controlle
             print("LOG: Boss part destroyed -> phase " .. self.boss_phase .. "/" .. #self.boss_parts)
             return
         else
-            -- 最後零件 → 真正死亡（播完爆炸動畫）
+            -- 最後零件 → 真正死亡。
+            -- [[ 演出 2026-08-08 ]] BOSS 的死亡爆炸拉長到 BOSS_DEATH_DURATION（3 秒），
+            -- 期間在**機體各處連續炸開**（每 BOSS_DEATH_BURST_INTERVAL 秒隨機一發）。
+            -- ★ 不是把單一動畫放慢 —— 那只會變成 1 秒 1 幀的投影片；
+            --   連環爆才撐得住 3 秒，也才像一台大機器逐塊解體。
+            -- 關卡端本來就會等 is_exploding 結束才過關（state_mission 的 BOSS_KILL 判定），
+            -- 所以拉長這裡＝爆炸播完關卡才結束，不需要另外改。
             self.exploding_frame_timer = self.exploding_frame_timer + dt
+
+            self.boss_burst_timer = (self.boss_burst_timer or 0) + dt
+            if controller and controller.addBlastVisual
+               and self.boss_burst_timer >= BOSS_DEATH_BURST_INTERVAL then
+                self.boss_burst_timer = 0
+                -- 在 BOSS 身體範圍內隨機取點
+                local bx = self.boss_x + math.random(0, math.max(1, self.boss_body_w))
+                local by = self.boss_y + math.random(0, math.max(1, self.boss_body_h))
+                controller:addBlastVisual(bx, by)
+                if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+            end
+
             if self.exploding_frame_timer >= self.exploding_duration then
                 self.is_alive = false; self.is_exploding = false
                 print("LOG: BOSS defeated")
@@ -855,25 +853,21 @@ function Enemy:drawBoss(camera_x)
             if img then pcall(function() img:draw(bx + (ox or 0), by + (oy or 0)) end) end
         end
 
-        drawCell(bd.cell_body)
+        -- 履帶：整條原位貼上（不旋轉）。先畫＝在本體之下
+        drawCell(bd.cell_track)
 
-        -- 上身：未進入最終階段才顯示，並上下震動
+        -- [[ 2026-08-11 ]] 最終階段（雷射槍）**本體與管子都隱藏**，畫面只剩履帶＋雷射槍
         local final_phase = (self.boss_phase >= #self.boss_parts)
-        if not final_phase then
-            local amp = bd.upper_vibrate or 2
-            local vib = math.floor(math.sin(playdate.getCurrentTimeMilliseconds() / 70) * amp + 0.5)
-            drawCell(bd.cell_upper, 0, vib)
+        if not (final_phase and bd.hide_body_on_final) then
+            drawCell(bd.cell_body)
         end
 
-        -- 輪子：隨移動旋轉（繞各自輪心）
-        local function drawWheel(img, spec)
-            if not (img and spec) then return end
-            pcall(function()
-                img:drawRotated(bx + spec.cx, by + spec.cy, self.wheel_angle or 0)
-            end)
+        -- 管子：未進入最終階段才顯示，並上下移動
+        if not final_phase then
+            local amp = bd.pipe_vibrate or 2
+            local vib = math.floor(math.sin(playdate.getCurrentTimeMilliseconds() / 70) * amp + 0.5)
+            drawCell(bd.cell_pipe, 0, vib)
         end
-        drawWheel(self.wheel_imgs and self.wheel_imgs.rear,  bd.wheel_rear)
-        drawWheel(self.wheel_imgs and self.wheel_imgs.front, bd.wheel_front)
 
         -- 武器零件：已破壞→不畫；當前弱點→轉場時閃爍；內部武器僅最終階段顯示
         for i, part in ipairs(self.boss_parts) do
@@ -986,10 +980,21 @@ function Enemy:drawBossHpBar()
     local bw, bh = 220, 8
     local bx = (400 - bw) / 2
     local by = 22
-    g.setColor(g.kColorBlack)
     local title = (self.boss_data.name or "BOSS") .. "  [" .. (part.label or "?") ..
         "  " .. self.boss_phase .. "/" .. #self.boss_parts .. "]"
-    g.drawText(title, bx, by - 16)
+
+    -- [[ 可讀性 ]] 先鋪白底再畫：BOSS 血條在畫面上方，會被天空層的黑雲吃掉
+    -- （同 state_mission 的 HUD 白底處理）。白底範圍涵蓋標題與血條，寬度取兩者較大值。
+    local tw = g.getTextSize(title)
+    local pad = 3
+    local top = by - 16
+    local block_w = math.max(tw, bw) + pad * 2
+    local block_h = (by + bh) - top + pad * 2
+    g.setColor(g.kColorWhite)
+    g.fillRect(bx - pad, top - pad, block_w, block_h)
+
+    g.setColor(g.kColorBlack)
+    g.drawText(title, bx, top)
     g.drawRect(bx, by, bw, bh)
     g.fillRect(bx, by, math.floor(bw * ratio), bh)
 end
@@ -1017,11 +1022,24 @@ function Enemy:drawMineExplosion(screen_x)
             playdate.graphics.setColor(playdate.graphics.kColorWhite)
             playdate.graphics.drawRect(draw_x, draw_y, anim_size, anim_size)
         end
-        -- 調試：顯示當前爆炸影格
-        playdate.graphics.drawText("EXP:" .. tostring(current_frame) .. "/" .. tostring(frame_count), draw_x, draw_y - 10)
     elseif self.is_triggered and not self.is_exploded then
-        local blink_speed = 10
-        if math.floor(self.explode_timer * blink_speed) % 2 == 0 then
+        -- [[ 2026-08-10 ]] 觸發後的警示燈：mine 的 imagetable 第 2/3 格交替閃爍。
+        -- 警示燈與本體（第 1 格）畫在同一張 32×16 畫布的上下兩段，
+        -- 所以用「和本體完全相同的座標」疊畫就會對位，不要另外加偏移。
+        -- 本體是由 Enemy:draw() 的一般路徑畫的（self.image = 第 1 格），這裡只負責疊燈。
+        local ed = EnemyData[self.type_id] or {}
+        local speed = ed.warn_blink_speed or 10
+        local on = (math.floor(self.explode_timer * speed) % 2 == 0)
+        local frame_idx = on and (ed.warn_frame_a or 2) or (ed.warn_frame_b or 3)
+        local lamp = nil
+        if self.imagetable then
+            local ok, img = pcall(function() return self.imagetable:getImage(frame_idx) end)
+            if ok then lamp = img end
+        end
+        if lamp then
+            lamp:draw(screen_x, self.y)
+        elseif on then
+            -- 後備：沒有警示燈圖時沿用舊的白框閃爍
             playdate.graphics.setColor(playdate.graphics.kColorWhite)
             playdate.graphics.fillRect(screen_x - 2, self.y - 2, self.width + 4, self.height + 4)
         end
@@ -1030,7 +1048,11 @@ end
 
 function Enemy:draw(camera_x)
     -- [[ S6 ]] BOSS 專屬繪製（爆炸中則落到下方沿用死亡爆炸動畫）
-    if self.is_boss and not self.is_exploding then
+    -- [[ 演出 2026-08-08 ]] BOSS **爆炸期間也照畫機體**。
+    -- 連環爆是由 controller 畫在它身上的（見 updateBoss 的 addBlastVisual），
+    -- 機體要等 is_alive 變 false 才消失 —— 這樣才有「一台大機器被逐塊炸開」的感覺。
+    -- 若沿用下方的通用爆炸繪製，3 秒 ÷ 3 幀 = 1 秒 1 幀，會變成投影片。
+    if self.is_boss then
         return self:drawBoss(camera_x)
     end
     -- 敌人死亡爆炸动画
@@ -1139,7 +1161,7 @@ function Enemy:draw(camera_x)
             end)
         else
             -- 預設：直線繪制
-            local sword_length = 30
+            local sword_length = enemy_data.sword_length or 30
             local end_x = pivot_x + math.cos(angle_rad) * sword_length
             local end_y = pivot_y + math.sin(angle_rad) * sword_length
             

@@ -1,17 +1,139 @@
 {
-  "description": "Eliminate all Enemies and learn movement controls.",
-  "name": "MISSION 1",
-  "objective": {
-    "description": "Defeat all enemies",
-    "type": "ELIMINATE_ALL"
-  },
   "id": "M001",
-  "reward_rubber": 15,
+  "name": "MISSION 1",
   "category": "ELIMINATION",
-  "reward_copper": 10,
+  "description": "MISSION 1",
   "prerequisite": 0,
   "time_limit": 60,
+  "objective": {
+    "type": "ELIMINATE_ALL",
+    "description": "Defeat all enemies"
+  },
+  "reward_steel": 35,
+  "reward_copper": 10,
+  "reward_rubber": 15,
   "scene": {
+    "width": 800,
+    "ground_y": 220,
+    "sky": "images/bg_sky",
+    "backgrounds": [
+      {
+        "layer": 1,
+        "x": 205,
+        "y": 48,
+        "image": "images/bg_building1.png"
+      },
+      {
+        "layer": 0,
+        "x": 395,
+        "y": 96,
+        "image": "images/bg_building4.png"
+      },
+      {
+        "layer": 0,
+        "x": 132,
+        "y": 134,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 3,
+        "y": 124,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 263,
+        "y": 131,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 636,
+        "y": 137,
+        "image": "images/bg_building7.png"
+      },
+      {
+        "layer": 0,
+        "x": 511,
+        "y": 94,
+        "image": "images/bg_building6.png"
+      }
+    ],
+    "terrain": [
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "up15",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": -17
+      },
+      {
+        "type": "flat",
+        "height_offset": -17
+      },
+      {
+        "type": "down15",
+        "height_offset": -17
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      }
+    ],
+    "obstacles": [],
+    "stones": [],
+    "enemies": [
+      {
+        "type": "SHIELD_ROBOT",
+        "x": 450,
+        "y": -17
+      },
+      {
+        "type": "BASIC_ENEMY",
+        "x": 355,
+        "y": 0
+      },
+      {
+        "type": "BASIC_ENEMY",
+        "x": 667,
+        "y": 0
+      }
+    ],
+    "delivery_targets": [],
     "dialog": {
       "image": "images/dialog_bg",
       "lines": [
@@ -19,103 +141,6 @@
         "Choose your parts to operate your parts.",
         "Defeat the enemies to complete the mission."
       ]
-    },
-    "width": 800,
-    "backgrounds": [
-      {
-        "x": 50,
-        "image": "images/bg_building3.png",
-        "layer": 0,
-        "y": 40
-      },
-      {
-        "x": 120,
-        "image": "images/bg_building1.png",
-        "layer": 1,
-        "y": 70
-      },
-      {
-        "x": 260,
-        "image": "images/bg_building2.png",
-        "layer": 1,
-        "y": 60
-      },
-      {
-        "x": 460,
-        "image": "images/bg_building4.png",
-        "layer": 0,
-        "y": 60
-      }
-    ],
-    "obstacles": [],
-    "ground_y": 220,
-    "terrain": [
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "up15"
-      },
-      {
-        "height_offset": -17,
-        "type": "flat"
-      },
-      {
-        "height_offset": -17,
-        "type": "flat"
-      },
-      {
-        "height_offset": -17,
-        "type": "down15"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      },
-      {
-        "height_offset": 0,
-        "type": "flat"
-      }
-    ],
-    "enemies": [
-      {
-        "x": 300,
-        "y": 0,
-        "type": "DRONE"
-      },
-      {
-        "x": 450,
-        "y": -17,
-        "type": "SHIELD_ROBOT"
-      }
-    ],
-    "stones": []
-  },
-  "reward_steel": 35
+    }
+  }
 }
