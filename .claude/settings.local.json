@@ -36,7 +36,8 @@
       "Bash(python -)",
       "Bash(git rev-list *)",
       "Bash(echo \"落後/領先 origin: $\\(git rev-list --left-right --count origin/feat/g2-hq-layout...HEAD\\)\")",
-      "Bash(awk '{print \"  main 獨有 \"$1\" 筆 / 本分支領先 \"$2\" 筆\"}')"
+      "Bash(awk '{print \"  main 獨有 \"$1\" 筆 / 本分支領先 \"$2\" 筆\"}')",
+      "Bash(git merge *)"
     ],
     "additionalDirectories": [
       "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"
