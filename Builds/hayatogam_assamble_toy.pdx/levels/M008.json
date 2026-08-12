@@ -1,5 +1,6 @@
 {
   "id": "M008",
+  "final": true,
   "name": "Escort Test",
   "category": "ELIMINATION",
   "description": "S5 demo: reach / protect(hold) / escort(move).",
@@ -16,6 +17,7 @@
     {
       "width": 800,
       "ground_y": 220,
+      "sky": "images/bg_sky",
       "objective": {
         "type": "PROTECT",
         "description": "Protect the NPC for the time"
@@ -30,14 +32,14 @@
       "backgrounds": [
         {
           "layer": 0,
-          "x": 40,
-          "y": 60,
+          "x": 26,
+          "y": 82,
           "image": "images/bg_building3.png"
         },
         {
           "layer": 1,
-          "x": 300,
-          "y": 70,
+          "x": 286,
+          "y": 92,
           "image": "images/bg_building1.png"
         }
       ],
@@ -127,6 +129,7 @@
     {
       "width": 800,
       "ground_y": 220,
+      "sky": "images/bg_sky",
       "objective": {
         "type": "PROTECT",
         "description": "Escort the NPC to the goal"
@@ -141,14 +144,14 @@
       "backgrounds": [
         {
           "layer": 0,
-          "x": 40,
-          "y": 60,
+          "x": 26,
+          "y": 82,
           "image": "images/bg_building3.png"
         },
         {
           "layer": 1,
-          "x": 300,
-          "y": 70,
+          "x": 286,
+          "y": 92,
           "image": "images/bg_building1.png"
         }
       ],
@@ -234,6 +237,7 @@
     {
       "width": 800,
       "ground_y": 220,
+      "sky": "images/bg_sky",
       "objective": {
         "type": "PROTECT",
         "description": "Escort the NPC to the bunker"
@@ -248,14 +252,14 @@
       "backgrounds": [
         {
           "layer": 0,
-          "x": 40,
-          "y": 60,
+          "x": 26,
+          "y": 82,
           "image": "images/bg_building3.png"
         },
         {
           "layer": 1,
-          "x": 300,
-          "y": 70,
+          "x": 286,
+          "y": 92,
           "image": "images/bg_building1.png"
         }
       ],

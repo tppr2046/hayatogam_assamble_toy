@@ -24,16 +24,17 @@
   "time_limit": -1,
   "scene": {
     "ground_y": 220,
+    "sky": "images/bg_sky",
     "delivery_targets": [
       {
         "x": 350,
-        "image": "images/target_box",
+        "image": "images/target",
         "y": 0,
         "id": "target1"
       },
       {
         "x": 600,
-        "image": "images/target_box",
+        "image": "images/target",
         "y": 90,
         "id": "target2"
       }
@@ -168,13 +169,13 @@
     "stones": [
       {
         "x": 200,
-        "image": "images/stone.png",
+        "image": "images/crate",
         "target_id": "target1",
         "y": -5
       },
       {
         "x": 410,
-        "image": "images/stone.png",
+        "image": "images/crate",
         "target_id": "target2",
         "y": -5
       }

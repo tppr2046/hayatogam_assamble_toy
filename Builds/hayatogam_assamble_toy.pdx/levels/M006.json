@@ -44,6 +44,7 @@
     "obstacles": [],
     "reward_copper": 60,
     "ground_y": 220,
+    "sky": "images/bg_sky",
     "terrain": [
       {
         "height_offset": 0,
