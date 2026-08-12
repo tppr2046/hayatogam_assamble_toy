@@ -32,7 +32,8 @@
       "Bash(git commit -q -m ' *)",
       "Bash(git check-attr *)",
       "Bash(echo \"PDC EXIT=$?\")",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(python -)"
     ],
     "additionalDirectories": [
       "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"
