@@ -43,7 +43,13 @@
       "Bash(gh repo *)",
       "Bash(git rm *)",
       "Bash(printf '\\\\n# 誤建的家目錄複本（曾有 ~/.ssh/config 被誤加入版控）\\\\n~/\\\\n\\\\n# Claude skill 檔案，不屬於本專案（正確位置是 ~/.claude/skills/）\\\\ngame-proto-planning/\\\\n')",
-      "Bash(xargs -I{} echo \"未提交: {}\")"
+      "Bash(xargs -I{} echo \"未提交: {}\")",
+      "PowerShell(& \"E:/PlaydateSDK/bin/pdc.exe\" Source Builds/hayatogam_assamble_toy.pdx; \"EXIT=$LASTEXITCODE\")",
+      "PowerShell($p = Start-Process \"E:\\\\PlaydateSDK\\\\bin\\\\PlaydateSimulator.exe\" -ArgumentList \"Builds\\\\hayatogam_assamble_toy.pdx\" -RedirectStandardOutput boot.log -PassThru -WorkingDirectory \"E:\\\\game_develop\\\\2025_1207_hayatojam_playdate\\\\hayatogam_assamble_toy\"; Start-Sleep 10; $null = $p.CloseMainWindow\\(\\); $null = $p.WaitForExit\\(8000\\); Get-Content boot.log | Select-String -Pattern \"LEVEL loaded|error|attempt|traceback\" -CaseSensitive:$false)",
+      "PowerShell($p = Start-Process \"E:\\\\PlaydateSDK\\\\bin\\\\PlaydateSimulator.exe\" -ArgumentList \"Builds\\\\hayatogam_assamble_toy.pdx\" -RedirectStandardOutput boot.log -PassThru -WorkingDirectory \"E:\\\\game_develop\\\\2025_1207_hayatojam_playdate\\\\hayatogam_assamble_toy\"; Start-Sleep 10; $null = $p.CloseMainWindow\\(\\); $null = $p.WaitForExit\\(8000\\); Get-Content boot.log | Select-String -Pattern \"LEVEL loaded|error|attempt|traceback|nil\" -CaseSensitive:$false)",
+      "Bash(grep -rn \"fillPolygon\" \"E:/PlaydateSDK/CoreLibs/\" 2>/dev/null | head -5; ls \"E:/PlaydateSDK/Documentation\" 2>/dev/null | head)",
+      "PowerShell(& \"E:/PlaydateSDK/bin/pdc.exe\" Source Builds/hayatogam_assamble_toy.pdx; \"PDC EXIT=$LASTEXITCODE\"; $p = Start-Process \"E:\\\\PlaydateSDK\\\\bin\\\\PlaydateSimulator.exe\" -ArgumentList \"Builds\\\\hayatogam_assamble_toy.pdx\" -RedirectStandardOutput boot.log -PassThru -WorkingDirectory \"E:\\\\game_develop\\\\2025_1207_hayatojam_playdate\\\\hayatogam_assamble_toy\"; Start-Sleep 10; $null = $p.CloseMainWindow\\(\\); $null = $p.WaitForExit\\(8000\\); Get-Content boot.log | Select-String -Pattern \"LEVEL loaded|error|attempt|traceback\" -CaseSensitive:$false)",
+      "Bash(file Source/*.lua)"
     ],
     "additionalDirectories": [
       "E:\\game_develop\\2025_1207_hayatojam_playdate\\hayatogam_assamble_toy\\Source"
