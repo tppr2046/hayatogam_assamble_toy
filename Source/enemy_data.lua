@@ -3,6 +3,8 @@
 
 return {
     ["BASIC_ENEMY"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（射擊類＝銅）
+        drop = { copper = {1, 2} },
         name = "BASIC TRAINER UNIT", hp = 20, attack = 5, 
         move_type = "MOVE FORWARD/BACK", attack_type = "FIRE BULLET",
         -- 移動參數
@@ -20,6 +22,8 @@ return {
     },
     
     ["HEAVY_ENEMY"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（最硬＝最值錢）
+        drop = { steel = {4, 6} },
         name = "HEAVY ARMOR UNIT", hp = 80, attack = 10, 
         move_type = "IMMOBILE", attack_type = "SWING ATTACK",
         -- 敵人圖片
@@ -30,6 +34,8 @@ return {
     },
     
     ["JUMP_ENEMY"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（彈跳＝橡膠）
+        drop = { rubber = {1, 2} },
         name = "JUMP UNIT", hp = 15, attack = 8,
         move_type = "JUMP", attack_type = "CONTACT",
         -- 跳躍參數
@@ -42,6 +48,8 @@ return {
     },
     
     ["SWORD_ENEMY"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（刀刃＝鋼）
+        drop = { steel = {2, 3} },
         name = "SWORD UNIT", hp = 30, attack = 12,
         move_type = "IMMOBILE", attack_type = "SWING SWORD",
         -- 劍揮動參數
@@ -67,6 +75,8 @@ return {
     },
     
     ["MINE"] = {
+        -- [[ §8.08 ]] ★ 不設 drop ＝ 不掉資源。地雷是**陷阱**不是敵人，
+        --   會掉的話等於在地上放免費資源。
         name = "MINE", hp = 1, attack = 20,
         move_type = "IMMOBILE", attack_type = "EXPLODE",
         -- 爆炸參數
@@ -85,6 +95,8 @@ return {
     },
 
     ["SHIELD_ROBOT"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（裝甲類＝鋼）
+        drop = { steel = {1, 2} },
         name = "SHIELD ROBOT", hp = 10, attack = 8,
         move_type = "SHIELD_MOVEMENT", attack_type = "SHIELD_FIRE",
         -- 盾牌參數
@@ -116,6 +128,8 @@ return {
     -- [[ 2026-08-12 ]] 本切片最後一種新敵人。行為＝BASIC 的變體：
     --   **移動較快、會週期性停下，而且只在停下時開火**（移動中不攻擊）。
     ["WALKER_ENEMY"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（射擊類＝銅）
+        drop = { copper = {1, 2} },
         name = "WALKER UNIT", hp = 18, attack = 6,
         move_type = "MOVE_PAUSE", attack_type = "FIRE BULLET",
         -- 移動／停頓的循環（秒）
@@ -133,15 +147,20 @@ return {
         --   （那會讓它無論停走都一直循環播放）
         image = "images/enemy04",
         walk_fps = 8,                 -- 移動中的換幀速度
-        -- ⚠️ 原圖面向**右**，但本作敵人一律面向左（玩家從左側來，enemy01/02 都是朝左）。
-        --   所以整張水平鏡射；bullet_offset 也是鏡射後的座標。
-        flip_x = true,
-        -- 槍口量自原圖：砲管末端 (34, 7) → 鏡射後 x = 40 − 34 = 6
+        -- [[ 2026-08-13 ]] ★ 圖已由使用者改成**朝左**（正確方向），所以 `flip_x` 拿掉了。
+        --   舊版是 `flip_x = true`，因為原圖朝右、要靠程式鏡射（本作敵人一律面向左）。
+        --   ⚠️ **不要再加回來** —— 現在再鏡射一次會變成朝右。
+        --   驗證方式：新圖與 git 舊版**逐格水平鏡射後差異 0.0%**，確認是整批鏡射過的。
+        --   `flip_x` 欄位本身保留在 `entity_enemy.lua`，以後有畫反方向的敵人仍可用。
+        -- 槍口：舊圖砲管末端在 (34, 7)，鏡射後 x = 40 − 34 = 6。
+        -- ★ 新圖＝舊圖的鏡射版，所以**顯示結果與之前完全相同**，這個值不必改。
         bullet_offset_x = 6,
         bullet_offset_y = 7
     },
 
     ["DRONE"] = {
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（電子類＝銅）
+        drop = { copper = {1, 2} },
         name = "DRONE", hp = 10, attack = 6,
         move_type = "AERIAL", attack_type = "FIRE BULLET",
         -- 飛行參數

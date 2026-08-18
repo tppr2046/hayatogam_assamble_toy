@@ -396,6 +396,110 @@ function EntityController:addHitSpark(x, y)
     table.insert(self.hit_sparks, { x = x, y = y, frame = 1, timer = 0 })
 end
 
+-- ============================================================
+-- [[ §8.08 資源掉落 ]] 敵人死亡時掉出資源，**落地後不會消失**，碰到機體才收。
+--
+-- ★ 這套與「重打不給關卡獎勵」（state_result.lua）是**配套的**：
+--   關卡獎勵只有首過關才給，重打的收入來源就是這裡。少了任一邊，
+--   不是變成無限刷（稀缺性消失），就是變成死鎖（賺不到錢修零件）。
+--
+-- 掉什麼、掉幾個寫在 `enemy_data` 的 `drop`（BOSS 寫在 `boss_data`），
+-- **型別固定、數量小範圍隨機**（GDD §8.08 的對照表）。格式：
+--     drop = { copper = {1, 2} }                     -- 銅 1~2 個
+--     drop = { steel = {5,8}, copper = {5,8}, ... }  -- BOSS：三種都掉
+--
+-- 現階段**用程式繪製**（三種資源靠形狀區分，各自白描邊 → 黑地面上也看得見）。
+-- ★ 之後放 `images/drop-table-8-8.png`（3 格：鋼/銅/橡膠，順序同 DROP_KINDS）
+--   進 Source/images/ 就會自動改用圖，本檔與呼叫端都不必改。
+-- ============================================================
+local DROP_W, DROP_H   = 8, 8
+local DROP_GRAVITY     = 220    -- px/s²：掉落物自己的重力（與砲彈無關）
+local DROP_SPAWN_VY    = -60    -- 生成時往上彈的初速
+local DROP_SPAWN_VX    = 30     -- 左右散開的水平初速上限
+local DROP_PICKUP_PAD  = 4      -- 收取判定的寬容值（機體四周各放寬這麼多）
+local DROP_FALL_LIMIT  = 200    -- 掉進 pit 後超過地面線這麼多就消失
+-- ★ 順序＝ drop-table-8-8 的格號順序，換圖時要對齊
+local DROP_KINDS = { "steel", "copper", "rubber" }
+
+-- 掉落表的來源：BOSS 讀 boss_data，一般敵人讀 enemy_data
+function EntityController:dropTableFor(enemy)
+    if enemy.is_boss then
+        return enemy.boss_data and enemy.boss_data.drop
+    end
+    local ed = EnemyData[enemy.type_id]
+    return ed and ed.drop
+end
+
+function EntityController:spawnDrops(enemy)
+    local dtbl = self:dropTableFor(enemy)
+    if not dtbl then return end   -- 沒宣告 drop 的敵人不掉（如 MINE：陷阱不是敵人）
+
+    if not self.drop_sheet_tried then
+        self.drop_sheet_tried = true
+        local ok, tbl = pcall(function() return playdate.graphics.imagetable.new("images/drop") end)
+        if ok and tbl then
+            self.drop_sheet = tbl
+            print("LOG: drop imagetable loaded, frames = " .. tostring(tbl:getLength()))
+        end
+    end
+
+    self.drops = self.drops or {}
+    local cx = enemy.x + (enemy.width or 16) / 2
+    local cy = enemy.y + (enemy.height or 16) / 2
+    for ki, kind in ipairs(DROP_KINDS) do
+        local rng = dtbl[kind]
+        if rng then
+            local lo = rng[1] or 0
+            local hi = rng[2] or lo
+            local n = lo + math.random(0, math.max(0, hi - lo))
+            for _ = 1, n do
+                table.insert(self.drops, {
+                    kind = kind, kind_index = ki,
+                    x = cx - DROP_W / 2, y = cy - DROP_H / 2,
+                    vx = (math.random() * 2 - 1) * DROP_SPAWN_VX,
+                    vy = DROP_SPAWN_VY * (0.6 + math.random() * 0.6),
+                    landed = false,
+                })
+            end
+        end
+    end
+end
+
+function EntityController:updateDrops(dt, mech_x, mech_y, mech_width, mech_height)
+    if not self.drops then return end
+    for i = #self.drops, 1, -1 do
+        local d = self.drops[i]
+
+        if not d.landed then
+            d.vy = d.vy + DROP_GRAVITY * dt
+            d.x  = d.x + d.vx * dt
+            d.y  = d.y + d.vy * dt
+            local gh = self:getGroundHeight(d.x + DROP_W / 2)
+            if d.y + DROP_H >= gh then
+                d.y = gh - DROP_H
+                -- ★ 落地就定住，**不會消失**（GDD §8.08 拍板）
+                d.landed = true
+            elseif d.y > self.ground_y + DROP_FALL_LIMIT then
+                -- 掉進懸崖（pit 的 getGroundHeight 回傳極大值）→ 撿不到了
+                table.remove(self.drops, i)
+                goto continue_drop
+            end
+        end
+
+        -- 收取：碰到機體就入袋（機體判定框四周各放寬 DROP_PICKUP_PAD）
+        if self:checkMechCollision(mech_x - DROP_PICKUP_PAD, mech_y - DROP_PICKUP_PAD,
+                                   mech_width + DROP_PICKUP_PAD * 2,
+                                   mech_height + DROP_PICKUP_PAD * 2,
+                                   d.x, d.y, DROP_W, DROP_H) then
+            local res = _G.GameState and _G.GameState.resources
+            if res then res[d.kind] = (res[d.kind] or 0) + 1 end
+            table.remove(self.drops, i)
+        end
+
+        ::continue_drop::
+    end
+end
+
 -- [[ 運送目標 ]] 箱子放在目標上的位置：**水平置中、箱底踩在平台上表面**。
 -- 放置當下與飛行途中都用這一個函式，兩邊才不會算出不同位置。
 function EntityController:stoneRestPos(target, stone)
@@ -736,6 +840,16 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
 
     -- 1. 更新敵人 (讓敵人移動和射擊)
     for i, enemy in ipairs(self.enemies) do
+        -- [[ §8.08 資源掉落 ]] 死亡當下掉出資源。
+        -- ★ 在這裡**集中偵測** `is_alive` 的轉變，而不是在每個設 is_alive=false 的地方各掛一次
+        --   —— entity_enemy.lua 有 4 個不同的死亡出口（一般爆炸完成／地雷爆完／無動畫逾時／BOSS），
+        --   逐處掛必漏（HANDOFF §3-5：同一件事有多個計算點，先列完再動手）。
+        -- ★ 爆炸中的敵人 is_alive 仍為 true，所以掉落物是**爆炸播完才出現**，順序自然。
+        if (not enemy.is_alive) and (not enemy._dropped) then
+            enemy._dropped = true
+            self:spawnDrops(enemy)
+        end
+
         if enemy.is_alive then
             enemy:update(dt, mech_x, mech_y, mech_width, mech_height, self)
 
@@ -815,6 +929,9 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             end
         end
     end
+
+    -- [[ §8.08 ]] 掉落物：落地物理 + 碰到機體收取
+    self:updateDrops(dt, mech_x, mech_y, mech_width, mech_height)
 
     -- 2. 更新砲彈 (處理物理與碰撞)
     for i = #self.projectiles, 1, -1 do
@@ -1086,7 +1203,10 @@ function EntityController:drawForeground(camera_x)
     if not (self.foregrounds and #self.foregrounds > 0) then return end
     if not self.fg_tried then
         self.fg_tried = true
-        local okf, tbl = pcall(function() return playdate.graphics.imagetable.new("images/forground") end)
+        -- [[ 2026-08-13 ]] 檔名拼字由 `forground` 修正為 `foreground`（使用者改的）。
+        -- ⚠️ 改名時 Builds/.../images/ 底下的舊 `forground.pdt` 必須手動刪掉 ——
+        --    pdc 不會清掉「來源已消失」的 .pdt，它會一直留在 pdx 裡（HANDOFF §3-2）。
+        local okf, tbl = pcall(function() return playdate.graphics.imagetable.new("images/foreground") end)
         if okf and tbl then self.fg_table = tbl end
     end
     if not self.fg_table then return end
@@ -1437,6 +1557,34 @@ function EntityController:draw(camera_x)
         gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(L.thickness)
         gfx.drawLine(sx, sy, ex, ey)
         gfx.setLineWidth(1)
+    end
+
+    -- [[ §8.08 資源掉落 ]] 有圖用圖（drop-table-8-8，格號＝DROP_KINDS 的順序），沒圖用程式繪製。
+    -- ★ 程式繪製一律「先白色填底、再黑色描邊」：地面是純黑填充、天空上半也是黑的，
+    --   單一顏色的話一定會有一種背景把它吃掉（§3-4）。三種資源**靠形狀區分**，不靠明暗。
+    for _, d in ipairs(self.drops or {}) do
+        local sx, sy = d.x - camera_x, d.y
+        if self.drop_sheet then
+            local img = self.drop_sheet:getImage(d.kind_index)
+            if img then pcall(function() img:draw(sx, sy) end) end
+        else
+            -- ★ 只用本專案**已經在用**的繪圖原語（fillRect / drawRect / drawCircleAtPoint /
+            --   drawLine）。fillPolygon 與 fillCircleAtPoint 在本專案沒有先例，而掉落物只在
+            --   關卡中才會出現、開機驗證跑不到 —— 萬一 API 用法不對就是關卡中崩潰，只能人工發現。
+            --   反正這只是佔位，放圖之後整段都不會執行。
+            local cx, cy = sx + DROP_W / 2, sy + DROP_H / 2
+            -- 三種共用的白底：黑色地面與黑色天空上都看得見（§3-4）
+            gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx, sy, DROP_W, DROP_H)
+            gfx.setColor(gfx.kColorBlack)
+            if d.kind == "steel" then
+                gfx.drawRect(sx, sy, DROP_W, DROP_H)                 -- 鋼＝方形
+            elseif d.kind == "copper" then
+                gfx.drawCircleAtPoint(cx, cy, DROP_W / 2 - 1)        -- 銅＝圓形
+            else
+                gfx.drawLine(sx + 1, sy + 1, sx + DROP_W - 2, sy + DROP_H - 2)  -- 橡膠＝X
+                gfx.drawLine(sx + DROP_W - 2, sy + 1, sx + 1, sy + DROP_H - 2)
+            end
+        end
     end
 
     -- [[ 命中特效 ]] 子彈擊中點的小火花。有圖用圖，沒圖用程式繪製。

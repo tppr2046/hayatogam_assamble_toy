@@ -20,6 +20,9 @@ local bosses = {
         --   ⚠️ 標籤不能寫成 "CANNON"（雙 N）—— 實測整行 221px，**超出 1px 就折行**。
         --   改名或改標籤前先量寬度（量法見 HANDOFF §5-4 的字寬腳本）。
         name = "OVERSEER",
+        -- [[ §8.08 ]] 資源掉落：**只掉一點**。BOSS 的報酬主要來自首過關獎勵與核心，
+        -- 掉太多會讓「重打 BOSS 關」變成最佳刷法，蓋過首過關獎勵的推進動力。
+        drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
         sprite = "images/boss1",     -- imagetable：boss1-table-72-72.png
         body_w = 72, body_h = 72,
         -- sprite 各格索引（1-based）。武器的格號寫在下面各 part 的 `cell`，

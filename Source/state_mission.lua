@@ -169,8 +169,33 @@ local function loadScene(scene)
     end
 end
 
+-- [[ §8.08 掉落寬限 ]] 過關判定成立後，如果場上還有沒撿的掉落物，先不結束，
+-- 給玩家一段時間走過去撿。
+--
+-- ★ 為什麼需要：掉落物是在敵人 `is_alive` 轉 false 的那一刻生成的，而
+--   ELIMINATE_ALL / BOSS_KILL 的過關判定**也是**等最後一隻敵人爆完 —— 兩件事同一瞬間，
+--   所以最後一擊的掉落**永遠來不及撿**。那不是玩家技術問題，是規則本身的漏洞。
+--
+-- ★ 為什麼放在 completeCurrentScene 裡：過關的呼叫點有 6 處（傳送點／ELIMINATE_ALL／
+--   REACH／PROTECT／DELIVER…），逐處加寬限一定會漏（HANDOFF §3-5）。集中在這一個出口。
+--
+-- 寬限期間關卡照常運作（敵人已清空，所以只是讓玩家跑去撿）。
+-- 撿完了就不必等滿 —— 下一幀 #drops == 0 就直接過關。
+local CLEAR_GRACE_TIME = 3.0   -- 秒
+local clear_grace_timer = nil
+
 -- [[ S1 多場景 ]] 目前場景達標：非最後一場景→載入下一場景（保留機甲 HP/組裝）；最後一場景→通關結算。
 local function completeCurrentScene()
+    -- 還有掉落物沒撿 → 起算寬限期，先不結束
+    if entity_controller and entity_controller.drops and #entity_controller.drops > 0 then
+        if clear_grace_timer == nil then
+            clear_grace_timer = CLEAR_GRACE_TIME
+            print("LOG: clear grace started - " .. #entity_controller.drops .. " drops left")
+        end
+        if clear_grace_timer > 0 then return end
+    end
+    clear_grace_timer = nil
+
     if current_scenes and current_scene_index < #current_scenes then
         -- [[ S5 護送 ]] 把 NPC 目前血量帶到下一場景（跨場景護送才有連續性）
         if entity_controller and entity_controller.npc and not entity_controller.npc.is_dead then
@@ -183,6 +208,26 @@ local function completeCurrentScene()
         loadScene(current_scenes[current_scene_index])
     else
         print("LOG: Final scene complete -> mission success")
+
+        -- [[ 耐久 §8.07 ]] 過關才結算耗損（失敗不扣 —— 重試永遠免費，推進才有成本）。
+        -- ★ 這裡是唯一的成功出口，所以耗損只會算一次。
+        -- ★ current_hp 跨場景保留（loadScene 不會重設），所以這個比例是**整關**的累計掉血。
+        -- ★ 重打已通關的關卡**一樣會耗損** —— 否則重打＝零成本收掉落，經濟直接破掉。
+        if _G.Durability and _G.Durability.applyMissionWear then
+            local ratio = 0
+            if max_hp and max_hp > 0 then
+                ratio = (max_hp - current_hp) / max_hp
+            end
+            local changes = _G.Durability.applyMissionWear(ratio)
+            if #changes > 0 then
+                print(string.format("LOG: durability wear (dmg %.0f%%): %d part(s)",
+                                    ratio * 100, #changes))
+                for _, c in ipairs(changes) do
+                    print(string.format("     %s %d -> %d", c.id, c.before, c.after))
+                end
+            end
+        end
+
         setState(_G.StateResult, true, "Mission Complete!", current_mission_id)
     end
 end
@@ -192,6 +237,7 @@ function StateMission.setup()
     gfx.setFont(font)
     is_paused = false
     timer = 0
+    clear_grace_timer = nil   -- [[ §8.08 ]] 重試/重打時要歸零，否則沿用上一場的殘值
 
     -- 嘗試使用先前快取的 mech image
     if _G and _G.GameState and _G.GameState.mech_image then
@@ -209,17 +255,19 @@ function StateMission.setup()
                 local pid = item.id
                 local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
                 if pdata and pdata._img then
-                    local px = (item.col - 1) * mech_grid.cell_size
+                    -- ★ 外框計算也要吃 image_offset_x/y —— 反向槍往左伸出格外，
+                    --   這裡漏掉的話合成圖會**把槍口切掉**（min_x 沒往左擴）。
+                    local px = (item.col - 1) * mech_grid.cell_size + (pdata.image_offset_x or 0)
                     local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size
                     local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
                     if ok and iw and ih then
                         local draw_y
                         if pdata.align_image_top then
                             -- 圖片上緣對齊格子上緣（用於 FEET）
-                            draw_y = py_top
+                            draw_y = py_top + (pdata.image_offset_y or 0)
                         else
                             -- 預設：圖片底部對齊格子底部
-                            draw_y = py_top + (mech_grid.cell_size - ih)
+                            draw_y = py_top + (mech_grid.cell_size - ih) + (pdata.image_offset_y or 0)
                         end
                         -- Expand bounding box to include full image
                         if px < min_x then min_x = px end
@@ -241,7 +289,8 @@ function StateMission.setup()
                     local pid = item.id
                     local pdata = (_G.PartsData and _G.PartsData[pid]) or nil
                     if pdata and pdata._img then
-                        local px = (item.col - 1) * mech_grid.cell_size - min_x
+                        -- ★ 與上面的外框計算用同一套位移，兩邊不一致就會畫歪
+                        local px = (item.col - 1) * mech_grid.cell_size + (pdata.image_offset_x or 0) - min_x
                         local py_top = (mech_grid.rows - item.row) * mech_grid.cell_size - min_y
                         local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
                         local draw_x = px
@@ -249,10 +298,10 @@ function StateMission.setup()
                         if ok and iw and ih then
                             if pdata.align_image_top then
                                 -- 圖片上緣對齊格子上緣（用於 FEET）
-                                draw_y = py_top
+                                draw_y = py_top + (pdata.image_offset_y or 0)
                             else
                                 -- 預設：圖片底部對齊格子底部
-                                draw_y = py_top + (mech_grid.cell_size - ih)
+                                draw_y = py_top + (mech_grid.cell_size - ih) + (pdata.image_offset_y or 0)
                             end
                         else
                             draw_y = py_top
@@ -613,7 +662,12 @@ function StateMission.update()
     -- 4. 更新實體控制器 (敵人、砲彈)，並套用造成的傷害
     if entity_controller then
         local dt = 1 / 30 -- approximate delta time per frame
-        
+
+        -- [[ §8.08 掉落寬限 ]] 倒數。歸零後下一次過關判定就會真的結束關卡。
+        if clear_grace_timer and clear_grace_timer > 0 then
+            clear_grace_timer = clear_grace_timer - dt
+        end
+
         -- 計算機甲本體碰撞框 (3×2 格)
         local mech_grid = _G.GameState.mech_grid
         local body_w = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)

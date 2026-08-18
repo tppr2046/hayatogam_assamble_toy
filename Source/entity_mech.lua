@@ -753,16 +753,26 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
             self.gun_fire_timers[item.id] = tmr
             -- ★ operable=true 的槍是**手動**（雷射槍 GUN2），由 updateActivePart 按 A 發射，
             --   不能在這裡自動打掉，否則會變成「自動 + 手動」兩邊都發。
+            -- [[ §15.9 反向槍 ]] 發射方向不再寫死 —— 由 parts_data 的 `fire_direction` 決定
+            -- （沒設就是 "RIGHT"，所以既有的 GUN/GUN2 行為完全不變）。
+            -- ★ 擋位判斷也要用同一個方向，否則反向槍會去檢查右側有沒有被擋。
+            local fire_dir = pdata.fire_direction or "RIGHT"
             if (not pdata.operable) and tmr >= pdata.fire_cooldown
-               and not self:isFiringDirectionBlocked("RIGHT", item.id) then
+               and not self:isFiringDirectionBlocked(fire_dir, item.id) then
                 local cell_size = mech_grid.cell_size
+                -- ★ 槍口位置要吃 image_offset_x/y ——「零件相對格子的位移」，
+                --   與 entity_mech_render / state_hq / state_mission 的繪製端**讀同一組欄位**。
+                --   高位槍靠 y = −8 把圖抬高，子彈發射點必須跟著抬，否則會從腳邊射出來。
                 local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                                     + (pdata.image_offset_x or 0)
                 local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
+                                     + (pdata.image_offset_y or 0)
 
                 -- 使用與敵人相同的計算方式
                 local base_speed = entity_controller.player_move_speed or 2.0
                 local speed_mult = pdata.projectile_speed_mult or 1.0
-                local vx = base_speed * speed_mult  -- 水平發射
+                local dir_sign = (fire_dir == "LEFT") and -1 or 1
+                local vx = base_speed * speed_mult * dir_sign  -- 水平發射（負值＝往左）
                 local vy = 0  -- GUN 直射，垂直速度為 0
                 local dmg = pdata.projectile_damage or 5
                 local grav_mult = pdata.projectile_grav_mult or 1.0

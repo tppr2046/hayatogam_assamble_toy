@@ -114,19 +114,32 @@ function StateResult.setup(success, message, mission_id)
         local MissionData = _G.MissionData or {}
         local mission = MissionData and MissionData[mission_id]
         if mission then
-            reward_steel = mission.reward_steel or 0
-            reward_copper = mission.reward_copper or 0
-            reward_rubber = mission.reward_rubber or 0
-            
-            -- 添加資源到玩家
             _G.GameState = _G.GameState or {}
-            _G.GameState.resources = _G.GameState.resources or {steel = 0, copper = 0, rubber = 0}
-            _G.GameState.resources.steel = _G.GameState.resources.steel + reward_steel
-            _G.GameState.resources.copper = _G.GameState.resources.copper + reward_copper
-            _G.GameState.resources.rubber = _G.GameState.resources.rubber + reward_rubber
-            
-            -- 標記任務為已完成
             _G.GameState.completed_missions = _G.GameState.completed_missions or {}
+
+            -- [[ §8.08 ]] 關卡獎勵**只有首次過關才給**（2026-08-12 拍板）。
+            -- ★ 必須在下面標記 completed 之**前**判斷，否則永遠讀到 true、等於全部關掉獎勵。
+            -- 重打的收入來源是敵人掉落（見 entity_controller 的掉落物），
+            -- 這一對規則是配套的：少了掉落，重打不給獎勵會變成死鎖。
+            local is_first_clear = not _G.GameState.completed_missions[mission_id]
+
+            if is_first_clear then
+                reward_steel = mission.reward_steel or 0
+                reward_copper = mission.reward_copper or 0
+                reward_rubber = mission.reward_rubber or 0
+
+                -- 添加資源到玩家
+                _G.GameState.resources = _G.GameState.resources or {steel = 0, copper = 0, rubber = 0}
+                _G.GameState.resources.steel = _G.GameState.resources.steel + reward_steel
+                _G.GameState.resources.copper = _G.GameState.resources.copper + reward_copper
+                _G.GameState.resources.rubber = _G.GameState.resources.rubber + reward_rubber
+            else
+                -- 重打：三個 reward_* 維持 0 → 結算畫面的 rows 為空，
+                -- 資源區塊整塊不畫（不會出現 "+0"）。
+                print("LOG: Mission " .. tostring(mission_id) .. " replayed - no clear reward.")
+            end
+
+            -- 標記任務為已完成
             _G.GameState.completed_missions[mission_id] = true
 
             -- [[ CORE ]] 核心獎勵：關卡 JSON 的 "reward_core": "CORE2"（GDD §8.05a）。

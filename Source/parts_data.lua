@@ -6,6 +6,12 @@ local parts_data = {
     ["GUN"] = {
         name = "GUN",
         part_type = "GUN",  -- 功能類別
+        -- [[ §8.08 死鎖安全閥 ]] 初始零件不吃耐久、永不損壞。
+        -- 「耐久 0 擋出擊」＋「重打不給關卡獎勵」會合成永久卡關：
+        -- 零件全壞 → 不能出擊 → 賺不到資源 → 修不好 → 永遠不能出擊。
+        -- 初始存檔就是 GUN + WHEEL1 且資源 0，所以那個狀態是真的到得了的。
+        -- ★ 用資料欄位而不是在程式裡寫死 id 清單 —— 日後改由別的零件當保底只要改資料。
+        indestructible = true,
         hp = 10,
         weight = 3,
         attack = 5,  -- 攻擊力
@@ -73,9 +79,86 @@ local parts_data = {
         projectile_damage = 12,       -- **貫穿**：同一發會打到路徑上每一隻，但每隻只吃一次
         block_directions = {"RIGHT"}
     },
+
+    -- ================================================================
+    -- [[ GDD §15.9 第一批輔助零件 ]] 2026-08-13
+    -- 兩把都是 **1 格寬 + operable = false**（被動自動開火、不進焦點循環）
+    -- → 切換壓力零增加，**既有 8 關的難度基準不變**。
+    --
+    -- ★ 1 格寬是重點：上排 3 格，10 個舊零件裡只有 GUN 是 1 格，
+    --   所以「上層裝多個零件」以前幾乎不可能。加了這兩把才真的能組合。
+    -- ================================================================
+
+    -- 反向槍：往**左**射，掩護背後。
+    -- ★ 存在理由見 GDD §8.08：敵人掉落物落在身後，折返撿資源時背後才是威脅。
+    ["BACK_GUN"] = {
+        name = "BACK GUN",
+        part_type = "GUN",
+        hp = 10,
+        weight = 3,
+        attack = 5,
+        slot_x = 1,
+        slot_y = 1,
+        -- 比 GUN 略貴：它蓋住的是 GUN 蓋不到的方向，不該是純上位替代
+        cost_steel = 15,
+        cost_copper = 15,
+        cost_rubber = 5,
+        color = gfx.kColorBlack,
+        image = "images/gun_back.png",
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/gun_panel.png",   -- 沿用 GUN 的面板（GUN2 也是這樣共用）
+        operation_hint = "Auto Fire (Back)",
+        operable = false,
+        -- ★ 圖 24 寬、格子 16 寬 → 多出來的 8px 是槍口。
+        --   繪製是**左對齊格子左緣**的，所以要往左推 8px 槍口才會朝左伸出格外；
+        --   不推的話槍身會侵入右邊那一格。
+        --   ⚠️ image_offset_x/y ＝「整個零件相對格子的位移」，**繪製端與槍口端共用同一組**。
+        image_offset_x = -8,
+        requires_clear_left = true,          -- 槍口淨空（GUN 的 requires_clear_right 的鏡像）
+        fire_direction = "LEFT",             -- ★ 沒有這個欄位就會往右射（預設 RIGHT）
+        fire_cooldown = 1.2,                 -- 比 GUN(1.0) 稍慢
+        projectile_damage = 5,
+        projectile_speed_mult = 40,
+        projectile_grav_mult = 0.2,
+        block_directions = {"LEFT"}
+    },
+
+    -- 高位槍：裝在較高的位置、攻擊力較弱（GDD §15.2）。
+    -- 用途是打高處目標，以及在 CLAW(2格) 旁邊補一把槍。
+    ["HIGH_GUN"] = {
+        name = "HIGH GUN",
+        part_type = "GUN",
+        hp = 8,
+        weight = 2,                          -- 比 GUN 輕（火力換重量）
+        attack = 3,
+        slot_x = 1,
+        slot_y = 1,
+        cost_steel = 10,
+        cost_copper = 8,
+        cost_rubber = 2,
+        color = gfx.kColorBlack,
+        image = "images/gun_high.png",
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/gun_panel.png",
+        operation_hint = "Auto Fire (High)",
+        operable = false,
+        -- ★ 往上抬 8px（半格）＝「高位」。子彈發射點會跟著抬，因為兩端讀同一個欄位。
+        image_offset_y = -8,
+        requires_clear_right = true,         -- 與 GUN 相同：槍口朝右，右側要淨空
+        fire_direction = "RIGHT",
+        fire_cooldown = 1.0,
+        projectile_damage = 3,               -- ★「攻擊力較弱」（GUN 是 5）
+        projectile_speed_mult = 40,
+        projectile_grav_mult = 0.2,
+        block_directions = {"RIGHT"}
+    },
+
     ["WHEEL1"] = {
-        name = "WHEEL",
+        name = "WHEEL 1",  -- [[ 2026-08-13 ]] 清單改顯示 name 後，兩顆輪子不能同名
         part_type = "WHEEL",  -- 功能類別
+        indestructible = true,  -- [[ §8.08 死鎖安全閥 ]] 初始零件，永不損壞（理由見 GUN）
         hp = 35,
         weight = 4,
         slot_x = 3,
@@ -150,7 +233,7 @@ local parts_data = {
 
 
     ["WHEEL2"] = {
-        name = "WHEEL",
+        name = "WHEEL 2",  -- [[ 2026-08-13 ]] 清單改顯示 name 後，兩顆輪子不能同名
         part_type = "WHEEL",  -- 功能類別
         hp = 50,
         weight = 4,
@@ -293,27 +376,27 @@ local parts_data = {
     },
 
 
-    ["SWORD"] = {
-        name = "SWORD",
-        part_type = "SWORD",  -- 功能類別
-        hp = 40,
-        weight = 5,
-        attack = 20,  -- 攻擊力
-        slot_x = 2,
-        slot_y = 1,
+--    ["SWORD"] = {
+--        name = "SWORD",
+--        part_type = "SWORD",  -- 功能類別
+--        hp = 40,
+--        weight = 5,
+--        attack = 20,  -- 攻擊力
+--        slot_x = 2,
+--        slot_y = 1,
         -- 購買成本
-        cost_steel = 70,
-        cost_copper = 15,
-        cost_rubber = 35,
-            color = gfx.kColorBlack,
-            image = "images/sword.png",
-            placement_row = "TOP",
-        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
+--        cost_steel = 70,
+--        cost_copper = 15,
+--        cost_rubber = 35,
+--            color = gfx.kColorBlack,
+--            image = "images/sword.png",
+--            placement_row = "TOP",
+--        align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
-        ui_panel = "images/sword_panel.png",
-        ui_stick = "images/sword_stick.png",
-        operation_hint = "Swing Sword with Crank",
-    },
+--        ui_panel = "images/sword_panel.png",
+--        ui_stick = "images/sword_stick.png",
+--        operation_hint = "Swing Sword with Crank",
+--    },
     ["FEET"] = {
         name = "FEET",
         part_type = "FEET",  -- 功能類別

@@ -1,7 +1,7 @@
 {
   "id": "M002",
-  "name": " 2 WALK WITH ME",
-  "description": " 2 WALK WITH ME",
+  "name": "2 WALK WITH ME",
+  "description": "2 WALK WITH ME",
   "prerequisite": "M001",
   "time_limit": -1,
   "objective": {

@@ -84,6 +84,7 @@ function SaveManager.createNewSave(slot_id)
         -- 核心由關卡的 reward_core 給予並自動裝上（純階梯升級，無選擇介面）。
         core_id = "CORE1",
         owned_cores = { CORE1 = true },
+        part_durability = {},     -- [[ 耐久 §8.07 ]] 空＝全部全新
         -- [[ S8/S10 ]] 新存檔的預設設定與教學旗標（教學未完成→新遊戲會播放）
         settings = { bgm_volume = 0.7, sfx_volume = 0.5 },
         tutorial = {}
@@ -118,6 +119,8 @@ function SaveManager.loadSave(slot_id)
         -- [[ CORE ]] 舊存檔沒有這些欄位 → 回退到預設核心（不會影響任何既有數值）
         _G.GameState.core_id = data.core_id or (_G.CoreData and _G.CoreData.default_id) or "CORE1"
         _G.GameState.owned_cores = data.owned_cores or { [_G.GameState.core_id] = true }
+        -- [[ 耐久 §8.07 ]] 舊存檔沒有這個欄位 → 空表，Durability.get 對未列出的零件回傳滿值
+        _G.GameState.part_durability = data.part_durability or {}
         -- [[ S8/S10 ]] 設定（音量）與教學完成旗標
         _G.GameState.settings = data.settings or {bgm_volume = 0.7, sfx_volume = 0.5}
         _G.GameState.tutorial = data.tutorial or {}
@@ -154,6 +157,8 @@ function SaveManager.saveCurrent()
         -- [[ CORE ]] 目前裝備的核心 + 已取得清單
         core_id = _G.GameState.core_id or (_G.CoreData and _G.CoreData.default_id) or "CORE1",
         owned_cores = _G.GameState.owned_cores or { CORE1 = true },
+        -- [[ 耐久 §8.07 ]] { part_id = 0~100 }；未列出＝全新（滿值）
+        part_durability = _G.GameState.part_durability or {},
         -- [[ S8/S10 ]] 設定與教學旗標
         settings = _G.GameState.settings or {bgm_volume = 0.7, sfx_volume = 0.5},
         tutorial = _G.GameState.tutorial or {}

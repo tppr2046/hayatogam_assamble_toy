@@ -25,9 +25,13 @@ CoreData.order = { "CORE1", "CORE2", "CORE3" }
 -- 玩家不需要知道 ×1.3 是什麼意思，只需要知道「跳得更高了」。
 -- 改倍率時記得一併確認等級名稱還說得通。
 CoreData.list = {
-    CORE1 = { id = "CORE1", name = "SALVAGE", frame = 1, base_hp = 30,  weight_cap = 16, jump_mult = 0,   jump_label = "NONE"   },
-    CORE2 = { id = "CORE2", name = "FIELD",   frame = 2, base_hp = 60,  weight_cap = 24, jump_mult = 1.0, jump_label = "MEDIUM" },
-    CORE3 = { id = "CORE3", name = "COMMAND", frame = 3, base_hp = 100, weight_cap = 34, jump_mult = 1.3, jump_label = "HIGH"   },
+    -- [[ 2026-08-13 ]] `button_sprite` ＝ HQ 右下角出擊按鈕用的 imagetable（3 格 64×64：
+    --   1 底座 / 2 按鈕未按 / 3 按鈕按下）。**那顆按鈕就是核心本體**，所以核心升級時整張換掉。
+    -- ★ 寫成資料欄位而不是在 state_hq 裡用 id 拼字串 —— 日後改名或改路徑只要動這一行。
+    -- ⚠️ core2 / core3 的圖尚未繪製；state_hq 載不到時會自動退回 CORE1 的圖，不會壞掉。
+    CORE1 = { id = "CORE1", name = "SALVAGE", frame = 1, base_hp = 30,  weight_cap = 16, jump_mult = 0,   jump_label = "NONE",   button_sprite = "images/core1" },
+    CORE2 = { id = "CORE2", name = "FIELD",   frame = 2, base_hp = 60,  weight_cap = 24, jump_mult = 1.0, jump_label = "MEDIUM", button_sprite = "images/core2" },
+    CORE3 = { id = "CORE3", name = "COMMAND", frame = 3, base_hp = 100, weight_cap = 34, jump_mult = 1.3, jump_label = "HIGH",   button_sprite = "images/core3" },
 }
 
 -- 取得核心資料；id 無效或未設定時回退到預設核心（永不回傳 nil）

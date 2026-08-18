@@ -1,7 +1,7 @@
 # 交接文件 — 組裝玩具任務
 
-> 更新日:**2026-08-12**　分支:`feat/g2-hq-layout`　最後 commit:`a306eb7`
-> **工作區乾淨(0 個未提交)**。分支領先 origin **18 筆、尚未 push**。
+> 更新日:**2026-08-13**　分支:`main`(與 origin 同步)　最後 commit:`82773fc`
+> **有大量未提交的變更**(M2.5 的成果)。編譯 exit 0、8 關全載入、開機無錯誤、**從 HQ 直接啟動也無錯誤無警告**(見 §3-3b)。
 > ⚠️ 使用者未要求 push/PR,**動 git 前務必先問**。
 
 ---
@@ -15,7 +15,8 @@
 |---|---|
 | **M1 垂直切片可玩** | ✅ 完成並實機驗證(2026-08-12) |
 | **M2 規模拍板** | ✅ 完成 —— **25 關/5 王/20 零件維持,不下修** |
-| **M3 內容量產** | ⬜ **下一步就是這個** |
+| **M2.5 功能與介面定案** | 🔵 **← 現在在這裡**(2026-08-12 立項,見下方「下一步」) |
+| **M3 內容量產** | ⬜ 延後至 M2.5 之後 |
 | M4 上架 | ⬜ |
 
 ### 切片的最終狀態
@@ -32,10 +33,36 @@
 - ⚠️ **新瓶頸是「關卡設計與試玩」**,本次沒量到、只能使用者做、隨關數線性成長
 - ⚠️ 重繪佔切片美術量的 **37%**,量產規劃要乘上這個係數
 
-### ★ 下一步的建議(尚未開始)
+### ★ 下一步(2026-08-12 拍板,**已改變**)
 
-**量產先做 3 關並單獨計時**,量出「一關 = 幾個動工天」。
-本次量測證明的是「美術總量沒問題」,**不是**「25 關沒問題」。
+> ⚠️ 原本這裡寫的是「量產先做 3 關並單獨計時」。**使用者已拍板改序**:
+> **本階段先不量產,先把功能與介面的流程定下來。** 3 關計時延後到本階段之後。
+
+**本階段四項工作(完整規格在 [GDD §15.9](GDD_正式版_組裝玩具任務.md))**:
+
+| # | 項目 | 狀態 |
+|---|---|---|
+| **0** | **HQ 版面重排 ＋ 組裝流程改版**([GDD §8.05b/c](GDD_正式版_組裝玩具任務.md)) | ✅ **完成**(2026-08-13) |
+| **1** | 零件耐久:功能 + UI([GDD §8.07](GDD_正式版_組裝玩具任務.md)) | ✅ **完成** —— K=40 / R=0.3,`Source/durability.lua` |
+| **2** | 新零件第一批:**反向槍 + 高位槍** | ✅ **程式完成**(`gun_high.png` 仍是佔位) |
+| **3** | **配合新零件的敵人／場景**(★ 沒有這項,兩把槍裝上去沒有用) | ⬜ **未開始 —— 本階段唯一還會改到玩法的項目** |
+| **4** | **資源經濟**:首過關獎勵 + 敵人掉落([GDD §8.08](GDD_正式版_組裝玩具任務.md)) | ✅ 完成(計畫外冒出來的) |
+| **5** | 巨大 BOSS(§15.5)—— 與其他項無依賴,**可完全並行** | ⬜ 未開始 |
+
+**⚠️ 待補美術**(程式都已接好,**放圖即自動生效,不必回頭改程式**):
+`gun_high.png`(24×16)／`drop-table-8-8.png`(3格)／`core1-table-64-64` **第 4 格**(選中狀態)／
+`core2`・`core3-table-64-64`／耐久標記(8×8 或 12×12,兩種狀態)。
+`core-table-24-24.png` 已無讀取端,可刪。
+
+**核心更換介面已正式否決**(2026-08-12):取得新核心時直接更換。
+本文件 §2-2 與 §4-2b 舊寫的「⬜ 未做:核心更換介面」**不是待辦,是已否決**;
+`CORE(test)` 系統選單項因此**改列為永久開發工具**,不再是暫時物。
+
+**⚠️ 本次查證推翻的兩件事**(細節見 GDD §15.1):
+1. **「上層一次只能裝一個功能零件」是錯的** —— `checkIfFits()` 沒有這條規則,
+   現在就能裝 `CANON(2格) + GUN(1格)`。玩起來像只能裝一個,是因為 **10 個零件裡只有 GUN 是 1 格寬**。
+   → §15.1 從【結構】降為【新增】,§15.7 把它排第一的理由不再成立。
+2. 本文件 §0 舊寫的「分支 `feat/g2-hq-layout` 領先 origin 18 筆未 push」已過期 —— **現在在 `main`,與 origin 同步**。
 
 ---
 
@@ -87,7 +114,10 @@
 Playdate 的 imagetable 硬性規定,**這是本專案最常踩的坑**(已發生四次:core、target、feet_walk、以及使用者早期兩次)。
 症狀是「改了圖卻沒生效」或「整張圖被當成一格」。
 
-現有:`boss1-table-72-72`(**6格**,2026-08-11 由 7 格改版)、`turret-table-32-32`(2格)、`forground-table-32-32`(4格,注意拼法)、
+現有:`boss1-table-72-72`(**6格**,2026-08-11 由 7 格改版)、`turret-table-32-32`(2格)、
+**`foreground-table-32-32`**(4格 —— ★ 2026-08-13 由誤拼的 `forground` 改正,
+程式端 `entity_controller.lua` 的 `imagetable.new("images/foreground")` 已同步;
+`Builds/.../images/forground.pdt` 也已手動刪除)、
 `npc_walk-table-36-36`(2格)、`arrow-table-32-32`(3格)、`feet_walk-table-48-20`(4格)、
 `core-table-24-24`(3格)、`target-table-32-32`(4格)、`enemy_drone-table-32-32`(6格)、
 `canon_button-table-32-32`(2格)、`mine_explode-table-50-50`(3格)、
@@ -130,7 +160,52 @@ Start-Sleep 10; $null = $p.CloseMainWindow(); $null = $p.WaitForExit(8000)
 把緩衝區灌爆——那兩行已在 2026-08-10 移除(每幀 print 在實機有成本),所以**收尾方式從此必須是關視窗**。
 - **可自動驗證**:編譯錯誤、載入期崩潰、關卡載入數
 - **必須人工**:畫面、手感、通關流程(無法驅動輸入或看畫面)
-- ⚠️ 開機驗證**跑不到**需要輸入才會進入的路徑(HQ、關卡內、商店),那些只能請使用者實測
+- ⚠️ 開機驗證**跑不到**需要輸入才會進入的路徑(HQ、PARTS、關卡內) → 見下方 3-3b 的解法
+
+⚠️ **2026-08-13:模擬器啟動變慢,`Start-Sleep 10` 可能不夠 → log 全空。** 現在一律用 **20 秒**。
+**log 全空不一定是遊戲掛了**,先加長等待再判斷 —— 我曾為此誤判成 `durability` 把遊戲弄壞,
+二分法查完才發現只是關太快。
+
+#### ★★ 3-3b. 驗證「要按鍵才進得去」的畫面(2026-08-13 新增)
+
+**暫時把 `main.lua` 的起始狀態改掉,讓那個畫面在開機時真的跑一遍。**
+
+```powershell
+Copy-Item Source/main.lua Source/main.lua.bak -Force
+(Get-Content Source/main.lua -Raw) -replace 'local current_state = _G\.StateMenu', 'local current_state = _G.StateHQ' |
+    Set-Content Source/main.lua -NoNewline -Encoding UTF8
+# 編譯 → 開機(20 秒) → 抓 log 的 "Update error|attempt|traceback|WARNING"
+Move-Item Source/main.lua.bak Source/main.lua -Force   # ★ 一定要還原,並用 git diff 確認
+```
+
+**抓得到**:`setup()` 與 `draw()` 路徑上的 **nil 索引、未宣告的 local、載圖失敗**。
+這些 **pdc 不會擋**(未宣告的全域在 Lua 是合法語法),以前只能等實機踩到。
+
+★ 2026-08-13 就是這樣抓到 **`start_sheets` 宣告在使用之後**(函式裡讀到的是同名的 nil 全域,一進 HQ 就 crash),
+並順帶清掉兩個原本看不見的死碼(`mech_controller`、舊的核心 imagetable 載入器)。
+
+⚠️ 仍抓不到:**畫面對不對、手感、需要連續輸入的流程**。那些還是只能人工。
+
+### ★ 3-3c. Lua / Playdate 的四個踩過的坑(2026-08-13)
+
+**1. `local` 宣告順序 —— 最貴的一個**
+`local` 只對**宣告之後**的程式碼可見。宣告寫在函式後面的話,函式裡讀到的是**同名的全域變數(nil)**。
+`pdc` 不會擋(未宣告的全域是合法語法),一執行到那條路徑就 crash。
+> 實例:`local start_sheets = {}` 寫在 `startButtonSheet()` 後面 → 一進 HQ 就 `attempt to index a nil value`。
+> **對策:§3-3b 的「直接從該畫面啟動」驗證。**
+
+**2. Playdate 沒有 `drawTextScaled`**
+要放大文字用 **`gfx.imageWithText(text, w, h)` 產生圖 → `img:drawScaled(x, y, k)`**。
+★ **動任何沒把握的 API 前先查 `E:/PlaydateSDK/CoreLibs/__stub.lua`**,它列了完整簽章。
+
+**3. 只用「本專案已經在用」的繪圖原語**
+`fillPolygon` / `fillCircleAtPoint` 在本專案沒有先例。用在**只有關卡中才會執行**的程式碼
+(掉落物、特效)時,萬一用法不對就是**關卡中崩潰、只能人工發現**。
+佔位圖形一律用已驗證的 `fillRect` / `drawRect` / `drawCircleAtPoint` / `drawLine`。
+
+**4. `setDitherPattern` 的 alpha 是「透明度」不是「不透明度」**
+**數字越大、點越少**。實測(16×16 取樣 256 點):`0.00→256 全白`、`0.50→128`、`1.00→0`。
+> 詳見 §5-3 的標題畫面背景。憑直覺調會得到**完全相反**的結果。
 
 ### 3-4. ★ 1-bit 可讀性:黑字要有白底
 地面是純黑填充、天空層上半 45~68% 是黑的 —— **任何黑色文字/線條疊在上面都會消失**。
@@ -243,7 +318,11 @@ crank 只有 8 個呼叫點、換觸控不成問題;**真正的風險是焦點�
 | ★ **雷射槍 GUN2** | `parts_data` 的 `GUN2`:`fire_cooldown`(2.2,比 GUN 的 1.0 長)、`laser_speed_mult`(150,GUN 砲彈是 40)、`laser_length`(40,線段長度)、`laser_thickness`(3)、`laser_range`(420)、`projectile_damage`(12)。<br>★ **手動**(`operable = true`)→ 進焦點循環、按 A 發射,面板右格是共用的 `canon_button`。<br>★ **貫穿**:每道光束記著自己打過誰(`L.hit` 集合),沿路每隻各扣一次、不重複。實作在 `entity_controller:updatePlayerLasers()`。<br>⚠️ 冷卻計時器在 `updateParts` **所有槍都會累加**,只有「自動開火」那段跳過 `operable` 的——否則手動槍打完第一發後計時器不動,再也打不出來 |
 | ★ **交戰範圍** | `entity_controller.lua` 的 `ENGAGE_MARGIN`(96，約 2 個機身)。敵人只在「畫面內 + 這段餘裕」內**才攻擊，也才會被打到**。<br>★ 判定集中在 `EntityController:isEngageable()`，**敵人開火／砲彈命中／雷射命中三處共用** —— 只做一半會變成「看不到卻被打」或「明明在打卻扣不到血」。<br>移動不受限，離開範圍時重置開火節奏。BOSS 維持自己更嚴格的「雙方同框才開打」，未套用這個餘裕 |
 | ★ **雷射槍 GUN2** | `parts_data` 的 `GUN2`：`fire_cooldown`(2.2)、`laser_speed_mult`(150)、`laser_length`(40)、`laser_thickness`(3)、`laser_range`(420)、`projectile_damage`(12)。<br>★ **手動**(`operable = true`) → 進焦點循環、按 A 發射，面板右格是共用的 `canon_button`。<br>★ **貫穿**：每道光束記著自己打過誰(`L.hit`)，沿路每隻各扣一次。<br>★ **光束方向跟著槍口**：發射時記下單位方向 `dx/dy`（速度已由 `applyMechTilt` 依地形角度旋轉），**繪製與命中都用它**。命中用線段-矩形（slab method），不能再用水平帶。<br>⚠️ 冷卻計時器在 `updateParts` **所有槍都會累加**，只有「自動開火」那段跳過 `operable` 的——否則手動槍打完第一發就再也打不出來 |
-| ★ **WALKER 敵人** | `enemy_data` 的 `WALKER_ENEMY`：`move_speed`(55，BASIC 是 20)、`move_duration`(1.6)、`pause_duration`(1.4)、`walk_fps`(8)、`fire_only_when_stopped`(true)。<br>★ 走路動畫由 `MOVE_PAUSE` 分支自己控制（第1格＝站立、第2~3格＝走路），**不要設 `anim_fps`**（那是無條件循環，停著也會走）。<br>★ `flip_x = true`：原圖面向右，但本作敵人一律面向左。這是通用欄位，以後任何畫反方向的敵人都可用 |
+| ★ **WALKER 敵人** | `enemy_data` 的 `WALKER_ENEMY`：`move_speed`(55，BASIC 是 20)、`move_duration`(1.6)、`pause_duration`(1.4)、`walk_fps`(8)、`fire_only_when_stopped`(true)。<br>★ 走路動畫由 `MOVE_PAUSE` 分支自己控制（第1格＝站立、第2~3格＝走路），**不要設 `anim_fps`**（那是無條件循環，停著也會走）。<br>★ ~~`flip_x = true`~~ **已於 2026-08-13 移除** —— 使用者把 `enemy04-table-40-32` 改成朝左(正確方向)了，
+**不要再加回來**,再鏡射一次會變成朝右。<br>
+驗證方式:新圖與 git 舊版**逐格水平鏡射後差異 0.0%**,確認是整批鏡射過的(這類「圖到底改了什麼」都可以這樣量,不要用看的)。<br>
+`bullet_offset_x = 6` **不必改** —— 它本來就是鏡射後的座標,而新圖＝舊圖的鏡射版,顯示結果完全相同。<br>
+`flip_x` 欄位本身保留在 `entity_enemy.lua`,以後有畫反方向的敵人仍可用 |
 | **BOSS 各階段武器** | `boss_data.lua`:`aim_time`/`aim_speed`/`cooldown`/`speed_mult`/`grav_mult`、雷射 `charge`/`beam_time`/`thickness`。<br>★ 血條標題「name  [label  n/3]」總寬 **≤ 220px**。2026-08-11 重量:最長標籤變成 `CANON`(5字)→後綴 135px,**name 上限只剩 85px**(OVERSEER=76,餘 9px)。<br>⚠️ 標籤寫成 `CANNON`(雙 N)會變 221px **超 1px 就折行**——改標籤前先用 §5-4 的字寬腳本量 |
 | **BOSS 死亡演出** | `entity_enemy.lua` 的 `BOSS_DEATH_DURATION`(3.0)與 `BOSS_DEATH_BURST_INTERVAL`(0.22)。★`BOSS_KILL` 判定本來就等 `is_exploding` 結束,**改長度＝改「爆炸播完才過關」** |
 | **運送目標** | `entity_controller.lua` 開頭一整組:浮空 `TARGET_FLOAT_H`(5)、飄動 `TARGET_BOB_AMP`(3)/`TARGET_BOB_SPEED`(2.2)、換幀 `TARGET_FRAME_TIME`(0.12)、**平台上表面** `TARGET_PLATFORM_TOP`(8,箱底對齊這條線)、飛走 `TARGET_FLY_VX`(-70)/`TARGET_FLY_VY`(-110)/`TARGET_FLY_ACC`(220,加速起飛)/`TARGET_FLY_MAX_T`(3.0,保險)。<br>★**飛到完全離開畫面上緣才消失**,不是固定秒數;箱子位置統一由 `stoneRestPos()` 算 |
@@ -268,14 +347,23 @@ crank 只有 8 個呼叫點、換觸控不成問題;**真正的風險是焦點�
 | **過場圖 / 對話框** | 圖 **400×163**;文字框滿版、上緣 `DIALOG_Y = 163`,**三處必須一致**(`state_intro`/`state_outro`/`state_mission`) |
 | **關卡 HUD** | `state_mission.lua` 第 4 段:玩家血條在**操作面板右側、與面板共用同一塊白底**。★不要移回左上角——會被 BOSS 血條的白底(x=87~368、y=3~33)蓋住 |
 | ★ **零件圖比格子高時** | `parts_data` 的 `align_image_top`。`true`＝**上緣對齊格子上緣**、多出來的往下超出格子(**FEET 48×20**、**WHEEL2 48×20** 都是);`false`(預設)＝底部對齊格子底部,可再用 `image_offset_y` 微調。<br>★ 機體上、HQ 組裝格、HQ 預覽、商店、關卡預覽**共 7 處都讀這一個欄位**,所以換圖變高時**只要改這個布林**,不必逐處改繪製程式 |
-| **移動零件面板** | `wheel_panel.png` **2 格(64px)** 滑軌 + **第 3 格**跳躍鈕(能跳)或 `empty.png`。滑塊行程 `STICK_MAX_OFFSET`(23)＝(軌道64−滑塊18)/2,**換面板圖要一併改** |
-| **CLAW 開合開關** | 面板左格,`claw-button-table-32-32`(2 格)的**第 1 格＝開、第 2 格＝夾起**。<br>★ 2026-08-10 由佔位圖 `claw_control_v`(3 格)換來,**兩張圖的順序剛好相反**(舊圖 1=關/2=開)——換圖時 [entity_mech_render.lua](Source/entity_mech_render.lua) 那一行沒跟著改的話,按鈕會顯示**相反**的狀態。舊圖與 fallback 分支都已刪除 |
+| **移動零件面板**（⚠️ **只剩關卡中**——HQ 的操作面板已於 2026-08-13 移除） | `wheel_panel.png` **2 格(64px)** 滑軌 + **第 3 格**跳躍鈕(能跳)或 `empty.png`。滑塊行程 `STICK_MAX_OFFSET`(23)＝(軌道64−滑塊18)/2,**換面板圖要一併改** |
+| **CLAW 開合開關**（同上，只剩關卡中） | 面板左格,`claw-button-table-32-32`(2 格)的**第 1 格＝開、第 2 格＝夾起**。<br>★ 2026-08-10 由佔位圖 `claw_control_v`(3 格)換來,**兩張圖的順序剛好相反**(舊圖 1=關/2=開)——換圖時 [entity_mech_render.lua](Source/entity_mech_render.lua) 那一行沒跟著改的話,按鈕會顯示**相反**的狀態。舊圖與 fallback 分支都已刪除 |
 | ★ **結算畫面** | [state_result.lua](Source/state_result.lua) 開頭一區。**成功只有 `MISSION COMPLETE` 一行**(2026-08-11 移除了第二行訊息與 CORE UPGRADED 橫幅——核心升級有專屬畫面 `state_core_upgrade` 接在後面,重複了)。<br>★ **失敗仍保留第二行**＝失敗原因(掉下懸崖／時間到／機體損毀／NPC 陣亡),那是唯一的失敗回饋,不要一起砍。<br>**資源三段式演出**:現有數字 → 閃爍 `+N` → 最終數字。`ANIM_HOLD_F`(18幀≈0.6s)／`ANIM_FLASH_F`(36幀≈1.2s)／`ANIM_BLINK_F`(4,與 `state_shop` 的 `res_flash_timer` 同一套)。<br>版面 `RES_LABEL_X`(118)／`RES_VALUE_R`(248,數字**右**對齊)／`RES_PLUS_X`(260)／`RES_Y0`(100)／`RES_LINE_H`(22)。<br>★ 加獎勵**之前**的存量在 setup 就先記進 `before_steel/copper/rubber`,不能事後反推 |
-| ★ **HQ 任務框(兩行)** | `HQ_LAYOUT.mission`(x=6,y=19,w=387,h=49)。第 1 行＝目標說明、第 2 行＝`REWARD S:n C:n R:n`(2026-08-11 新增,出擊前就看得到報酬),兩行**一起**垂直置中、行距 4px。<br>⚠️ **`REQ:` 必須畫在第 2 行右側,不能放第 1 行** —— 說明最長 353px(`Deliver the stone to the target zone`)右緣到 **365**,而 `REQ: CLAW` 左緣在 **301**,同一行會疊字(**M002/M003/M005 三關就是這個組合**)。REWARD 只有 225px、右緣 237,放同一行才不會撞 |
-| **HQ / 商店版面** | `state_hq.lua` 的 `HQ_LAYOUT`、`state_shop.lua` 的 `SHOP_LAYOUT` |
-| ★ **標題畫面背景** | [state_menu.lua](Source/state_menu.lua) 開頭一整區:排數 `ROWS`(4)、每排每幀位移 `ROW_SPEEDS`(`{0.7,-0.5,0.9,-0.6}`,**正=右／負=左**)、一段寬度 `STRIP_W`(480)、零件間距 `ROW_GAP_MIN/MAX`(14/46,越大越稀疏)、排內上下抖動 `ROW_JITTER`(6)、減淡 `BG_DIM`(0.5)。<br>★ `cover.png` 是**透明底**,只剩標題字 —— 先畫零件層、再疊 cover,**順序不能反**。<br>★ 每排在 setup 合成成一張 `STRIP_W` 長條圖,畫兩段循環;**超出右緣的零件會補畫在 `x − STRIP_W`**,否則接縫會斷。<br>⚠️ `BG_DIM` 存在的理由:零件圖 60~83% 是黑的,不減淡會把黑色標題字吃掉(§3-4)。設 0 = 零件清晰但標題糊。<br>捲動推進在 `update()` 用**每幀像素數**(refresh rate 固定 30fps),不算 dt |
+| ★ **HQ 任務框(兩行)** | `HQ_LAYOUT.mission`(**2026-08-13 換新底圖後為 x=20,y=19,w=360,h=45**)。標題黑標籤在 `tab`(x=16,y=−1)。第 1 行＝目標說明、第 2 行＝`REWARD S:n C:n R:n`(2026-08-11 新增,出擊前就看得到報酬),兩行**一起**垂直置中、行距 4px。<br>⚠️ **`REQ:` 必須畫在第 2 行右側,不能放第 1 行** —— 說明最長 353px(`Deliver the stone to the target zone`)右緣到 **365**,而 `REQ: CLAW` 左緣在 **301**,同一行會疊字(**M002/M003/M005 三關就是這個組合**)。REWARD 只有 225px、右緣 237,放同一行才不會撞 |
+| ★★ **HQ / PARTS 版面與流程** | **2026-08-13 大改版，完整規格見 [GDD §8.05b/§8.05c](GDD_正式版_組裝玩具任務.md)**。<br>版面：`state_hq.lua` 的 `HQ_LAYOUT`、`state_shop.lua` 的 `SHOP_LAYOUT`（**兩張表就是全部**）。<br>**流程**:HQ 的操作面板與 SHOP 鈕**已移除**;`TOP PARTS`/`BOTTOM PARTS` → 進 **PARTS 介面**(原商店,現在同時做購買/修理/安裝);核心**移出組裝格**改成右下角**出擊按鈕**。<br>★ 座標工具:`python tools/scan_hq_bg.py <圖>` 掃描底圖的白色連通區域,直接吐出各框內緣座標。<br>⚠️ `mech_cx/cy` 與 `start_x/y` **掃不出來**(落在機艙裝飾圖上),是看畫面調的。 |
+| ★ **出擊按鈕(＝核心)** | `core<N>-table-64-64.png`,格號 **1 底座 / 2 未按 / 3 按下 / 4 選中(選配)**。<br>4 格以上才用第 4 格,否則退回第 2 格 —— **補圖即自動生效,不必改程式**。<br>對應圖寫在 `core_data` 的 `button_sprite`;`core2`/`core3` 載不到會**自動退回 core1**。<br>★ 按下時**先播 8 幀動畫才 `setState`** —— 舊版同一幀就切換,那一格永遠來不及畫。倒數在 **update** 不在 draw(draw 可能因切換而不執行)。 |
+| **PARTS 介面** | 清單只顯示名稱、**CRANK 捲動**(30°/格)、右下三顆鈕 `BUY`\|`REPAIR` / `INSTALL` / `BACK`。<br>★ **不可用的鈕整顆隱藏**,所以**游標必須跳過**它們;可用判斷抽成 `buttonEnabled()`,**繪製端與輸入端共用**。<br>`INSTALL` → 設 `GameState.pending_install` 回 HQ,HQ 於 setup 進入選位置狀態。 |
+| ★ **標題畫面背景** | [state_menu.lua](Source/state_menu.lua) 開頭一整區:排數 `ROWS`(4)、每排每幀位移 `ROW_SPEEDS`(`{0.7,-0.5,0.9,-0.6}`,**正=右／負=左**)、一段寬度 `STRIP_W`(480)、零件間距 `ROW_GAP_MIN/MAX`(14/46,越大越稀疏)、排內上下抖動 `ROW_JITTER`(6)、減淡 `BG_DIM`(0.5)。<br>★ `cover.png` 是**透明底**,只剩標題字 —— 先畫零件層、再疊 cover,**順序不能反**。<br>★ 每排在 setup 合成成一張 `STRIP_W` 長條圖,畫兩段循環;**超出右緣的零件會補畫在 `x − STRIP_W`**,否則接縫會斷。<br>⚠️ `BG_DIM` 存在的理由:零件圖 60~83% 是黑的,不減淡會把黑色標題字吃掉(§3-4)。<br>
+★★ **`setDitherPattern` 的 alpha 是「透明度」不是「不透明度」——數字越大、白點越少。**
+2026-08-13 用開機 log 實測(16×16 取樣 256 點):`0.00→256/256 全白`、`0.25→192`、`0.50→128`、`0.75→64`、`1.00→0`。
+→ **要讓零件更清楚就調大、要標題更好讀就調小**(現值 **0.65**,2026-08-13 由 0.5 調高)。
+⚠️ 舊註解寫的「設 0 = 不減淡」是**錯的**:0 之所以沒事只是因為 `if BG_DIM > 0` 把整段跳過,
+寫 0.01 會得到幾乎全白的畫面。同一個 alpha 語意也用在 `entity_controller.lua` 的 `surface_dither`。
+> 量法:在 `main.lua` 尾端暫時加一段 —— 用 `image.new` + `pushContext` + `setDitherPattern` 填色,
+> 再用 `img:sample(x,y)` 數白點並 `print`,然後跑一次開機驗證讀 log。**這類「猜方向會做反」的事都可以這樣實測。**<br>捲動推進在 `update()` 用**每幀像素數**(refresh rate 固定 30fps),不算 dt |
 | **存檔 / 選關畫面底圖** | 兩個畫面都吃 `images/save_bg`(選關是**暫用**,專屬 `mission_select_bg` 未做)。<br>⚠️ `save_bg.png` 是**滿版細點陣場景圖**,不是 `hq_bg` 那種留白框線底圖 —— 所以兩個檔各自有一份局部的 `drawTextOnWhite()`,文字一律鋪白底、清單列未選中先填白再描框(選中則沿用黑底白字)。<br>★ 這是 §3-4 的直接應用。**日後換成留白式底圖時,把那些白底拿掉即可,版面座標沒動過** |
-| ⚠️ **HQ 組裝格畫的是 `_img_scaled`** | 預先合成圖,在 `state_hq` setup 內產生(CANON＝底座+上移砲管;CLAW＝底座+臂+爪)。**改組裝格外觀要改那段**,改下方的 `elseif _img` 分支沒有作用(那是走不到的 fallback)。CLAW 的合成圖上下各超出格子 4px,靠 `pdata._scaled_offset_y` 對回格子 |
+| ⚠️ **組裝格與 PARTS 預覽都畫 `_img_scaled`** | 預先合成圖,在 `state_hq` setup 內產生(CANON＝底座+上移砲管;CLAW＝底座+臂+爪)。**改外觀要改那段**,改下方的 `elseif _img` 分支沒有作用(走不到的 fallback)。CLAW 合成圖上下各超出格子 4px,靠 `pdata._scaled_offset_y` 對回格子。<br>★ **2026-08-13**:PARTS 介面的預覽也改讀這張圖 —— 舊版把 base/arm/upper/lower **全畫在同一個座標**,CLAW 整疊在一起。三個畫面(關卡/組裝格/PARTS)現在必然一致。 |
 | 地面表面層 | `entity_controller.lua` 的 `SURFACE_T`(6)、`self.surface_dither`(0.5, Bayer8x8) |
 | 過場/對話文案 | `intro_data.lua` / `outro_data.lua` / 關卡 JSON 的 `scene.dialog` |
 

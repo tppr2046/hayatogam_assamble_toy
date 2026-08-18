@@ -32,6 +32,10 @@ _G.BossData = bd or _G.BossData or {}
 local cd = import "core_data"
 _G.CoreData = cd or _G.CoreData or {}
 
+-- [[ 耐久 ]] 零件耐久/損壞（GDD §8.07）。★ 必須在 parts_data 之後載入（會讀 indestructible）
+local du = import "durability"
+_G.Durability = du or _G.Durability or {}
+
 -- [[ S8 ]] 系統選單（Menu 鍵）項目管理
 local mi = import "menu_items"
 _G.MenuItems = mi or _G.MenuItems or {}

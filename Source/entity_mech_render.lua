@@ -238,14 +238,17 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     
     local part_type = pdata.part_type
     local cell_size = mech_grid.cell_size
-    local px = draw_x + (item.col - 1) * cell_size
+    -- ★ image_offset_x/y ＝「整個零件相對格子的位移」，繪製端與槍口端（entity_mech.lua
+    --   的 updateParts）**讀同一組欄位**，所以不會出現「圖畫高了、子彈還從原位出來」。
+    --   反向槍用 x = −8 讓槍口朝左伸出格外；高位槍用 y = −8 抬高半格。
+    local px = draw_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
     local py_top = body_draw_y + (mech_grid.rows - item.row) * cell_size
     local ok, iw, ih = pcall(function() return pdata._img:getSize() end)
     if not ok or not iw or not ih then return end
-    
+
     local part_y
     if pdata.align_image_top then
-        part_y = py_top
+        part_y = py_top + (pdata.image_offset_y or 0)
     else
         local offset_y = pdata.image_offset_y or 0
         part_y = py_top + (cell_size - ih) + offset_y
