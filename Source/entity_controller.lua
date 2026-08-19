@@ -155,6 +155,12 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             obs.height = odata.height or 40
         end
         
+        -- [[ §15.3 可破壞石塊 ]] 關卡 JSON 的 obstacle 只要加 `"hp": N` 就變成**可破壞**。
+        -- ★ 沿用既有的 obstacle 系統（它本來就會擋住移動），不另做一種實體 ——
+        --   碰撞、繪製、與石頭合併成 all_obstacles 的那段全部自動沿用。
+        -- ★ 沒有 hp 的 obstacle 行為完全不變（既有關卡不受影響）。
+        obs.hp = odata.hp            -- nil = 打不破
+        obs.max_hp = odata.hp
         table.insert(controller.obstacles, obs)
     end
     
@@ -167,6 +173,49 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             enemy = Enemy:init(edata.x, edata.y, edata.type, safe_ground_y)
         end
         table.insert(controller.enemies, enemy)
+    end
+
+    -- ============================================================
+    -- [[ §15.3 空中平台 ]] scene.platforms = [{ x, y, width, crumble }]
+    -- ★ 這才是「鬆動地板」真正需要的東西：**跳上去的空中板子**，
+    --   而不是地形陣列裡的一格（地形是靠世界 x 查表的連續地面，表達不了浮空板）。
+    -- ★ 單向平台：從下往上跳穿得過去，只有**下墜時**才會踩到頂面 —— 平台遊戲的標準行為。
+    -- ★ crumble = true 的板子踩久了會塌；沒設就是普通板子。
+    -- ★ 這套之後也是「移動地板」的基礎（平台本來就是獨立實體，加上速度即可）。
+    controller.platforms = {}
+    for _, pd in ipairs((scene_data and scene_data.platforms) or {}) do
+        table.insert(controller.platforms, {
+            x = pd.x or 0,
+            y = pd.y or 100,          -- 螢幕座標（與 ropes 相同，都是「空中的東西」）
+            width = pd.width or 64,
+            height = pd.height or 8,
+            crumble = pd.crumble and true or false,
+            crumble_timer = 0,
+            collapsed = false,
+            -- [[ §15.3 移動平台 ]] 從起點來回移動的距離與速度（0 = 不動）。
+            -- ★ 用「相對起點的位移量」而不是「終點座標」：關卡編輯器只要填兩個數字,
+            --   而且平台被拖動時不必重算終點。
+            move_x = pd.move_x or 0,
+            move_y = pd.move_y or 0,
+            move_speed = pd.move_speed or 30,
+            home_x = pd.x or 0,
+            home_y = pd.y or 100,
+            phase = 0,          -- 0→1→0 的來回進度
+            phase_dir = 1,
+        })
+    end
+
+    -- [[ §15.3 吊索 ]] scene.ropes = [{ x1, x2, y }]：一條**水平**索道。
+    -- ★ y 與地形同一個座標系（已扣掉 ui_offset），所以直接沿用 safe_ground_y 的基準。
+    -- ★ 刻意只做水平索道 —— 斜的會讓「沿索移動」變成二維問題（要投影、要算切線），
+    --   而這一項的目的是「離開地面的移動模式」，水平就足夠表達。
+    controller.ropes = {}
+    for _, rd in ipairs((scene_data and scene_data.ropes) or {}) do
+        table.insert(controller.ropes, {
+            x1 = math.min(rd.x1 or 0, rd.x2 or 0),
+            x2 = math.max(rd.x1 or 0, rd.x2 or 0),
+            y  = (rd.y or 60),
+        })
     end
 
     -- [[ S4 ]] 敵人重生點（資料驅動）：{ type, x, y, interval 秒, max 上限(nil=無限) }
@@ -361,7 +410,7 @@ end
 -- 添加玩家砲彈
 -- blast_radius / blast_damage：命中或落地時的範圍爆炸（CANON3 的迫擊砲效果）。
 -- 兩者都給才會生效；不給就是一般直擊砲彈，行為與以前完全相同。
-function EntityController:addPlayerProjectile(x, y, vx, vy, damage, grav_mult, size, blast_radius, blast_damage)
+function EntityController:addPlayerProjectile(x, y, vx, vy, damage, grav_mult, size, blast_radius, blast_damage, self_block_from)
     grav_mult = grav_mult or 1.0
 
     local projectile = Projectile:init(x, y, vx, vy, damage, true, self.ground_y)
@@ -372,6 +421,10 @@ function EntityController:addPlayerProjectile(x, y, vx, vy, damage, grav_mult, s
         projectile.blast_radius = blast_radius
         projectile.blast_damage = blast_damage or damage
     end
+    -- [[ §15.2 高位槍 ]] `self_block_from` ＝ 發射者的零件 id。
+    -- 設了就會在飛行前段檢查「有沒有撞到自己機體上的**其他**零件」，撞到就消失。
+    -- ★ 這是「拿掉槍口淨空、允許並排」的配套代價：可以裝在一起，但可能被自己擋。
+    projectile.self_block_from = self_block_from
     table.insert(self.projectiles, projectile)
     print("LOG: Player fired projectile at (" .. math.floor(x) .. ", " .. math.floor(y) .. ") vx=" .. math.floor(vx) .. " grav_mult=" .. grav_mult)
 end
@@ -382,6 +435,80 @@ end
 --   本檔與呼叫端都不必改（幀數由 imagetable 的長度決定）。
 local HIT_SPARK_FRAMES = 4        -- 程式繪製時的幀數
 local HIT_SPARK_FRAME_TIME = 0.04 -- 每幀秒數（圖與程式繪製共用）
+
+-- [[ §15.4 隱形敵人 ]] 「這隻敵人現在打不打得到」的**唯一判定**。
+-- ★ 隱形中要讓攻擊**直接穿過去** —— 不能只是「打到但傷害為 0」，
+--   那樣子彈仍會被消耗、還會冒火花，玩家看到的是「打中了卻沒扣血」，更混亂。
+-- ★ 命中判定點有 6 處（飛彈鎖定/飛彈命中/雷射/砲彈/範圍爆炸/近戰），全部走這裡。
+function EntityController:canHitEnemy(e)
+    if not e or not e.is_alive then return false end
+    if e.cloaked then return false end                       -- 隱形中：穿過去
+    return self:isEngageable(e.x, e.width)
+end
+
+-- [[ §15.3 移動平台 ]] 推進平台位置,並回傳「站在上面的玩家要跟著位移多少」。
+--
+-- ★ **必須在玩家物理之前呼叫**（state_mission 的重力/碰撞之前）。
+--   放在 updateAll 裡會慢一幀 —— 玩家會看起來在平台上滑動。
+-- ★ 載人判定與崩塌用同一個「腳底貼著平台頂面」的條件,兩者不會不一致。
+-- 回傳 dx, dy（要加到機體座標上）
+function EntityController:updatePlatformMotion(dt, mech_x, mech_y, mech_w, mech_h)
+    local carry_dx, carry_dy = 0, 0
+    for _, pf in ipairs(self.platforms or {}) do
+        if (pf.move_x ~= 0 or pf.move_y ~= 0) and not pf.collapsed then
+            local span = math.max(math.abs(pf.move_x), math.abs(pf.move_y))
+            if span > 0 then
+                -- 線性來回（不是正弦）—— 平台遊戲的落腳點要好預測,等速比較好抓時機
+                local step = (pf.move_speed or 30) * dt / span
+                pf.phase = pf.phase + step * pf.phase_dir
+                if pf.phase >= 1 then pf.phase = 1; pf.phase_dir = -1
+                elseif pf.phase <= 0 then pf.phase = 0; pf.phase_dir = 1 end
+
+                local nx = pf.home_x + pf.move_x * pf.phase
+                local ny = pf.home_y + pf.move_y * pf.phase
+                local dx, dy = nx - pf.x, ny - pf.y
+                pf.x, pf.y = nx, ny
+
+                -- 玩家正踩在這塊上 → 一起被帶走
+                local on_top = (mech_x + mech_w > pf.x) and (mech_x < pf.x + pf.width)
+                               and math.abs((mech_y + mech_h) - pf.y) <= 4
+                if on_top then carry_dx = carry_dx + dx; carry_dy = carry_dy + dy end
+            end
+        end
+    end
+    return carry_dx, carry_dy
+end
+
+-- [[ §15.3 空中平台 ]] 單向平台落地判定。
+-- 只有**下墜中**（vy > 0）且腳底這一幀「由平台上方跨到下方」才算踩到 —— 從下往上跳會穿過去。
+-- 回傳平台頂端 y（呼叫端把機體貼上去）或 nil。
+function EntityController:platformLanding(x, w, foot_prev, foot_new, vy)
+    if vy and vy < 0 then return nil end
+    local best = nil
+    for _, pf in ipairs(self.platforms or {}) do
+        if not pf.collapsed then
+            local overlap = (x + w > pf.x) and (x < pf.x + pf.width)
+            if overlap and foot_prev <= pf.y and foot_new >= pf.y then
+                if (not best) or pf.y < best then best = pf.y end
+            end
+        end
+    end
+    return best
+end
+
+-- [[ §15.3 吊索 ]] 找出機體**正上方 reach 距離內**的索道（掛得到的那一條）。
+-- mx = 機體中心 x、my = 機體頂端 y。回傳索道或 nil。
+function EntityController:ropeAt(mx, my, reach)
+    reach = reach or 40
+    local best, bestd = nil, reach
+    for _, r in ipairs(self.ropes or {}) do
+        if mx >= r.x1 and mx <= r.x2 then
+            local d = my - r.y          -- 索道在上方時為正
+            if d >= 0 and d <= bestd then best, bestd = r, d end
+        end
+    end
+    return best
+end
 
 function EntityController:addHitSpark(x, y)
     if not self.spark_sheet_tried then
@@ -569,6 +696,98 @@ local function segIntersectsRect(px, py, dx, dy, minx, miny, maxx, maxy)
     return true
 end
 
+-- ============================================================
+-- [[ §15.2 追蹤飛彈 ]] 先往上射,再搜尋最近的敵人並**限速轉向**飛過去。
+--
+-- ★ GDD 明寫「轉向速度與飛行速度可調,且**刻意不要太強**」——
+--   閥門就是 parts_data 的 missile_turn_rate（每秒最多轉幾度）。
+--   轉太快＝必中、玩家不用瞄；轉太慢＝繞圈圈打不到。這個數字要試玩才知道。
+-- ★ 只鎖 `isEngageable` 範圍內的敵人 —— 與「看不見的敵人打不到」同一套判定,
+--   否則飛彈會飛去打畫面外的東西（HANDOFF §5-1 的交戰範圍）。
+-- ============================================================
+local MISSILE_W, MISSILE_H = 6, 6
+
+function EntityController:addPlayerMissile(x, y, pdata)
+    self.missiles = self.missiles or {}
+    table.insert(self.missiles, {
+        x = x, y = y,
+        -- 先往**上**發射（GDD 的行為描述）：角度 -90 度
+        angle = -90,
+        speed = pdata.missile_launch_speed or 90,
+        cruise = pdata.missile_speed or 110,
+        turn = pdata.missile_turn_rate or 120,
+        life = pdata.missile_life or 4.0,
+        seek = pdata.missile_seek_range or 260,
+        damage = pdata.projectile_damage or 20,
+        target = nil,
+    })
+end
+
+function EntityController:updateMissiles(dt)
+    if not self.missiles then return end
+    for i = #self.missiles, 1, -1 do
+        local m = self.missiles[i]
+        m.life = m.life - dt
+        if m.life <= 0 then
+            self:addHitSpark(m.x, m.y)      -- 自滅也給一點回饋
+            table.remove(self.missiles, i)
+            goto continue_missile
+        end
+
+        -- 目標失效（死了/離開交戰範圍）就重新找
+        if m.target and (not m.target.is_alive or not self:isEngageable(m.target.x, m.target.width)) then
+            m.target = nil
+        end
+        if not m.target then
+            local best, bestd = nil, m.seek
+            for _, e in ipairs(self.enemies) do
+                if self:canHitEnemy(e) then
+                    local dx, dy = (e.x + e.width / 2) - m.x, (e.y + e.height / 2) - m.y
+                    local d = math.sqrt(dx * dx + dy * dy)
+                    if d < bestd then best, bestd = e, d end
+                end
+            end
+            m.target = best
+        end
+
+        -- 轉向：**每幀最多轉 turn * dt 度**，這就是「不要太強」的閥門
+        if m.target then
+            local dx = (m.target.x + m.target.width / 2) - m.x
+            local dy = (m.target.y + m.target.height / 2) - m.y
+            local want = math.deg(math.atan(dy, dx))
+            local diff = (want - m.angle + 180) % 360 - 180   -- 收斂到 -180~180
+            local maxturn = m.turn * dt
+            if diff > maxturn then diff = maxturn elseif diff < -maxturn then diff = -maxturn end
+            m.angle = m.angle + diff
+            m.speed = m.cruise
+        end
+
+        local rad = math.rad(m.angle)
+        m.x = m.x + math.cos(rad) * m.speed * dt
+        m.y = m.y + math.sin(rad) * m.speed * dt
+
+        -- 命中判定（與砲彈同一套 checkMechCollision，只是角色對調）
+        for _, e in ipairs(self.enemies) do
+            if self:canHitEnemy(e)
+               and self:checkMechCollision(e.x, e.y, e.width, e.height, m.x, m.y, MISSILE_W, MISSILE_H) then
+                e:takeDamage(m.damage)                    -- [[ §15.4 ]] 集中入口（隱形中不生效）
+                self:addHitSpark(m.x, m.y)
+                if e.hp <= 0 and e.startExplosion then e:startExplosion() end
+                table.remove(self.missiles, i)
+                goto continue_missile
+            end
+        end
+
+        -- 撞地就消失
+        if m.y >= self:getGroundHeight(m.x) then
+            self:addHitSpark(m.x, m.y)
+            table.remove(self.missiles, i)
+        end
+
+        ::continue_missile::
+    end
+end
+
 function EntityController:addPlayerLaser(x, y, vx, vy, length, thickness, damage, max_range)
     self.player_lasers = self.player_lasers or {}
     vx = vx or 300
@@ -605,7 +824,7 @@ function EntityController:updatePlayerLasers(dt)
         local half = L.thickness / 2
         local segdx, segdy = L.dx * L.length, L.dy * L.length
         for _, enemy in ipairs(self.enemies or {}) do
-            if enemy.is_alive and not L.hit[enemy] and self:isEngageable(enemy.x, enemy.width) then
+            if self:canHitEnemy(enemy) and not L.hit[enemy] then
                 local ex1 = enemy.x + (enemy.width or 0)
                 local ey1 = enemy.y + (enemy.height or 0)
                 if segIntersectsRect(L.x, L.y, segdx, segdy,
@@ -630,7 +849,7 @@ function EntityController:updatePlayerLasers(dt)
                             end
                         end
                         if not blocked then
-                            enemy.hp = enemy.hp - L.damage
+                            enemy:takeDamage(L.damage)    -- [[ §15.4 ]] 集中入口
                             enemy.hit_shake_timer = 0.3
                             enemy.hit_shake_offset_x = 0
                             -- 命中點：把敵人中心投影到光束線段上（夾在 0~1），
@@ -676,7 +895,7 @@ function EntityController:triggerBlast(x, y, radius, damage)
     damage = damage or 0
 
     for _, enemy in ipairs(self.enemies or {}) do
-        if enemy.is_alive then
+        if self:canHitEnemy(enemy) then          -- [[ §15.4 ]] 隱形中不吃範圍傷害
             local ex = enemy.x + (enemy.width or 0) / 2
             local ey = enemy.y + (enemy.height or 0) / 2
             local dx, dy = ex - x, ey - y
@@ -686,7 +905,7 @@ function EntityController:triggerBlast(x, y, radius, damage)
                     enemy.is_triggered = true
                     enemy.explode_timer = 0
                 else
-                    enemy.hp = enemy.hp - damage
+                    enemy:takeDamage(damage)              -- [[ §15.4 ]] 集中入口
                     enemy.hit_shake_timer = 0.3
                     enemy.hit_shake_offset_x = 0
                     if enemy.hp <= 0 and not enemy.is_exploding then
@@ -930,6 +1149,41 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         end
     end
 
+    -- [[ §15.3 空中平台 ]] 崩塌計時（玩家站在上面才算）
+    do
+        local CRUMBLE_DELAY = 1.2
+        for i = #self.platforms, 1, -1 do
+            local pf = self.platforms[i]
+            if pf.crumble and not pf.collapsed then
+                local on_top = (mech_x + mech_width > pf.x) and (mech_x < pf.x + pf.width)
+                                and math.abs((mech_y + mech_height) - pf.y) <= 3
+                if on_top then
+                    pf.crumble_timer = pf.crumble_timer + dt
+                    if pf.crumble_timer >= CRUMBLE_DELAY then
+                        pf.collapsed = true
+                        print("LOG: platform collapsed at x=" .. pf.x)
+                    end
+                end
+            end
+        end
+    end
+
+    -- [[ §15.2 偵測器 ]] 每幀算一次「有沒有裝偵測器」，供隱形敵人查詢。
+    -- ★ 算在這裡（單一處）而不是讓每隻敵人自己掃裝備清單 —— 敵人可能有十幾隻，
+    --   每隻每幀掃一次裝備是白費的；而且規則只有一個地方。
+    do
+        self.detector_active = false
+        local eq = _G.GameState and _G.GameState.mech_stats
+                   and _G.GameState.mech_stats.equipped_parts or {}
+        for _, item in ipairs(eq) do
+            local pd = _G.PartsData and _G.PartsData[item.id]
+            if pd and pd.part_type == "DETECTOR" then self.detector_active = true break end
+        end
+    end
+
+    -- [[ §15.2 ]] 追蹤飛彈
+    self:updateMissiles(dt)
+
     -- [[ §8.08 ]] 掉落物：落地物理 + 碰到機體收取
     self:updateDrops(dt, mech_x, mech_y, mech_width, mech_height)
 
@@ -957,11 +1211,60 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                 self:addHitSpark(p.x, p.y)   -- [[ 命中特效 ]]
             end
             
+            -- [[ §15.2 高位槍 self-block ]] 子彈被自己機體上的其他零件擋住 → 消失。
+            -- ★ 只在子彈還在機體範圍內時檢查（離開就不再算），否則每顆子彈每幀都要掃裝備。
+            if p.active and p.self_block_from then
+                -- ⚠️ updateAll 沒有拿到 mech_grid，格子邊長用專案固定值 16（GRID_CELL_SIZE）
+                local cell = 16
+                if p.x < mech_x - 8 or p.x > mech_x + mech_width + 24 then
+                    p.self_block_from = nil          -- 已離開機體，之後不必再檢查
+                else
+                    local eq = _G.GameState and _G.GameState.mech_stats
+                               and _G.GameState.mech_stats.equipped_parts or {}
+                    for _, item in ipairs(eq) do
+                        if item.id ~= p.self_block_from then
+                            local bx = mech_x + (item.col - 1) * cell
+                            local by = mech_y + (2 - item.row) * cell
+                            local bw = (item.w or 1) * cell
+                            if self:checkMechCollision(bx, by, bw, cell, p.x, p.y, p.width, p.height) then
+                                p.active = false
+                                self:addHitSpark(p.x, p.y)
+                                print("LOG: high gun shot blocked by own part: " .. item.id)
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- [[ §15.3 可破壞石塊 ]] 玩家砲彈打到有 hp 的障礙物 → 扣血；破了就從清單移除
+            -- （移除後它同時不再擋路、不再被畫 —— 兩者都是讀同一個 self.obstacles）
+            if p.is_player_bullet and p.active then
+                for oi = #self.obstacles, 1, -1 do
+                    local obs = self.obstacles[oi]
+                    -- ⚠️ 障礙物的 y **不是 JSON 的 `y`** —— 繪製與移動碰撞都用
+                    --    `ground_y - height`（貼在地面上）,JSON 的 y 欄位根本沒被讀。
+                    --    2026-08-13 的 bug：這裡誤用 obs.y,矩形差了一整個高度 → 子彈穿過去。
+                    local oy = self.ground_y - (obs.height or 0)
+                    if obs.hp and self:checkMechCollision(obs.x, oy, obs.width, obs.height,
+                                                          p.x, p.y, p.width, p.height) then
+                        obs.hp = obs.hp - (p.damage or 0)
+                        self:addHitSpark(p.x, p.y)
+                        p.active = false
+                        if obs.hp <= 0 then
+                            print("LOG: breakable obstacle destroyed at x=" .. tostring(obs.x))
+                            table.remove(self.obstacles, oi)
+                        end
+                        break
+                    end
+                end
+            end
+
             -- 檢查玩家砲彈是否擊中敵人
             if p.is_player_bullet then
                 for _, enemy in ipairs(self.enemies) do
                     -- [[ 交戰範圍 ]] 看不見的敵人打不到（與「它也不會攻擊你」對稱）
-                    if enemy.is_alive and self:isEngageable(enemy.x, enemy.width)
+                    if self:canHitEnemy(enemy)
                        and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, p.x, p.y, p.width, p.height) then
                         -- 特殊處理：地雷被砲彈擊中時觸發
                         if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
@@ -999,7 +1302,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         -- 若盾牌未阻擋，則造成傷害
                         if not shield_blocked then
                             -- 擊中敵人
-                            enemy.hp = enemy.hp - p.damage
+                            enemy:takeDamage(p.damage)    -- [[ §15.4 ]] 集中入口
                             p.active = false -- 砲彈銷毀
                             self:addHitSpark(p.x, p.y)   -- [[ 命中特效 ]]
 
@@ -1082,7 +1385,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         -- 檢查石頭是否與敵人碰撞（造成傷害）
         if not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
             for _, enemy in ipairs(self.enemies) do
-                if enemy.is_alive and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, stone.x, stone.y, stone.width, stone.height) then
+                if self:canHitEnemy(enemy) and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, stone.x, stone.y, stone.width, stone.height) then
                     -- 特殊處理：地雷被石頭擊中時觸發
                     if enemy.attack_type == "EXPLODE" and not enemy.is_triggered then
                         enemy.is_triggered = true
@@ -1092,7 +1395,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     end
                     
                     -- 石頭砸到敵人
-                    enemy.hp = enemy.hp - stone.damage
+                    enemy:takeDamage(stone.damage)        -- [[ §15.4 ]] 集中入口
                     enemy.hit_shake_timer = 0.3
                     enemy.hit_shake_offset_x = 0
                     
@@ -1148,7 +1451,7 @@ function EntityController:checkWeaponCollision(weapon_parts)
         end
         
         for i, enemy in ipairs(self.enemies) do
-            if enemy.is_alive and not enemy.is_exploding then
+            if self:canHitEnemy(enemy) and not enemy.is_exploding then
                 -- AABB 碰撞檢查
                 local collision = weapon.x < enemy.x + enemy.width and
                                  weapon.x + weapon.w > enemy.x and
@@ -1158,7 +1461,7 @@ function EntityController:checkWeaponCollision(weapon_parts)
                 if collision then
                     -- 擊中敵人，扣除 HP
                     local attack = weapon.attack or 0
-                    enemy.hp = enemy.hp - attack
+                    enemy:takeDamage(attack)              -- [[ §15.4 ]] 集中入口
                     damage_dealt = damage_dealt + attack
                     
                     -- 播放擊中音效
@@ -1534,6 +1837,42 @@ function EntityController:draw(camera_x)
         projectile:draw(camera_x)
     end
 
+    -- [[ §15.3 空中平台 ]] 白底 + 黑框（§3-4）。crumble 已被踩過還沒塌 → 閃爍預警。
+    for _, pf in ipairs(self.platforms or {}) do
+        if not pf.collapsed then
+            local sx = pf.x - camera_x
+            if sx < 400 and sx + pf.width > 0 then
+                local warn = pf.crumble and pf.crumble_timer > 0
+                        and (math.floor(playdate.getCurrentTimeMilliseconds() / 90) % 2 == 0)
+                gfx.setColor(warn and gfx.kColorBlack or gfx.kColorWhite)
+                gfx.fillRect(sx, pf.y, pf.width, pf.height)
+                gfx.setColor(warn and gfx.kColorWhite or gfx.kColorBlack)
+                gfx.drawRect(sx, pf.y, pf.width, pf.height)
+            end
+        end
+    end
+
+    -- [[ §15.3 吊索 ]] 目前程式繪製：白色粗線 + 黑色細線（黑天空/白天空都看得見 §3-4）。
+    -- 放 images/rope.png 之後可改成沿線平鋪。
+    for _, r in ipairs(self.ropes or {}) do
+        local sx1, sx2 = r.x1 - camera_x, r.x2 - camera_x
+        if sx2 > 0 and sx1 < 400 then
+            gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(4)
+            gfx.drawLine(sx1, r.y, sx2, r.y)
+            gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(2)
+            gfx.drawLine(sx1, r.y, sx2, r.y)
+            gfx.setLineWidth(1)
+        end
+    end
+
+    -- [[ §15.2 追蹤飛彈 ]] 目前程式繪製（白底黑框的小方塊,黑地面上也看得見 §3-4）。
+    -- 放 images/missile.png 之後可改成讀圖並依 m.angle 旋轉。
+    for _, m in ipairs(self.missiles or {}) do
+        local sx = m.x - camera_x
+        gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - 3, m.y - 3, MISSILE_W, MISSILE_H)
+        gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - 3, m.y - 3, MISSILE_W, MISSILE_H)
+    end
+
     -- [[ CANON3 ]] 範圍爆炸的視覺（沿用 mine_explode 圖表，以爆心置中）
     if self.blast_sheet and self.blasts then
         for _, b in ipairs(self.blasts) do
@@ -1656,6 +1995,7 @@ function EntityController:getGroundHeight(world_x)
             if terrain.type == "pit" then
                 -- [[ S2 懸崖 ]] 空洞：回傳極大值＝此處無地面，機甲不會被夾住而下墜
                 return base_y + 10000
+
             elseif terrain.type == "flat" then
                 return base_y
             elseif terrain.type == "up15" then

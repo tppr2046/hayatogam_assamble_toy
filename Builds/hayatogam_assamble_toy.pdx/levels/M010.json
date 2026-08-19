@@ -1,0 +1,51 @@
+{
+  "id": "M010",
+  "name": "10 STEALTH TEST",
+  "description": "Test level for cloaked enemies and breakable blocks.",
+  "prerequisite": 0,
+  "time_limit": -1,
+  "objective": { "type": "ELIMINATE_ALL", "description": "Defeat all enemies" },
+  "reward_steel": 0,
+  "reward_copper": 0,
+  "reward_rubber": 0,
+  "scene": {
+    "width": 1200,
+    "ground_y": 220,
+    "sky": "images/bg_sky",
+    "backgrounds": [
+      { "layer": 1, "x": 205, "y": 48, "image": "images/bg_building1.png" },
+      { "layer": 1, "x": 700, "y": 48, "image": "images/bg_building3.png" }
+    ],
+    "terrain": [
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 },
+      { "type": "flat", "height_offset": 0 }
+    ],
+    "obstacles": [
+{"x":340,"y":0,"width":32,"height":64,"hp":15}
+    ],
+    "stones": [],
+    "enemies": [
+      { "type": "STEALTH_ENEMY", "x": 520, "y": 0 },
+      { "type": "STEALTH_ENEMY", "x": 200, "y": 0 }
+    ],
+    "delivery_targets": [],
+    "objective": { "type": "ELIMINATE_ALL", "description": "Defeat all enemies" }
+  }
+}

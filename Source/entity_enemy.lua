@@ -73,6 +73,11 @@ function Enemy:init(x, y, type_id, ground_y)
         vy = 0,   -- 垂直速度（跳躍用）
         move_dir = 1, -- 1 for right, -1 for left
         is_alive = true,
+        -- [[ §15.4 隱形敵人 ]] 只有 cloak_duration 有值的型別會用到
+        cloak_duration  = data.cloak_duration,
+        reveal_duration = data.reveal_duration,
+        cloaked = (data.cloak_duration ~= nil),   -- 有宣告就從「隱形」開始
+        cloak_timer = 0,
         is_grounded = true,  -- 是否在地面上
         jump_state = "grounded",  -- "grounded", "jumping", "landing"（用於 JUMP_ENEMY 動畫）
         landing_frame_timer = 0,  -- 著陸幀計時器
@@ -192,6 +197,15 @@ function Enemy:init(x, y, type_id, ground_y)
 end
 
 function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
+    -- [[ 2026-08-13 ]] 朝向跟著玩家：1 = 玩家在右邊（敵人面向右）／-1 = 在左邊（面向左）。
+    -- ★ 為什麼需要：`Enemy:fire()` **本來就會朝玩家開火**（target_dist<0 就往左射），
+    --   但繪製朝向以前是寫死的「一律面向左」。玩家在敵人右側時（左側重生點、
+    --   或玩家折返跑過敵人）就會出現「背對玩家還能射中你」的畫面。
+    -- ★ 既有 8 關幾乎不受影響 —— 玩家一路往右推進，敵人本來就都在右側（face_dir = -1）。
+    if mech_x then
+        self.face_dir = (mech_x >= self.x) and 1 or -1
+    end
+
     -- [[ S6 ]] BOSS 走專屬階段控制器
     if self.is_boss then
         return self:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controller)
@@ -208,6 +222,29 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     end
     
     if not self.is_alive then return end
+    -- [[ §15.4 隱形敵人 ]] 固定節奏的隱形/現身循環。
+    -- ★ 刻意用**固定節奏**而非隨機 —— 玩家要能學會節奏、抓時機打。
+    -- ★ 裝了偵測器就**強制現身** —— 這是偵測器唯一的作用。
+    -- ⚠️⚠️ 這一段**必須放在爆炸動畫處理之後**。
+    --    2026-08-13 的 bug：原本放在 update 最前面且隱形時 `return`,
+    --    導致隱形階段死亡的敵人**爆炸計時器永遠不前進** → is_alive 不會變 false → 屍體殘留。
+    if self.cloak_duration then
+        self.cloak_timer = (self.cloak_timer or 0) + dt
+        local dur = self.cloaked and self.cloak_duration or (self.reveal_duration or 1.5)
+        if self.cloak_timer >= dur then
+            self.cloak_timer = 0
+            self.cloaked = not self.cloaked
+        end
+        if controller and controller.detector_active then
+            self.cloaked = false
+        end
+        -- 隱形中不開火（現身才攻擊 = 玩家的可預測空檔）
+        if self.cloaked then
+            self.fire_timer = 0
+            return
+        end
+    end
+
 
     -- [[ 2026-08-09 ]] 通用待機動畫：敵人資料設了 anim_fps 就循環播放 imagetable。
     -- JUMP_ENEMY 是自己依跳躍狀態指定幀（不設 anim_fps），所以不受影響。
@@ -528,12 +565,36 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         end
     end
 end
+-- ============================================================
+-- [[ §15.4 隱形敵人 ]] **所有對敵人扣血的地方都要走這裡。**
+--
+-- ★ 為什麼要集中：專案裡對敵人扣血的地方有 **6 處**
+--   （飛彈／雷射／範圍爆炸／砲彈／石頭砸／近戰揮擊）。
+--   隱形規則如果逐處判斷，漏掉任何一處就會變成「隱形時還是打得到」——
+--   這正是 HANDOFF §3-5 反覆出事的模式。改成單一入口後，之後要加
+--   護甲、弱點、傷害倍率也只有一個地方要改。
+--
+-- 回傳 true = 傷害有生效。cloaked（隱形中）時回傳 false 且不扣血。
+-- ============================================================
+function Enemy:takeDamage(amount)
+    if not amount or amount <= 0 then return false end
+    if not self.is_alive then return false end
+    -- 隱形中：打不到。★ 裝了偵測器時 controller 會把 cloaked 清掉（見 update）
+    if self.cloaked then return false end
+    self.hp = (self.hp or 0) - amount
+    return true
+end
+
 -- 發射拋物線砲彈 (擊向機甲)
 function Enemy:fire(target_x, controller)
     -- 使用敵人資料中定義的子彈發射位置
     -- ★ 要加上 drone_vertical_offset：無人機的上下浮動是在**繪製時**才套用的
     --   （見 Enemy:draw 的 draw_y），發射點不加就會從偏離機身的高度射出。
-    local start_x = self.x + self.bullet_offset_x
+    -- ★ 槍口 x 是照「面向左」量的；面向右時要鏡射到另一側，
+    --   否則子彈會從背後冒出來（與繪製端的 face_dir 用同一個值）。
+    local off_x = self.bullet_offset_x
+    if self.face_dir == 1 then off_x = self.width - off_x end
+    local start_x = self.x + off_x
     local start_y = self.y + (self.drone_vertical_offset or 0) + self.bullet_offset_y
     local target_dist = target_x - start_x
     -- 使砲彈水平方向速度接近玩家的移動速度（尊重敵人定義的 multiplier）
@@ -1182,10 +1243,19 @@ function Enemy:draw(camera_x)
         draw_y = self.y + self.drone_vertical_offset
     end
     
+    -- [[ §15.4 隱形敵人 ]] 隱形中整隻不畫（連盾牌/劍等附件也不畫，所以整段提前 return）。
+    -- ★ 打不到的東西就不該看得到 —— 兩者必須一致，否則會出現「看得到卻打不到」的挫折。
+    -- ★ 爆炸中一律看得見 —— 不然「打中了但看不到爆炸」會像沒打到
+    if self.cloaked and not self.is_exploding then return end
+
     -- 繪製敵人圖片或方塊
     if self.image then
-        -- flip_x：原圖朝右的敵人整張水平鏡射（本作敵人一律面向左）
-        local fmode = self.flip_x and gfx.kImageFlippedX or gfx.kImageUnflipped
+        -- flip_x：原圖朝右時先鏡射成「面向左」（本作素材的基準朝向）。
+        -- 再依 face_dir 決定要不要**又**翻一次：玩家在右邊就面向右。
+        -- ★ 兩個布林做 XOR —— 直接用 if 串會漏掉「原圖朝右 + 玩家在右」那一組。
+        local mirrored = (self.flip_x and true or false)
+        if self.face_dir == 1 then mirrored = not mirrored end
+        local fmode = mirrored and gfx.kImageFlippedX or gfx.kImageUnflipped
         pcall(function() self.image:draw(screen_x, draw_y, fmode) end)
     else
         gfx.setColor(gfx.kColorBlack)

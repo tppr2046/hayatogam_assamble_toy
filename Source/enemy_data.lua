@@ -158,6 +158,31 @@ return {
         bullet_offset_y = 7
     },
 
+    -- [[ §15.4 隱形敵人 ]] 平時隱形（打不到），只在**短暫現身攻擊**時可被打到。
+    -- ★ 裝了偵測器（§15.2）就**隨時可見可打** —— 兩者是一組,單做任一個都沒意義。
+    -- ★ 現身/隱形是固定節奏,不是隨機 —— 玩家要能學會節奏、抓時機打,
+    --   隨機的話就變成純運氣,那不是設計目的。
+    ["STEALTH_ENEMY"] = {
+        -- [[ §8.08 ]] 電子類＝銅（與 DRONE 同族）
+        drop = { copper = {2, 3} },
+        name = "PHANTOM", hp = 14, attack = 7,
+        -- ★ 沿用 BASIC 的移動型別（"PATROL" 不是有效值，會變成完全不動）
+        move_type = "MOVE FORWARD/BACK", attack_type = "FIRE BULLET",
+        move_probability = 0.7,
+        move_speed = 24,
+        move_range = 90,
+        -- 隱形節奏（秒）：隱形 3 秒 → 現身 1.5 秒（現身時才開火、才打得到）
+        cloak_duration  = 3.0,
+        reveal_duration = 1.5,
+        projectile_speed_mult = 30,
+        projectile_grav_mult = 0.2,
+        fire_cooldown = 1.0,
+        -- 暫時沿用 BASIC 的圖（隱形是靠「畫不畫」表現,不需要專屬圖也能測）
+        image = "images/enemy01",
+        bullet_offset_x = 4,
+        bullet_offset_y = 16
+    },
+
     ["DRONE"] = {
         -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（電子類＝銅）
         drop = { copper = {1, 2} },

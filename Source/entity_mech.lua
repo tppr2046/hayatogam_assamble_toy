@@ -88,6 +88,14 @@ function MechController:init()
         claw_is_attacking = false,  -- 爪子是否在攻擊狀態
         claw_last_attack_angle = 0,  -- 上次攻擊時的角度
         
+        -- [[ §15.3 吊索鉤 ]] 掛住的索道（nil = 沒掛）
+        hook_rope = nil,
+        hook_len = 32,          -- 索道到機體頂端的距離（crank 收放）
+
+        -- [[ §15.2 防護罩 ]] 擋一次 → 冷卻 → 恢復
+        shield_cd = 0,          -- >0 = 冷卻中（秒）
+        shield_flash = 0,       -- 剛擋下時的視覺回饋幀數
+
         -- 玩家受擊效果
         hit_shake_timer = 0,
         hit_shake_offset = 0,
@@ -331,6 +339,50 @@ function MechController:getCanonKnobAngle(part_id)
     return self.canon_knob_angles[part_id] or 0
 end
 
+-- [[ §15.3 吊索鉤 ]] 目前是否掛在索道上（供 state_mission 決定要不要套用重力）。
+-- ★ **焦點切走時不會放開** —— 掛著繼續移動是這個零件的用法：
+--   吊在索上時仍可切到別的零件開火。放開的條件只有兩個：
+--   (1) 再按一次 A（焦點在 HOOK 上時）  (2) 移動到索道邊緣（在 state_mission 判定）。
+function MechController:hookedRope()
+    return self.hook_rope
+end
+
+-- [[ §15.2 防護罩 ]] 傷害套用**之前**先過這裡。
+-- 回傳「實際要扣的傷害」——擋下時回傳 0 並起冷卻。
+-- ★ 刻意做成「攔在傷害管線前面」而不是改傷害計算:
+--   共享血量池、敵人攻擊力、命中判定全部維持原狀,零件只影響「這一下算不算數」。
+-- ★ 只擋**正值傷害**;冷卻中或沒裝防護罩就原樣回傳。
+function MechController:absorbDamage(damage)
+    if not damage or damage <= 0 then return damage end
+    if (self.shield_cd or 0) > 0 then return damage end   -- 冷卻中,擋不了
+
+    local eq = _G.GameState and _G.GameState.mech_stats
+               and _G.GameState.mech_stats.equipped_parts or {}
+    for _, item in ipairs(eq) do
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        if pdata and pdata.part_type == "SHIELD" then
+            self.shield_cd = pdata.shield_cooldown or 5.0
+            self.shield_flash = 12
+            print(string.format("LOG: shield blocked %.0f damage (cd %.1fs)", damage, self.shield_cd))
+            return 0
+        end
+    end
+    return damage
+end
+
+-- 防護罩目前能不能擋（供 UI 顯示）。沒裝防護罩回傳 nil
+function MechController:shieldState()
+    local eq = _G.GameState and _G.GameState.mech_stats
+               and _G.GameState.mech_stats.equipped_parts or {}
+    for _, item in ipairs(eq) do
+        local pdata = _G.PartsData and _G.PartsData[item.id]
+        if pdata and pdata.part_type == "SHIELD" then
+            return ((self.shield_cd or 0) <= 0), (self.shield_cd or 0)
+        end
+    end
+    return nil
+end
+
 -- 檢查發射方向是否被已安裝的零件阻擋（不包括當前發射的零件）
 function MechController:isFiringDirectionBlocked(firing_direction, active_part_id)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
@@ -508,6 +560,131 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         elseif playdate.buttonJustReleased(playdate.kButtonA) then
             self.canon_button_pressed = false
         end
+    elseif part_type == "HOOK" then
+        -- [[ §15.3 吊索鉤 ]] A = **往上發射鉤子**；勾到索道就吊住。
+        --   吊住後：左右 = 沿索前後移動、**crank = 捲動鉤索長度**（角色上下移動）。
+        -- ★ 高度由 `hook_len`（索道到機體頂端的距離）決定,不是貼齊索道 ——
+        --   所以「維持固定高度」是指「維持目前的索長」,玩家可以自己收放。
+        -- ★ 重力與碰撞在 state_mission 跳過（讀 hookedRope），這裡只管掛/放/長度。
+        local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
+        local reach   = (pdata and pdata.hook_reach) or 96
+        local hspeed  = (pdata and pdata.hook_speed) or 2.4
+        local lmin    = (pdata and pdata.hook_len_min) or 16
+        local lmax    = (pdata and pdata.hook_len_max) or 110
+        local per_rot = (pdata and pdata.hook_reel_per_rotation) or 120
+
+        if playdate.buttonJustPressed(playdate.kButtonA) then
+            self.gun_button_pressed = true
+            if self.hook_rope then
+                self.hook_rope = nil              -- 放開 → 落下（重力接手）
+                if _G.SoundManager and _G.SoundManager.playCancel then _G.SoundManager.playCancel() end
+            elseif entity_controller and entity_controller.ropeAt then
+                local mech_w = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
+                local r = entity_controller:ropeAt(mech_x + mech_w / 2, mech_y, reach)
+                if r then
+                    self.hook_rope = r
+                    -- ★ 掛上時保留**目前的高度**（不瞬移）：索長 = 現在離索道多遠
+                    self.hook_len = math.max(lmin, math.min(lmax, mech_y - r.y))
+                    self.velocity_y = 0
+                    if _G.SoundManager and _G.SoundManager.playSelect then _G.SoundManager.playSelect() end
+                end
+            end
+        elseif playdate.buttonJustReleased(playdate.kButtonA) then
+            self.gun_button_pressed = false
+        end
+
+        if self.hook_rope then
+            -- crank 捲索：順時針放長（下降）、逆時針收短（上升）
+            local dc = playdate.getCrankChange()
+            if dc and dc ~= 0 then
+                self.hook_len = (self.hook_len or lmin) + (dc / 360) * per_rot
+                self.hook_len = math.max(lmin, math.min(lmax, self.hook_len))
+            end
+            -- 沿索前後移動。★ **不在這裡夾住兩端** —— 走到邊緣要「脫鉤掉下去」，
+            --   那個判定放在 state_mission（因為焦點切走後 dx 來自別的零件，
+            --   夾在這裡的話一離開 HOOK 焦點就失效了）。
+            if playdate.buttonIsPressed(playdate.kButtonLeft) then
+                dx = -hspeed
+            elseif playdate.buttonIsPressed(playdate.kButtonRight) then
+                dx = hspeed
+            end
+        end
+
+    elseif part_type == "HIGH_GUN" then
+        -- [[ §15.2 高位槍 ]] 手動拋射：按 A 打出**受重力影響**的弧線彈。
+        -- ★ 它有自己的 part_type,所以**不會**被 updateParts 的 GUN 自動開火迴圈掃到,
+        --   冷卻也要自己算（與 MISSILE 同樣的處理）。
+        local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
+        self.high_gun_timer = (self.high_gun_timer or 999) + (1 / 30)
+        if playdate.buttonJustPressed(playdate.kButtonA) then
+            self.gun_button_pressed = true
+            if pdata and self.high_gun_timer >= (pdata.fire_cooldown or 1.4) then
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    if item.id == self.active_part_id then
+                        local cell_size = mech_grid.cell_size
+                        -- 槍口與繪製端共用同一組欄位（圖畫多高,槍口就多高）
+                        local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
+                        local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
+                        local gx = px + cell_size / 2
+                        local gy = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
+                        if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
+                            local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
+                            if oki and iw and ih then
+                                local img_y = pdata.align_image_top
+                                    and (py_top + (pdata.image_offset_y or 0))
+                                    or  (py_top + (cell_size - ih) + (pdata.image_offset_y or 0))
+                                gx = px + pdata.muzzle_x
+                                gy = img_y + pdata.muzzle_y
+                            end
+                        end
+                        local base_speed = entity_controller.player_move_speed or 2.0
+                        local vx = base_speed * (pdata.projectile_speed_mult or 26)
+                        local vy = 0
+                        gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+                        entity_controller:addPlayerProjectile(gx, gy, vx, vy,
+                            pdata.projectile_damage or 3, pdata.projectile_grav_mult or 18,
+                            nil, nil, nil, pdata.self_block and self.active_part_id or nil)
+                        self.high_gun_timer = 0
+                        if _G.SoundManager and _G.SoundManager.playCanonFire then
+                            _G.SoundManager.playCanonFire()
+                        end
+                        break
+                    end
+                end
+            end
+        elseif playdate.buttonJustReleased(playdate.kButtonA) then
+            self.gun_button_pressed = false
+        end
+
+    elseif part_type == "MISSILE" then
+        -- [[ §15.2 追蹤飛彈 ]] 手動：焦點在它身上時按 A 發射。
+        -- ★ 冷卻沿用 gun_fire_timers（updateParts 對所有 part_type=="GUN" 的零件累加）——
+        --   但 MISSILE 的 part_type 不是 GUN,所以它**不在那個迴圈裡**,計時器要自己累加。
+        local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
+        self.missile_timer = (self.missile_timer or 999) + (1 / 30)
+        if playdate.buttonJustPressed(playdate.kButtonA) then
+            self.gun_button_pressed = true
+            if pdata and self.missile_timer >= (pdata.fire_cooldown or 3.0) then
+                local eq = _G.GameState.mech_stats.equipped_parts or {}
+                for _, item in ipairs(eq) do
+                    if item.id == self.active_part_id then
+                        local cell_size = mech_grid.cell_size
+                        local mx = mech_x + (item.col - 1) * cell_size + cell_size / 2
+                        local my = mech_y + (mech_grid.rows - item.row) * cell_size
+                        entity_controller:addPlayerMissile(mx, my, pdata)
+                        self.missile_timer = 0
+                        if _G.SoundManager and _G.SoundManager.playCanonFire then
+                            _G.SoundManager.playCanonFire()
+                        end
+                        break
+                    end
+                end
+            end
+        elseif playdate.buttonJustReleased(playdate.kButtonA) then
+            self.gun_button_pressed = false
+        end
+
     elseif part_type == "GUN" then
         -- [[ 雷射槍 GUN2 2026-08-11 ]] 手動：焦點在它身上時按 A 發射一道**會往前飛的貫穿光束**。
         -- （全自動的 GUN 是 operable=false，根本不會成為焦點，不會走到這裡。）
@@ -738,6 +915,15 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
     --   之後再加槍械變體（如雷射槍 GUN2）只要在 parts_data 宣告即可，不必回來改這裡。
     -- ★ 冷卻計時器**所有槍都要累計**（含手動的雷射槍），只有「自動開火」這段跳過手動零件；
     --   否則手動槍的計時器永遠不會前進，按 A 就再也打不出第二發。
+    -- [[ §15.2 防護罩 ]] 冷卻遞減。放在 updateParts —— 它每幀都會被呼叫,
+    -- 而且與槍械冷卻同一個地方,不會出現「有的計時器有跑、有的沒跑」。
+    if self.shield_cd and self.shield_cd > 0 then
+        self.shield_cd = math.max(0, self.shield_cd - dt)
+    end
+    if self.shield_flash and self.shield_flash > 0 then
+        self.shield_flash = self.shield_flash - 1
+    end
+
     self.gun_fire_timers = self.gun_fire_timers or {}
     local eq = _G.GameState.mech_stats.equipped_parts or {}
     for _, item in ipairs(eq) do
@@ -762,11 +948,29 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
                 local cell_size = mech_grid.cell_size
                 -- ★ 槍口位置要吃 image_offset_x/y ——「零件相對格子的位移」，
                 --   與 entity_mech_render / state_hq / state_mission 的繪製端**讀同一組欄位**。
-                --   高位槍靠 y = −8 把圖抬高，子彈發射點必須跟著抬，否則會從腳邊射出來。
-                local gun_x = mech_x + (item.col - 1) * cell_size + cell_size / 2
-                                     + (pdata.image_offset_x or 0)
-                local gun_y = mech_y + (mech_grid.rows - item.row) * cell_size + cell_size / 2
-                                     + (pdata.image_offset_y or 0)
+                local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
+                local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
+                local gun_x = px + cell_size / 2
+                local gun_y = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
+
+                -- [[ 2026-08-13 ]] ★ 零件若宣告了 `muzzle_x/muzzle_y`（**相對零件圖左上角**，
+                --   與 GUN2 的雷射槍同一套慣例），就改用「圖的實際位置 + 槍口偏移」。
+                --   為什麼需要：**圖比格子高**的零件（如高位槍要架在支柱上）用格子中心算槍口
+                --   會算在腳邊。改讀圖之後，**圖畫多高、槍口就自動多高**，不必再多一個欄位手動同步。
+                --   ⚠️ 這裡的 y 公式必須與 entity_mech_render 的繪製端一致（同一套 align_image_top 規則）。
+                if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
+                    local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
+                    if oki and iw and ih then
+                        local img_y
+                        if pdata.align_image_top then
+                            img_y = py_top + (pdata.image_offset_y or 0)
+                        else
+                            img_y = py_top + (cell_size - ih) + (pdata.image_offset_y or 0)
+                        end
+                        gun_x = px + pdata.muzzle_x
+                        gun_y = img_y + pdata.muzzle_y
+                    end
+                end
 
                 -- 使用與敵人相同的計算方式
                 local base_speed = entity_controller.player_move_speed or 2.0

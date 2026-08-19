@@ -1,0 +1,170 @@
+{
+  "id": "M009",
+  "name": "9 PLATFORM TEST",
+  "description": "Test level for floating platforms (some crumble).",
+  "prerequisite": 0,
+  "time_limit": -1,
+  "objective": {
+    "type": "REACH",
+    "description": "Reach the goal"
+  },
+  "reward_steel": 0,
+  "reward_copper": 0,
+  "reward_rubber": 0,
+  "scene": {
+    "width": 1200,
+    "ground_y": 220,
+    "sky": "images/bg_sky",
+    "backgrounds": [
+      {
+        "layer": 1,
+        "x": 205,
+        "y": 48,
+        "image": "images/bg_building1.png"
+      },
+      {
+        "layer": 1,
+        "x": 700,
+        "y": 48,
+        "image": "images/bg_building3.png"
+      }
+    ],
+    "terrain": [
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "pit",
+        "height_offset": 0
+      },
+      {
+        "type": "pit",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      },
+      {
+        "type": "flat",
+        "height_offset": 0
+      }
+    ],
+    "obstacles": [],
+    "stones": [],
+    "enemies": [],
+    "delivery_targets": [],
+    "reach": {
+      "x": 1132
+    },
+    "objective": {
+      "type": "REACH",
+      "description": "Reach the goal"
+    },
+    "ropes": [
+      {
+        "x1": 500,
+        "x2": 850,
+        "y": 96
+      }
+    ],
+    "platforms": [
+      {
+        "x": 260,
+        "y": 120,
+        "width": 64
+      },
+      {
+        "x": 380,
+        "y": 100,
+        "width": 64,
+        "crumble": true
+      },
+      {
+        "x": 500,
+        "y": 120,
+        "width": 64,
+        "move_x": 180,
+        "move_speed": 40
+      },
+      {
+        "x": 760,
+        "y": 130,
+        "width": 64,
+        "move_y": -60,
+        "move_speed": 25
+      },
+      {
+        "x": 900,
+        "y": 110,
+        "width": 64,
+        "move_x": 90,
+        "move_y": -40,
+        "move_speed": 35,
+        "crumble": true
+      },
+      {
+        "x": 1060,
+        "y": 120,
+        "width": 64
+      }
+    ]
+  }
+}

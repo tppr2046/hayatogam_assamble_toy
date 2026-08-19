@@ -1393,7 +1393,7 @@ function StateHQ.draw()
                         else
                             -- no image: draw text label at the origin cell
                             gfx.setColor(gfx.kColorBlack)
-                            gfx.drawText(pid or "?", px + 2, py_top + 2)
+                            gfx.drawText(pid and partLabel(pid) or "?", px + 2, py_top + 2)
                         end
                     end
                 end
@@ -1469,7 +1469,7 @@ function StateHQ.draw()
                         else
                             -- no image: draw text label at the origin cell
                             gfx.setColor(gfx.kColorBlack)
-                            gfx.drawText(pid or "?", px + 2, py_top + 2)
+                            gfx.drawText(pid and partLabel(pid) or "?", px + 2, py_top + 2)
                         end
                     end
                 end
@@ -1635,7 +1635,8 @@ function StateHQ.draw()
         local _, item = findEquippedPartAt(unequip_selected_col, unequip_selected_row)
         gfx.setColor(gfx.kColorBlack)
         if item then
-            gfx.drawText(item.id, list_x, list_y)
+            -- ★ 顯示 name 不是 id —— 畫 id 會出現底線（HIGH_GUN / BACK_GUN），看起來像字型壞掉
+            gfx.drawText(partLabel(item.id), list_x, list_y)
             gfx.drawText("A:REMOVE", list_x, list_y + line_height)
         else
             gfx.drawText("(EMPTY)", list_x, list_y)

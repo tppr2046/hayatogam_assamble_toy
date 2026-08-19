@@ -539,6 +539,19 @@ function StateMission.update()
         dx = mech_controller:handlePartOperation(mech_x, mech_y, mech_grid, entity_controller)
     end
     
+    -- [[ §15.3 移動平台 ]] 推進平台，並把「站在上面的玩家」一起帶走。
+    -- ★★ 必須在**物理之前** —— entity_controller:updateAll 在本函式很後面才呼叫，
+    --   把平台移動放在那裡會慢一幀，玩家看起來會在平台上滑動。
+    -- ★ 直接改 mech_x/mech_y（不是加進 dx）：被平台載走**不是玩家的移動輸入**，
+    --   混進 dx 會被滑行衰減與索道邊緣判定當成「玩家自己走過去」。
+    if entity_controller and entity_controller.updatePlatformMotion then
+        local body_w0 = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
+        local body_h0 = (mech_grid and mech_grid.rows or 2) * (mech_grid and mech_grid.cell_size or 16)
+        local cdx, cdy = entity_controller:updatePlatformMotion(1/30, mech_x, mech_y, body_w0, body_h0)
+        mech_x = mech_x + cdx
+        mech_y = mech_y + cdy
+    end
+
     -- 2. 應用物理和碰撞檢測
     
     -- [[ P4 跳躍物理統一（決策 #2）]]
@@ -549,11 +562,22 @@ function StateMission.update()
         mech_vy = mech_controller.velocity_y
         mech_controller.velocity_y = 0
     end
-    mech_vy = mech_vy + GRAVITY
-    
+    -- [[ §15.3 吊索鉤 ]] 掛在索道上時**不套用重力**，機體吊在索道下方。
+    -- ★ 這是唯一一個「暫停重力」的地方 —— 掛/放的判斷在 MechController，
+    --   物理只在這裡處理，兩邊不重複。
+    local hooked_rope = mech_controller.hookedRope and mech_controller:hookedRope() or nil
+    if hooked_rope then
+        mech_vy = 0
+    else
+        mech_vy = mech_vy + GRAVITY
+    end
+
     -- 計算新的位置
     local new_x = mech_x + dx
-    local new_y = mech_y + mech_vy
+    -- ★ 吊住時的高度 = 索道 y + **鉤索長度**（crank 收放），不是貼齊索道。
+    local new_y = hooked_rope
+        and (hooked_rope.y + (mech_controller.hook_len or 32))
+        or (mech_y + mech_vy)
     
     -- 邊界檢查：限制玩家不能超出關卡寬度
     local scene_width = (current_scene and current_scene.width) or 400
@@ -604,7 +628,39 @@ function StateMission.update()
         over_pit = (entity_controller:getTerrainType(new_x + body_w / 2) == "pit")
     end
 
-    if entity_controller then
+    -- [[ §15.3 吊索鉤 ]] 放索不能穿過地面。
+    -- ★ 夾的是 **hook_len 本身**（而不是只夾最後的 y）—— 只夾 y 的話 crank 會繼續
+    --   累積看不見的鬆弛量，玩家得往回轉很久才看得到機體上升，像是失靈。
+    -- ★ 在 pit 上方不夾 —— 那裡本來就沒有地面，正好是「放長索垂到坑裡」的用法。
+    if hooked_rope and not over_pit then
+        local max_len = ground_level - hooked_rope.y
+        if max_len < 0 then max_len = 0 end
+        if (mech_controller.hook_len or 0) > max_len then
+            mech_controller.hook_len = max_len
+            new_y = hooked_rope.y + max_len
+        end
+    end
+
+    -- [[ §15.3 吊索鉤 ]] 移動到索道邊緣 → **脫鉤掉下去**。
+    -- ★ 判定放在這裡（而不是 HOOK 的操作分支）：焦點切走之後 dx 來自別的零件，
+    --   夾在那邊的話一離開 HOOK 焦點就失效了。這裡是所有移動的共同出口。
+    if hooked_rope then
+        local cx = new_x + body_w / 2
+        if cx < hooked_rope.x1 or cx > hooked_rope.x2 then
+            mech_controller.hook_rope = nil
+            hooked_rope = nil
+            print("LOG: hook released at rope edge")
+        end
+    end
+
+    if hooked_rope then
+        -- [[ §15.3 吊索鉤 ]] 掛住時：只吃水平移動與場景邊界，**不做地面/障礙的垂直夾制**。
+        -- ★ 不走 checkCollision —— 那個函式的職責是「把機體壓回地面」，
+        --   在索道上呼叫它會被立刻拉下去。
+        mech_x = new_x
+        mech_y = new_y
+        is_on_ground = false
+    elseif entity_controller then
         -- 使用 EntityController 進行精確碰撞（使用包含 FEET 的總高度）
         local horizontal_block, vertical_stop = entity_controller:checkCollision(new_x, new_y, mech_vy, mech_y_old, body_w, total_h)
 
@@ -616,7 +672,22 @@ function StateMission.update()
             -- mech_x = mech_x -- 明確保留
         end
 
-        if vertical_stop then
+        -- [[ §15.3 空中平台 ]] 先看有沒有踩到平台頂面（單向：只有下墜時算）。
+        -- ★ 用「腳底這一幀從平台上方跨到下方」判定，不是「重疊」——
+        --   重疊判定會讓從下往上跳時被平台頂住，那就不是單向平台了。
+        local plat_y = nil
+        if entity_controller.platformLanding then
+            plat_y = entity_controller:platformLanding(new_x, body_w,
+                        mech_y + total_h, new_y + total_h, mech_vy)
+        end
+
+        if plat_y then
+            mech_x = new_x
+            mech_y = plat_y - total_h
+            mech_vy = 0
+            is_on_ground = true
+            mech_controller:updateGroundState(true)
+        elseif vertical_stop then
             mech_y = vertical_stop
             mech_vy = 0
             is_on_ground = true
@@ -675,6 +746,12 @@ function StateMission.update()
         
         -- 更新敵人和砲彈，使用本體碰撞框檢查受擊
         local damage = entity_controller:updateAll(dt, mech_x, mech_y, body_w, body_h, (_G.GameState and _G.GameState.mech_stats) or {})
+        -- [[ §15.2 防護罩 ]] 傷害套用**之前**先讓防護罩攔一次（擋下就變 0,並起冷卻）。
+        -- ★ 攔在這裡而不是改傷害計算 —— 共享血量池與所有命中判定維持原狀。
+        -- ★ 這是**唯一**的傷害入口（entity_controller 把所有來源加總後回傳），所以只要攔這一處。
+        if mech_controller and mech_controller.absorbDamage then
+            damage = mech_controller:absorbDamage(damage)
+        end
         if damage and damage > 0 then
             current_hp = current_hp - damage
             -- 觸發玩家受擊震動效果和音效

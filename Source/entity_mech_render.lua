@@ -113,6 +113,69 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     end
 
     self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+    self:drawShieldRing(draw_x, body_draw_y, mech_grid)
+    self:drawHookLine(draw_x, body_draw_y, mech_grid)
+end
+
+-- [[ §15.3 吊索鉤 ]] 畫出「機體 ↔ 索道」之間的鉤索。
+-- ★ 沒有這條線的話,吊在半空中的機體看起來只是浮著,完全看不出是被吊著的。
+function MechController:drawHookLine(draw_x, body_draw_y, mech_grid)
+    if not self.hook_rope then return end
+    local gfx = playdate.graphics
+    local cell = (mech_grid and mech_grid.cell_size) or 16
+    local cx = draw_x + cell * 1.5
+    local top = body_draw_y
+    local ry = self.hook_rope.y
+    -- 白粗線打底 + 黑細線（黑天空/白天空都看得見 §3-4）
+    gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(3)
+    gfx.drawLine(cx, ry, cx, top)
+    gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(1)
+    gfx.drawLine(cx, ry, cx, top)
+    -- 鉤頭
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawRect(cx - 3, ry - 2, 6, 4)
+    gfx.setLineWidth(1)
+end
+
+-- [[ §15.2 防護罩 ]] 以機體中心畫一圈**虛線圓**表示護罩。
+-- 可用時：實線感較強的虛線；冷卻中：點更稀疏（一眼看得出還能不能擋）。
+-- ★ 用 drawLine 逐段畫而不是 drawCircle + dither —— 1-bit 上 dither 圓會糊成一團。
+-- ★ 白線在下、黑線在上：地面是純黑、天空上半也是黑的（§3-4）。
+function MechController:drawShieldRing(draw_x, body_draw_y, mech_grid)
+    local ready, cd = self:shieldState()
+    if ready == nil then return end          -- 沒裝防護罩
+
+    local pdata
+    local eq = _G.GameState and _G.GameState.mech_stats
+               and _G.GameState.mech_stats.equipped_parts or {}
+    for _, item in ipairs(eq) do
+        local pd = _G.PartsData and _G.PartsData[item.id]
+        if pd and pd.part_type == "SHIELD" then pdata = pd break end
+    end
+    local r = (pdata and pdata.shield_radius) or 42
+
+    local cell = (mech_grid and mech_grid.cell_size) or 16
+    local cx = draw_x + cell * 1.5
+    local cy = body_draw_y + cell
+
+    -- 剛擋下時整圈閃一下（實心感）
+    local flashing = (self.shield_flash or 0) > 0
+    -- 虛線密度：可用時較密、冷卻中較疏
+    local seg = flashing and 16 or (ready and 12 or 6)
+    local gap = flashing and 0.18 or (ready and 0.45 or 0.72)
+
+    local gfx = playdate.graphics
+    for i = 0, seg - 1 do
+        local a1 = (i / seg) * 2 * math.pi
+        local a2 = ((i + gap) / seg) * 2 * math.pi
+        local x1, y1 = cx + math.cos(a1) * r, cy + math.sin(a1) * r
+        local x2, y2 = cx + math.cos(a2) * r, cy + math.sin(a2) * r
+        gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(3)
+        gfx.drawLine(x1, y1, x2, y2)
+        gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(1)
+        gfx.drawLine(x1, y1, x2, y2)
+    end
+    gfx.setLineWidth(1)
 end
 
 -- [[ A3/G1 ]] 機體上的焦點回饋：切到某零件的瞬間，該零件外框以
@@ -638,6 +701,43 @@ function MechController:drawPartUI(part_id, x, y, size)
                     pcall(function() rotated_control:draw(control_x, y + (size - rh)/2) end)
                 end
             end
+        elseif part_type == "MISSILE" or part_type == "HOOK" or part_type == "HIGH_GUN" then
+            -- [[ §15.2/§15.3 ]] 手動零件：面板 + 右格 A 鈕（沿用 GUN2 那一套）。
+            -- ★ 沒有這顆鈕的話,玩家完全看不出「這個零件要按 A」——
+            --   面板是關卡中唯一的操作提示。
+            pcall(function() panel_img:draw(x, y) end)
+
+            -- [[ §15.3 吊索鉤 ]] 左格放**捲索旋鈕**（沿用 CANON 的 canon_control 圖）。
+            -- ★ 角度跟著鉤索長度走,不是跟著 crank 的絕對角度 ——
+            --   玩家看到的是「索收了多少」,而不是「手把轉到哪」。
+            if part_type == "HOOK" then
+                local control_img = ui.canon_control
+                if control_img then
+                    local pd = _G.PartsData and _G.PartsData[part_id]
+                    local lmin = (pd and pd.hook_len_min) or 16
+                    local lmax = (pd and pd.hook_len_max) or 110
+                    local t = ((self.hook_len or lmin) - lmin) / math.max(1, lmax - lmin)
+                    local rotated = control_img:rotatedImage(t * 360)
+                    if rotated then
+                        local rw, rh = rotated:getSize()
+                        pcall(function() rotated:draw(x, y + (size - rh) / 2) end)
+                    end
+                end
+            end
+            local panel_w = panel_img:getSize()
+            local button_table = ui.canon_button   -- 共用 canon_button-table-32-32（1=放開 / 2=按下）
+            if button_table then
+                local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
+                local button_img = button_table:getImage(pressed and 2 or 1)
+                if button_img then
+                    -- ★ 按鈕靠**面板右緣內側**對齊,不是接在面板外面。
+                    --   2 格寬的零件面板本身就是 64px（canon_panel）,
+                    --   畫在 x + panel_w 會整顆掉到零件範圍之外（2026-08-13 的 bug）。
+                    local bw = button_img:getSize()
+                    pcall(function() button_img:draw(x + panel_w - bw, y) end)
+                end
+            end
+
         elseif part_type == "GUN" then
             -- [[ 雷射槍 GUN2 2026-08-11 ]] 手動槍（operable）＝ 面板 + 右格 A 鈕。
             -- 全自動的 GUN（operable=false）沒有操作，只畫面板。

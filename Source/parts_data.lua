@@ -126,13 +126,18 @@ local parts_data = {
 
     -- 高位槍：裝在較高的位置、攻擊力較弱（GDD §15.2）。
     -- 用途是打高處目標，以及在 CLAW(2格) 旁邊補一把槍。
+    -- 高位槍：架高的**拋射**武器。2026-08-13 改版（使用者拍板）：
+    --   1) 子彈**受重力影響** → 打的是弧線,不必再配合特定高度的敵人
+    --   2) **手動發射**（按 A）
+    --   3) **可與其他向前發射的武器並存**（拿掉槍口淨空）——
+    --      但子彈若被自己的武器擋住就會消失（見 entity_controller 的 self-block）
     ["HIGH_GUN"] = {
         name = "HIGH GUN",
-        part_type = "GUN",
+        part_type = "HIGH_GUN",              -- ★ 自己的型別：它不再走 GUN 的自動開火迴圈
         hp = 8,
         weight = 2,                          -- 比 GUN 輕（火力換重量）
         attack = 3,
-        slot_x = 1,
+        slot_x = 1,                          -- 1 格
         slot_y = 1,
         cost_steel = 10,
         cost_copper = 8,
@@ -142,17 +147,147 @@ local parts_data = {
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",
-        operation_hint = "Auto Fire (High)",
-        operable = false,
-        -- ★ 往上抬 8px（半格）＝「高位」。子彈發射點會跟著抬，因為兩端讀同一個欄位。
-        image_offset_y = -8,
-        requires_clear_right = true,         -- 與 GUN 相同：槍口朝右，右側要淨空
+        operation_hint = "A: Lob Shot",
+        operable = true,                     -- ★ 手動：進焦點循環,按 A 發射
+        -- 槍口相對**零件圖左上角**（與 GUN2 同一套慣例）。圖畫多高,槍口就自動多高。
+        muzzle_x = 20,
+        muzzle_y = 8,
+        -- ★ **不設 requires_clear_right** —— 可以和 GUN/CANON 並排。
+        --   代價是子彈可能被自己的武器擋掉（那是刻意的取捨,不是 bug）。
         fire_direction = "RIGHT",
-        fire_cooldown = 1.0,
-        projectile_damage = 3,               -- ★「攻擊力較弱」（GUN 是 5）
-        projectile_speed_mult = 40,
-        projectile_grav_mult = 0.2,
-        block_directions = {"RIGHT"}
+        fire_cooldown = 1.4,
+        projectile_damage = 3,               -- 「攻擊力較弱」（GUN 是 5）
+        projectile_speed_mult = 26,          -- 比 GUN(40) 慢 → 弧線更明顯
+        -- ★★ 這一項就是這次改版的核心：**受重力影響**。
+        --   GUN 是 0.2（幾乎直線）；這裡拉到 18,打出明顯的拋物線,
+        --   可以越過前方的敵人或障礙打到後面 —— 所以不必再依賴特定高度的敵人。
+        projectile_grav_mult = 18,
+        -- ★ 子彈會被自己的零件擋掉（見 EntityController 的 self_block）
+        self_block = true,
+        -- ⚠️ 不再宣告 block_directions —— 它不擋別人的射線,別人也不擋它的安裝。
+    },
+
+    -- ================================================================
+    -- [[ GDD §15.2 第二批輔助零件 ]] 2026-08-13
+    -- 寬度**依功能強度決定**（使用者拍板）：弱的 1 格、強的 2 格。
+    -- ★ 上排只有 3 格,所以 2 格的輔助零件會**擠掉主武器** —— 那是刻意的取捨。
+    -- ================================================================
+
+    -- 防護罩：擋一次傷害後進入冷卻,冷卻完又能擋（使用者拍板：**有冷卻、會恢復**）。
+    -- ★ 被動生效（operable = false）→ 不進焦點循環,切換壓力零增加。
+    -- ★ 不碰傷害模型本身:它只是在傷害套用**之前**攔一次,共享血量池維持現狀。
+    ["SHIELD"] = {
+        name = "SHIELD",
+        part_type = "SHIELD",
+        hp = 15,
+        weight = 4,
+        slot_x = 1,          -- 1 格：被動、不直接輸出傷害 → 不該擠掉主武器
+        slot_y = 1,
+        cost_steel = 25,
+        cost_copper = 20,
+        cost_rubber = 15,
+        color = gfx.kColorBlack,
+        image = "images/shield_part.png",
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/gun_panel.png",   -- 暫時沿用,之後有專屬面板再換
+        operation_hint = "Auto Block",
+        operable = false,
+        -- ★ 擋下一次攻擊後的冷卻秒數。調這個數字＝調「多久能擋一次」。
+        shield_cooldown = 5.0,
+        -- 護罩視覺半徑（以機體中心為圓心）。★ 目前**只是視覺**：
+        -- 傷害是由 entity_controller 加總後才回傳一個數字,分不出來源方位,
+        -- 所以護罩實際上是「擋下一次任何傷害」,不是按距離判定。
+        -- 要做成真的按範圍擋,得改成逐傷害來源判斷（見 GDD §15.2 待議）。
+        shield_radius = 42,
+    },
+
+    -- 追蹤飛彈：先往上發射,再搜尋敵人並轉向飛過去。
+    -- ★ GDD §15.2 明寫「**轉向速度與飛行速度可調,且刻意不要太強**」——
+    --   下面三個數字就是那個閥門,不要一次調滿。
+    -- ★ 2 格寬 + operable = true：它是**強力主動武器**,要付出「佔格子」與「佔焦點」兩種成本
+    --   （與雷射槍 GUN2 同一套定位）。
+    ["MISSILE"] = {
+        name = "MISSILE",
+        part_type = "MISSILE",
+        hp = 12,
+        weight = 7,
+        attack = 20,
+        slot_x = 2,
+        slot_y = 1,
+        cost_steel = 50,
+        cost_copper = 70,
+        cost_rubber = 20,
+        color = gfx.kColorBlack,
+        image = "images/missile_part.png",
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/canon_panel.png", -- 暫時沿用
+        operation_hint = "A: Fire Missile",
+        operable = true,                     -- 手動：按 A 發射（進焦點循環）
+        fire_cooldown = 3.0,                 -- ★ 比任何槍都長
+        projectile_damage = 20,
+        -- 飛彈參數（★ 這三個就是「刻意不要太強」的閥門）
+        missile_launch_speed = 90,           -- 發射初速（先往上）
+        missile_turn_rate = 120,             -- 每秒最多轉幾度 —— **越小越笨、越容易閃掉**
+        missile_speed = 110,                 -- 巡航速度
+        missile_life = 4.0,                  -- 存活秒數（找不到目標就自滅）
+        missile_seek_range = 260,            -- 搜尋半徑
+    },
+
+    -- 偵測器：讓隱形敵人**隨時可見可打**（§15.2 + §15.4，兩者是一組）。
+    -- ★ 1 格寬、被動：它本身不輸出傷害,只是把「看得到」這件事打開。
+    -- ★ 沒裝的話隱形敵人只有現身那 1.5 秒能打 —— 這就是它的價值。
+    ["DETECTOR"] = {
+        name = "DETECTOR",
+        part_type = "DETECTOR",
+        hp = 8,
+        weight = 3,
+        slot_x = 1,
+        slot_y = 1,
+        cost_steel = 15,
+        cost_copper = 40,
+        cost_rubber = 5,
+        color = gfx.kColorBlack,
+        image = "images/detector_part.png",
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/gun_panel.png",   -- 暫時沿用
+        operation_hint = "Reveals Cloaked",
+        operable = false,
+    },
+
+    -- 吊索鉤：掛上場景的**吊索**後離開地面，沿索左右移動（§15.2 + §15.3，一組）。
+    -- ★ operable = true → 進焦點循環,焦點在它身上時 **A = 掛上/放開**、左右 = 沿索移動。
+    --   這與「跳躍綁在焦點上」是同一套模型（GDD §8.06）:移動能力要付出切換成本。
+    -- ★ 放在**上排**：鉤子是往上勾的,裝在下排（移動零件那排）語意不對,
+    --   而且下排 3 格已被輪子/腿佔滿。
+    ["HOOK"] = {
+        name = "HOOK",
+        part_type = "HOOK",
+        hp = 10,
+        weight = 5,
+        slot_x = 2,          -- 2 格：它提供一整套移動模式，不該只佔 1 格
+        slot_y = 1,
+        cost_steel = 30,
+        cost_copper = 25,
+        cost_rubber = 30,
+        color = gfx.kColorBlack,
+        image = "images/hook_part.png",
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/canon_panel.png", -- 2 格寬的面板（右格放 A 鈕）
+        operation_hint = "A: Shoot Hook / Crank: Reel",
+        operable = true,
+        -- 鉤子往上發射的最大距離（機體頂端往上找索道）
+        hook_reach = 96,
+        -- 沿索移動速度（px/幀，與地面移動的 move_speed 同一個尺度）
+        hook_speed = 2.4,
+        -- 鉤索長度（機體頂端與索道的垂直距離）可調範圍
+        hook_len_min = 16,
+        hook_len_max = 110,
+        -- crank 轉一整圈 → 收放這麼多 px
+        hook_reel_per_rotation = 120,
     },
 
     ["WHEEL1"] = {
