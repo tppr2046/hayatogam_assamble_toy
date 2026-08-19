@@ -21,23 +21,42 @@ StateShop = {}
 -- 版面（量自 shop_bg.png）
 -- ============================================================
 local SHOP_LAYOUT = {
-    res     = { x = 6,   y = 6,   w = 386, h = 21 },   -- 上橫條：資源列
-    list    = { x = 6,   y = 36,  w = 121, h = 192 },  -- 左框：零件清單（只放名稱）
-    preview = { x = 137, y = 36,  w = 255, h = 117 },  -- 右上框：名稱＋圖＋價格/耐久
-    desc    = { x = 137, y = 162, w = 166, h = 66 },   -- 下中框：說明文字
-    btn     = {                                        -- 右下三顆按鈕
-        { x = 313, y = 162, w = 79, h = 18 },          -- 1: BUY / REPAIR
-        { x = 313, y = 186, w = 79, h = 18 },          -- 2: INSTALL
-        { x = 313, y = 210, w = 79, h = 18 },          -- 3: BACK
-    },
+    -- 框線由 shop_bg.png 提供，座標量自底圖（tools/scan_hq_bg.py）
+    res     = { x = 8,   y = 8,   w = 384, h = 17 },   -- 上橫條：資源列
+    list    = { x = 8,   y = 36,  w = 119, h = 192 },  -- 左框：零件清單（只放名稱）
+    desc    = { x = 139, y = 164, w = 163, h = 64 },   -- 下中框：說明文字
 }
-local SHOP_LINE_H  = 20
+
+-- [[ 2026-08-13 ]] 預覽區：中上方的開放區域，**沒有框線可以量** →
+-- 改用「零件圖的中心點」定位（與 HQ 的 mech_cx/cy 同一套慣例）。
+-- ⚠️ 這一區底下是機艙裝飾圖，**文字一律鋪白底**（§3-4），否則黑字會糊進背景線條。
+local PV_CX, PV_CY = 249, 100   -- ★ 零件圖中心（調位置只改這兩個數字）
+local PV_TEXT_W    = 190        -- 文字置中用的寬度（以中心左右各半）
+local PV_NAME_DY   = -52        -- 名稱相對中心的 y
+local PV_LINE1_DY  =  30        -- 第 1 行資訊（購買資源／耐久度）
+local PV_LINE2_DY  =  48        -- 第 2 行資訊（修理資源）
+
+-- [[ 2026-08-13 ]] 按鈕改用 `shop_button-table-86-25`（2 格：1=一般 / 2=焦點）。
+-- 底圖已把按鈕框拿掉，改由程式畫 —— 因為**只顯示需要操作的按鈕**，數量會變。
+-- ★ 由下往上排：`BACK` 永遠是最後一顆，位置固定不動（肌肉記憶）；
+--   少一顆時是上面那顆消失，而不是整排位移。
+local BTN_W, BTN_H = 86, 21   -- shop_button-table-86-21
+local BTN_X        = 310   -- 右欄左緣
+local BTN_BOTTOM   = 229   -- 最後一顆的底邊（BACK 永遠貼在這條線上）
+local BTN_STEP     = 23    -- 每顆的間距（21 高 + 2px 間隙）
+-- 文字垂直微調：`getTextSize` 回傳的高度含字型的基線留白，
+-- 純用 (bh - th)/2 置中會偏上 1px。這個值就是補償量。
+local BTN_TEXT_DY  = 2
+local shop_btn_sheet = nil
+
+local SHOP_LINE_H   = 20
 -- 清單框高 192、起點內縮 8 → 放得下 9 行
 local VISIBLE_ITEMS = 9
 -- CRANK 捲動：轉這麼多度捲一格（與 state_mission_select 的手感一致）
 local CRANK_DEG_PER_STEP = 30
 
 local shop_bg_img = nil
+
 
 -- ============================================================
 -- 狀態
@@ -120,6 +139,25 @@ local function buttonEnabled(part_id, part_data)
     return { act_ok, canInstall(part_id), true }   -- BACK 永遠可用
 end
 
+-- [[ 2026-08-13 ]] **只顯示需要操作的按鈕**：回傳 { {slot=原始索引1..3, label=}, ... }
+-- ★ 繪製端與輸入端都走這個函式 —— 位置與數量都會變，兩邊各算一次一定會對不起來。
+local function visibleButtons(part_id, part_data)
+    local act_label = actionButton(part_id, part_data)
+    local labels = { act_label, "INSTALL", "BACK" }
+    local en = buttonEnabled(part_id, part_data)
+    local out = {}
+    for i = 1, 3 do
+        if en[i] then out[#out + 1] = { slot = i, label = labels[i] } end
+    end
+    return out
+end
+
+-- 第 k 顆（由上往下）的螢幕位置。★ **由下往上排**：BACK 永遠是最後一顆、位置固定。
+local function buttonRect(k, n)
+    local y = BTN_BOTTOM - BTN_H - (n - k) * BTN_STEP
+    return BTN_X, y, BTN_W, BTN_H
+end
+
 -- 往 dir 方向找下一顆「可用」的鈕；找不到就留在原地
 local function nextEnabledBtn(from, dir, en)
     local i = from
@@ -166,6 +204,15 @@ function StateShop.setup()
     gfx.setFont(font)
     if not shop_bg_img then
         shop_bg_img = gfx.image.new("images/shop_bg")
+    end
+    -- [[ 2026-08-13 ]] 按鈕圖：1 = 一般 / 2 = 焦點
+    if not shop_btn_sheet then
+        local ok, tbl = pcall(function() return gfx.imagetable.new("images/shop_button") end)
+        if ok and tbl then
+            shop_btn_sheet = tbl
+        else
+            print("WARNING: failed to load images/shop_button-table-86-25.png")
+        end
     end
     if _G.SoundManager and _G.SoundManager.playTitleBGM then
         _G.SoundManager.playTitleBGM()
@@ -327,9 +374,16 @@ end
 -- ============================================================
 -- 繪製
 -- ============================================================
-local function drawCentered(text, bx, bw, y)
-    local tw = gfx.getTextSize(text)
-    gfx.drawText(text, bx + (bw - tw) // 2, y)
+-- [[ 2026-08-13 ]] 預覽區沒有框線、底下是機艙裝飾圖 → **文字一律鋪白底**（HANDOFF §3-4）。
+-- 不鋪的話黑字會糊進背景的線條裡，1-bit 螢幕上完全讀不出來。
+local function drawCenteredOnWhite(text, bx, bw, y)
+    if not text or text == "" then return end
+    local tw, th = gfx.getTextSize(text)
+    local x = bx + (bw - tw) // 2
+    gfx.setColor(gfx.kColorWhite)
+    gfx.fillRect(x - 4, y - 2, tw + 8, (th or 14) + 4)
+    gfx.setColor(gfx.kColorBlack)
+    gfx.drawText(text, x, y)
 end
 
 function StateShop.draw()
@@ -391,32 +445,35 @@ function StateShop.draw()
     local owned     = isOwned(part_id)
     local D         = _G.Durability
 
-    -- 右上框：名稱 ＋ 圖 ＋（未擁有→購買資源／已擁有→耐久度與修理資源）
-    local pb = L.preview
+    -- 預覽區：名稱 ＋ 圖 ＋（未擁有→購買資源／已擁有→耐久度與修理資源）
+    -- ★ 全部以 PV_CX/PV_CY（零件圖中心）為基準 —— 那一區沒有框線可以對齊。
     do
+        local tx0 = PV_CX - PV_TEXT_W // 2   -- 文字置中用的左緣
         gfx.setColor(gfx.kColorBlack)
-        drawCentered(partLabel(part_id), pb.x, pb.w, pb.y + 4)
-        drawPartImage(part_id, part_data, pb.x, pb.y + 22, pb.w, 50, 2)
+        drawCenteredOnWhite(partLabel(part_id), tx0, PV_TEXT_W, PV_CY + PV_NAME_DY)
+        -- drawPartImage 收的是矩形 → 給一個以中心為準的框，圖會置中於其中
+        drawPartImage(part_id, part_data, PV_CX - 60, PV_CY - 30, 120, 60, 2)
 
-        local line1_y = pb.y + 76
-        local line2_y = pb.y + 95
+        local line1_y = PV_CY + PV_LINE1_DY
+        local line2_y = PV_CY + PV_LINE2_DY
+        local pb = { x = tx0, w = PV_TEXT_W }
         if not owned then
             -- 購買需求資源
-            drawCentered(string.format("S:%d   C:%d   R:%d",
+            drawCenteredOnWhite(string.format("S:%d   C:%d   R:%d",
                 part_data.cost_steel or 0, part_data.cost_copper or 0, part_data.cost_rubber or 0),
                 pb.x, pb.w, line1_y)
         else
             -- 耐久度
             local indestructible = D and D.isIndestructible and D.isIndestructible(part_id)
             if indestructible then
-                drawCentered("DURABILITY  ---", pb.x, pb.w, line1_y)
+                drawCenteredOnWhite("DURABILITY  ---", pb.x, pb.w, line1_y)
             else
                 local dur = (D and D.get and D.get(part_id)) or 100
-                drawCentered("DURABILITY  " .. math.floor(dur) .. "%", pb.x, pb.w, line1_y)
+                drawCenteredOnWhite("DURABILITY  " .. math.floor(dur) .. "%", pb.x, pb.w, line1_y)
                 -- 修理需要的資源（滿耐久時不顯示）
                 local c = (D and D.repairCost and D.repairCost(part_id)) or nil
                 if c and c.total > 0 then
-                    drawCentered(string.format("REPAIR  S:%d   C:%d   R:%d", c.steel, c.copper, c.rubber),
+                    drawCenteredOnWhite(string.format("REPAIR  S:%d   C:%d   R:%d", c.steel, c.copper, c.rubber),
                         pb.x, pb.w, line2_y)
                 end
             end
@@ -430,37 +487,40 @@ function StateShop.draw()
         gfx.drawTextInRect(part_data.description or "", db.x + 6, db.y + 6, db.w - 12, db.h - 12)
     end
 
-    -- 右下三顆按鈕
+    -- 右下按鈕：**只畫需要操作的**（由下往上排，BACK 位置固定）
     do
-        local act_label = actionButton(part_id, part_data)
-        local labels  = { act_label, "INSTALL", "BACK" }
-        local enabled = buttonEnabled(part_id, part_data)
-        for i = 1, 3 do
-            -- [[ 2026-08-13 ]] 不可用的按鈕**整顆隱藏**（依使用者要求），不再用 dither 淡化。
-            -- ★ 隱藏之後游標不能停在上面，否則會出現「選著一顆看不見的鈕」——
-            --   跳過邏輯在 update 的 moveBtn()，兩邊用同一個 enabled 判斷。
-            if enabled[i] then
-                local b = L.btn[i]
-                local selected = (focus == "buttons" and btn_index == i)
-                local tw, th = gfx.getTextSize(labels[i])
-                local tx = b.x + (b.w - tw) // 2
-                local ty = b.y + (b.h - th) // 2
-                if selected then
-                    gfx.setColor(gfx.kColorBlack)
-                    gfx.fillRect(b.x, b.y, b.w, b.h)
-                    gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
-                    gfx.drawText(labels[i], tx, ty)
-                    gfx.setImageDrawMode(gfx.kDrawModeCopy)
-                else
-                    gfx.setColor(gfx.kColorBlack)
-                    gfx.drawText(labels[i], tx, ty)
-                end
-                if selected and act_error_flash > 0 and ((act_error_flash // 3) % 2 == 0) then
-                    gfx.setColor(gfx.kColorBlack)
-                    gfx.setLineWidth(2)
-                    gfx.drawRect(b.x - 2, b.y - 2, b.w + 4, b.h + 4)
-                    gfx.setLineWidth(1)
-                end
+        local vis = visibleButtons(part_id, part_data)
+        local n = #vis
+        for k = 1, n do
+            local bx, by, bw, bh = buttonRect(k, n)
+            local selected = (focus == "buttons" and btn_index == vis[k].slot)
+            -- 圖：1 = 一般 / 2 = 焦點
+            if shop_btn_sheet then
+                local img = shop_btn_sheet:getImage(selected and 2 or 1)
+                if img then pcall(function() img:draw(bx, by) end) end
+            else
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawRect(bx, by, bw, bh)
+            end
+            -- 文字：焦點狀態的底圖是黑的 → 字要白；一般狀態底圖是白的 → 字要黑
+            local label = vis[k].label
+            local tw, th = gfx.getTextSize(label)
+            local tx = bx + (bw - tw) // 2
+            local ty = by + (bh - th) // 2 + BTN_TEXT_DY
+            if selected then
+                gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+                gfx.drawText(label, tx, ty)
+                gfx.setImageDrawMode(gfx.kDrawModeCopy)
+            else
+                gfx.setColor(gfx.kColorBlack)
+                gfx.drawText(label, tx, ty)
+            end
+            -- 不可執行時按下去：外框閃爍
+            if selected and act_error_flash > 0 and ((act_error_flash // 3) % 2 == 0) then
+                gfx.setColor(gfx.kColorBlack)
+                gfx.setLineWidth(2)
+                gfx.drawRect(bx - 2, by - 2, bw + 4, bh + 4)
+                gfx.setLineWidth(1)
             end
         end
     end

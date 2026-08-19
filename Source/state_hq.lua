@@ -53,11 +53,12 @@ local HQ_LAYOUT = {
     mech_cx  = 250,      -- 放大後「組裝格中心」的螢幕 x
     mech_cy  = 140,      -- 放大後「組裝格中心」的螢幕 y
 
-    -- [[ 出擊按鈕 ]] core1-table-64-64：1=底座 / 2=按鈕未按 / 3=按鈕按下
-    -- ⚠️ 同樣是推測值（右下角），看畫面後改這兩個數字。
-    start_x  = 324,
-    start_y  = 170,
-    start_size = 64,
+    -- [[ 出擊按鈕 ]] core<N>-table-80-80（4 格，語意見 draw 內的註解）
+    -- ⚠️ 2026-08-13 由 64×64 改為 80×80。x/y 是**維持原本視覺中心 (356,202)** 反推的
+    --    （舊值 324,170 + 64 已經超出畫面右緣），看畫面後直接改這兩個數字。
+    start_x  = 310,
+    start_y  = 154,
+    start_size = 80,
 }
 
 -- [[ 2026-08-13 ]] LIST_VISIBLE 已移除：安裝時左側選單只顯示一筆（正在裝的那個零件），
@@ -1739,27 +1740,31 @@ function StateHQ.draw()
         local bx, by = HQ_LAYOUT.start_x, HQ_LAYOUT.start_y
         local sheet = startButtonSheet()
         if sheet then
-            -- [[ 2026-08-13 ]] 底座與按鈕**一律顯示**（離開焦點也看得到）。
-            --   格號：1 = 底座（常駐）／2 = 未按／3 = 按下／**4 = 選中（選配）**
+            -- [[ 2026-08-13 ]] `core<N>-table-80-80` 的**五格**語意（使用者定義）：
+            --   1 = 底座・未在焦點      2 = 底座・焦點
+            --   3 / 4 = 按鈕・焦點一般（**兩格交互閃爍**）
+            --   5 = 按鈕・按下
             --
-            -- ★ 焦點**不畫外框**（依使用者要求，稍後由圖本身表現）。
-            --   已預留第 4 格：imagetable 有 4 格以上時，焦點狀態自動改用第 4 格；
-            --   還沒補圖（只有 3 格）就退回第 2 格 —— 與 core2/core3 的處理方式一致，
-            --   你把圖放進去就自動生效，不必回來改程式。
-            local base = sheet:getImage(1)
+            -- 繪製規則：
+            --   未在焦點 → **只畫底座第 1 格**（按鈕層整個隱藏）
+            --   在焦點   → 底座第 2 格 ＋ 按鈕（一般時 3↔4 閃爍／按下時 5）
+            -- ★ 「按鈕只在焦點時出現」本身就是焦點提示,所以不需要外框。
+            -- ★ 閃爍用畫面共用的 250ms 節拍(blink_on),與選單、安裝粗框同一拍,
+            --   否則畫面上各個元素會各閃各的。
+            local focused = cursor_on_start or (start_press_timer > 0)
+            local base = sheet:getImage(focused and 2 or 1)
             if base then pcall(function() base:draw(bx, by) end) end
 
-            local idx
-            if start_press_timer > 0 then
-                idx = 3                                  -- 按下
-            elseif cursor_on_start then
-                local n = (sheet.getLength and sheet:getLength()) or 3
-                idx = (n >= 4) and 4 or 2                -- 選中（有第 4 格才用）
-            else
-                idx = 2                                  -- 未選中
+            if focused then
+                local idx
+                if start_press_timer > 0 then
+                    idx = 5                      -- 按下
+                else
+                    idx = blink_on and 3 or 4    -- 焦點一般：兩格交互閃爍
+                end
+                local btn = sheet:getImage(idx)
+                if btn then pcall(function() btn:draw(bx, by) end) end
             end
-            local btn = sheet:getImage(idx)
-            if btn then pcall(function() btn:draw(bx, by) end) end
         else
             -- 圖沒載到時的保險：畫個方框，至少知道按鈕在哪
             gfx.setColor(gfx.kColorBlack)
