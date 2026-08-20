@@ -103,6 +103,12 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     for _, b in ipairs(bgs_data) do
         local bg = {
             layer = (b.layer or 0),
+            -- ★ [[ §15.4 ]] 可選的 per-layer 視差係數。不填＝維持既有的 layer 慣例
+            --   （layer 1 → 0.6、其餘 → 0.3），所有既有關卡行為不變。
+            -- ★★ **牆壁背景要填 `parallax: 1.0`** ——
+            --   爬牆敵人的軌道 `scene.walls` 是世界座標，背景有視差的話兩者只會在
+            --   某一個相機位置對齊，鏡頭一捲牆就跟敵人分家。1.0＝不視差＝永遠對齊。
+            parallax = b.parallax,
             x = b.x or 0,
             y = b.y or 0,
             image = nil,
@@ -164,6 +170,29 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
         table.insert(controller.obstacles, obs)
     end
     
+    -- ============================================================
+    -- [[ §15.4 爬牆敵人 ]] scene.walls = [{ x, y_top, y_bottom }]
+    -- ★★ 這**不是**碰撞面 —— 不擋移動、不擋子彈、不畫出來。
+    --   它只是爬牆敵人的**移動軌道**（一條垂直線與上下界）。
+    --   牆的外觀由關卡自己擺 `backgrounds` 的牆壁圖，軌道對齊那張圖即可。
+    -- ★ 為什麼做成資料而不是讓敵人自由飛：「貼在牆上」是這隻敵人唯一的識別，
+    --   靠關卡設計者每次記得擺對位置太脆弱；一條軌道資料就能保證視覺一致。
+    -- ★ 為什麼不做成真的牆（GDD §15.3 側面牆面）：那要把純裝飾的 backgrounds/sky
+    --   變成可碰撞的面，是這批裡最貴的一項。**軌道化之後那項需求整個消失。**
+    -- ⚠️ y 是**螢幕座標**（與 ropes / platforms 同一套，都是「空中的東西」）。
+    --   y_bottom 要**壓得夠低**，敵人爬下來時水平槍才打得到 —— 否則會變成
+    --   「不裝 CANON 就打不到」，那就違反了「零件是取捨不是鑰匙」。
+    controller.walls = {}
+    for _, wd in ipairs((scene_data and scene_data.walls) or {}) do
+        table.insert(controller.walls, {
+            x        = wd.x or 0,
+            y_top    = math.min(wd.y_top or 20, wd.y_bottom or 140),
+            y_bottom = math.max(wd.y_top or 20, wd.y_bottom or 140),
+        })
+    end
+
+    -- ⚠️ walls 必須在**敵人迴圈之前**載入 —— 敵人生成時就要吸附軌道。
+    --   （2026-08-19 踩過：放在後面 → walls 還是空的 → 每隻都印「no wall to climb」。）
     -- 初始化敵人（[[ S6 ]] type=="BOSS" 走 BOSS 工廠）
     for _, edata in ipairs(enemies_data or {}) do
         local enemy
@@ -171,6 +200,12 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             enemy = Enemy:initBoss(edata, safe_ground_y)
         else
             enemy = Enemy:init(edata.x, edata.y, edata.type, safe_ground_y)
+        end
+        -- [[ §15.4 爬牆敵人 ]] 綁定最近的一面牆當軌道。
+        -- ★ 綁定在這裡而不是 Enemy:init —— init 拿不到場景的 walls。
+        -- ★ 找「x 最近的一面」：關卡設計者把敵人擺在牆邊就會自動吸附，不必再填 index。
+        if enemy and enemy.move_type == "WALL" then
+            controller:attachWall(enemy)
         end
         table.insert(controller.enemies, enemy)
         -- [[ §15.5a ]] 平行制 BOSS 的手臂：各自是一個代理實體，一起放進 enemies。
@@ -446,6 +481,27 @@ local HIT_SPARK_FRAME_TIME = 0.04 -- 每幀秒數（圖與程式繪製共用）
 -- ★ 隱形中要讓攻擊**直接穿過去** —— 不能只是「打到但傷害為 0」，
 --   那樣子彈仍會被消耗、還會冒火花，玩家看到的是「打中了卻沒扣血」，更混亂。
 -- ★ 命中判定點有 6 處（飛彈鎖定/飛彈命中/雷射/砲彈/範圍爆炸/近戰），全部走這裡。
+-- [[ §15.4 爬牆敵人 ]] 把敵人吸附到最近的一面牆軌道上。
+-- 沒有牆時**不當成錯誤**：敵人會退化成停在原地的固定砲台（仍會開火），
+-- 而不是崩潰或飛走 —— 關卡少填一筆資料不該讓整關掛掉。
+-- ★ 重生點生出來的爬牆敵人也走這裡（見 respawner）。
+function EntityController:attachWall(enemy)
+    local best, bestd = nil, nil
+    for _, w in ipairs(self.walls or {}) do
+        local d = math.abs(w.x - enemy.x)
+        if not bestd or d < bestd then best, bestd = w, d end
+    end
+    if not best then
+        print("WARNING: WALL enemy at " .. tostring(enemy.x) .. " has no wall to climb (scene.walls empty)")
+        return
+    end
+    enemy.wall = best
+    enemy.x = best.x
+    -- 起始位置：軌道中間，方向朝下（先往下爬 → 玩家一入畫就看得到它在動）
+    enemy.y = (best.y_top + best.y_bottom) / 2
+    enemy.climb_dir = 1
+end
+
 function EntityController:canHitEnemy(e)
     if not e or not e.is_alive then return false end
     if e.cloaked then return false end                       -- 隱形中：穿過去
@@ -1016,6 +1072,8 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             if r.timer <= 0 then
                 r.timer = r.interval
                 local e = Enemy:init(r.x, r.y, r.type, self.ground_y)
+                -- [[ §15.4 ]] 重生點生出來的爬牆敵人也要吸附軌道（與關卡初始化同一條路）
+                if e and e.move_type == "WALL" then self:attachWall(e) end
                 table.insert(self.enemies, e)
                 r.spawned = r.spawned + 1
                 print("LOG: respawned " .. tostring(r.type) .. " (" .. r.spawned .. ")")
@@ -1610,7 +1668,9 @@ function EntityController:draw(camera_x)
         for _, bg in ipairs(self.backgrounds) do table.insert(sorted, bg) end
         table.sort(sorted, function(a, b) return (a.layer or 0) < (b.layer or 0) end)
         for _, bg in ipairs(sorted) do
-            local parallax = (bg.layer == 1) and 0.6 or 0.3  -- 前景較快，後景較慢
+            -- 視差：關卡明確指定就用它（牆壁背景要 1.0，見 init 的註解），
+            -- 沒指定才回到既有的 layer 慣例（前景較快、後景較慢）。
+            local parallax = bg.parallax or ((bg.layer == 1) and 0.6 or 0.3)
             local screen_x = bg.x - (camera_x * parallax)
             local screen_y = bg.y
             if bg.image then

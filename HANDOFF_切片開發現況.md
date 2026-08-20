@@ -291,6 +291,11 @@ Menu 鍵可切 CORE1/2/3。
 移除方式:刪 `addCoreSwitcher()` 與兩處呼叫。
 ⚠️ Playdate 系統選單**上限 3 個自訂項目**,關卡中已用滿。
 
+**5. `M012` 測試關 @ [M012.json](Source/levels/M012.json)　(2026-08-19 新增)**
+名稱 `12 CRAWLER TEST`、`prerequisite: 0`。爬牆敵人的測試場:
+兩面 `walls` 軌道 + 對齊的建築背景(`parallax: 1.0`)、兩隻 `WALL_ENEMY`。
+⚠️ 它會出現在選關畫面。**正式版要刪掉這個檔**。
+
 **4. `M011` 測試關 @ [M011.json](Source/levels/M011.json)　(2026-08-19 新增)**
 名稱 `11 COLOSSUS TEST`、`prerequisite: 0`。巨大 BOSS(平行零件制)的測試場:
 固定戰場 `arena {520, 920}`、BOSS2 在 x=700、左緣一座可接管砲台、地上兩顆石頭。
@@ -437,6 +442,13 @@ for s in re.findall(r'\"([^\"]*)\"\s*,', io.open('Source/intro_data.lua',encodin
   - ★ **2026-08-13 補上**:**空中平台**(單向,可勾「會塌」)、**吊索**(水平索道)、
     **障礙物／可破壞石塊**(填 hp 就打得破)、**PHANTOM 隱形敵人**
   - `scene.sky` 於 2026-08-11 補上(頂端「天空層」勾選框),新場景預設帶天空層
+  - ★ **2026-08-19 補上**:**爬牆軌道**(`scene.walls`,虛線 + 上下界橫槓)、
+    **固定戰場**(`scene.arena`,左右界 + 範圍淡色底)、**背景的 `parallax` 欄位**
+    (留空＝沿用 layer 慣例;**牆壁背景要填 1.0**)、**CRAWLER**(`WALL_ENEMY`)、**BOSS2**。
+    → `check_editor_sync.py` 三項全 OK(敵人 10 種、BOSS 2 隻、地形型別)。
+    → 另做了 **round-trip 實測**:把 M011/M012 餵進編輯器的
+      `normalizeScene → sceneToJSON`,確認 `arena` / `walls` / `parallax` / `boss_id`
+      / `WALL_ENEMY` 匯出後原樣還在。
 - ★★ **「編輯器吃掉欄位」的老問題已解決**(2026-08-13)
   舊版只輸出白名單內的欄位,`sky_parallax`/`sky_y`/`reward_core`/`final` 等會在
   「載入 → 重存」時**靜默消失**。現在改成**保留未知欄位**:載入時把白名單外的欄位

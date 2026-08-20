@@ -165,6 +165,14 @@ function Enemy:init(x, y, type_id, ground_y)
         e.y = math.min(y, ground_y - e.height)
     end
     
+    -- [[ §15.4 爬牆敵人 ]] 軌道參數（實際的軌道由 controller:attachWall 綁上去）
+    if data and data.move_type == "WALL" then
+        e.climb_speed      = data.climb_speed or 26
+        e.climb_pause_time = data.climb_pause_time or 0.5
+        e.climb_dir        = 1
+        e.climb_pause      = 0
+    end
+
     -- 特殊處理：無人機應該在空中飛行
     if data and data.move_type == "AERIAL" then
         -- 無人機初始位置在飛行高度的中心
@@ -437,6 +445,34 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             end
         end
     
+    elseif self.move_type == "WALL" then
+        -- [[ §15.4 爬牆敵人 ]] 沿著 scene.walls 的軌道**上下**移動。
+        -- ★★ 為什麼主軸是垂直、而不是像 DRONE 那樣水平：
+        --   水平移動的話它就只是「另一隻 DRONE」，玩家不必學任何新東西，
+        --   撐不起一隻新敵人的美術成本。垂直移動才是**第一個逼玩家處理高度**的敵人，
+        --   也讓 CANON 的 crank 仰角有了常態用途（以前主要只在 BOSS 戰用得上）。
+        -- ★ 不套重力 —— 這不是特例，本作**只有 JUMP 型別會套重力**，其餘敵人的 y 本來就固定。
+        -- ★ 沒綁到軌道時（關卡沒填 walls）留在原地，仍會開火：退化成固定砲台，不崩潰。
+        local w = self.wall
+        if w then
+            self.climb_dir = self.climb_dir or 1
+            -- 端點停頓：一路來回會像鐘擺，停一下才像「爬到頭、換方向」
+            if (self.climb_pause or 0) > 0 then
+                self.climb_pause = self.climb_pause - dt
+            else
+                self.y = self.y + self.climb_dir * (self.climb_speed or 26) * dt
+                if self.y <= w.y_top then
+                    self.y = w.y_top
+                    self.climb_dir = 1
+                    self.climb_pause = self.climb_pause_time or 0.5
+                elseif self.y + self.height >= w.y_bottom then
+                    self.y = w.y_bottom - self.height
+                    self.climb_dir = -1
+                    self.climb_pause = self.climb_pause_time or 0.5
+                end
+            end
+        end
+
     elseif self.move_type == "AERIAL" then
         -- 無人機：前後飛行 + 上下振動
         self.move_timer = self.move_timer + dt

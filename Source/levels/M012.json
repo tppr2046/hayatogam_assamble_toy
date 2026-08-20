@@ -1,0 +1,131 @@
+{
+ "id": "M012",
+ "name": "12 CRAWLER TEST",
+ "description": "S15.4 test: wall-climbing enemy on a scene.walls rail (suppression type).",
+ "prerequisite": 0,
+ "time_limit": -1,
+ "objective": {
+  "type": "ELIMINATE_ALL",
+  "description": "Clear the crawlers"
+ },
+ "reward_steel": 8,
+ "reward_copper": 8,
+ "reward_rubber": 8,
+ "scenes": [
+  {
+   "width": 800,
+   "ground_y": 220,
+   "sky": "images/bg_sky",
+   "objective": {
+    "type": "ELIMINATE_ALL",
+    "description": "Clear the crawlers"
+   },
+   "dialog": {
+    "image": "images/dialog_bg",
+    "lines": [
+     "TEST LEVEL: CRAWLER (wall-climbing enemy).",
+     "It rides a scene.walls rail: vertical only, no gravity, no collision.",
+     "The wall art is a background with parallax 1.0 so it stays aligned.",
+     "Suppression type: low damage, arcing shots. It drops low enough for flat guns."
+    ]
+   },
+   "backgrounds": [
+    {
+     "layer": 0,
+     "x": 420,
+     "y": 28,
+     "image": "images/bg_building1.png",
+     "parallax": 1.0
+    },
+    {
+     "layer": 0,
+     "x": 640,
+     "y": 28,
+     "image": "images/bg_building3.png",
+     "parallax": 1.0
+    }
+   ],
+   "terrain": [
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    }
+   ],
+   "obstacles": [],
+   "stones": [],
+   "delivery_targets": [],
+   "walls": [
+    {
+     "x": 470,
+     "y_top": 30,
+     "y_bottom": 150
+    },
+    {
+     "x": 690,
+     "y_top": 30,
+     "y_bottom": 150
+    }
+   ],
+   "enemies": [
+    {
+     "type": "WALL_ENEMY",
+     "x": 470,
+     "y": 0
+    },
+    {
+     "type": "WALL_ENEMY",
+     "x": 690,
+     "y": 0
+    }
+   ]
+  }
+ ]
+}
