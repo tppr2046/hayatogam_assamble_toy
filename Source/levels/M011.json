@@ -1,0 +1,132 @@
+{
+ "id": "M011",
+ "name": "11 COLOSSUS TEST",
+ "description": "S15.5a test: parallel-part giant boss, fixed arena, boss-thrown stones.",
+ "prerequisite": 0,
+ "time_limit": -1,
+ "objective": {
+  "type": "BOSS_KILL",
+  "description": "Destroy the COLOSSUS head"
+ },
+ "reward_steel": 10,
+ "reward_copper": 10,
+ "reward_rubber": 10,
+ "scenes": [
+  {
+   "width": 1000,
+   "ground_y": 220,
+   "sky": "images/bg_sky",
+   "objective": {
+    "type": "BOSS_KILL",
+    "description": "Destroy the COLOSSUS head"
+   },
+   "dialog": {
+    "image": "images/dialog_bg",
+    "lines": [
+     "TEST LEVEL: giant boss (COLOSSUS).",
+     "Cross x=520 to lock the arena. Head is the only win condition.",
+     "Arms are optional - destroying both makes the head rage.",
+     "A turret sits at the left edge: any loadout can reach the head."
+    ]
+   },
+   "backgrounds": [],
+   "terrain": [
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    }
+   ],
+   "obstacles": [],
+   "stones": [
+    {
+     "x": 600,
+     "y": 0
+    },
+    {
+     "x": 650,
+     "y": 0
+    }
+   ],
+   "delivery_targets": [],
+   "weapons": [
+    {
+     "type": "TURRET",
+     "x": 560,
+     "angle_init": 45
+    }
+   ],
+   "enemies": [
+    {
+     "type": "BOSS",
+     "boss_id": "BOSS2",
+     "x": 700,
+     "y": 0
+    }
+   ],
+   "arena": {
+    "x1": 520,
+    "x2": 920
+   }
+  }
+ ]
+}

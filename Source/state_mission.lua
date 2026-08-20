@@ -85,9 +85,47 @@ local mech_x, mech_y, mech_vy = 0, 0, 0
 local is_on_ground = true
 local camera_x = 0       
 local last_input = "None" 
+
+-- [[ §15.5a-4 固定戰場 ]] scene.arena = { x1, x2 }（世界座標）。
+-- 玩家跨過 x1 → 鎖定：相機停止捲動、玩家被夾在 [x1, x2] 之內。
+-- ★ 沒有這個欄位的場景**完全不受影響**（arena=nil 時所有判斷都短路）。
+-- ★ 解鎖條件＝「範圍內沒有活著的敵人」——刻意做成通用規則而不是「BOSS 死掉」，
+--   這樣普通關卡也能用，而且**不會因為 BOSS 沒放進去就把玩家永久關在裡面**。
+local arena = nil
+local arena_locked = false
+
 local mech_y_old = 0    -- 用於垂直碰撞檢查
 local Assets = {} 
 local entity_controller = nil 
+
+-- 每幀更新固定戰場的鎖定狀態。arena 為 nil 時整個函式等於不存在。
+-- ⚠️ 這個函式**必須定義在 `local entity_controller` 之後** —— 定義在前面的話
+--    它會抓到同名的全域（nil），解鎖判斷就會靜默失效。
+local function updateArena(mech_center_x)
+    if not arena or not arena.x1 or not arena.x2 then return end
+
+    if not arena_locked then
+        -- 進場：機體中心跨過左界就鎖上
+        if mech_center_x >= arena.x1 then
+            arena_locked = true
+            print("LOG: arena locked [" .. arena.x1 .. ", " .. arena.x2 .. "]")
+        end
+        return
+    end
+
+    -- 解鎖：範圍內沒有活著的敵人（爆炸動畫播完才算死，與 ELIMINATE_ALL 同一套判定）
+    if entity_controller and entity_controller.enemies then
+        for _, e in ipairs(entity_controller.enemies) do
+            local alive = (e.hp and e.hp > 0) or e.is_exploding
+            if alive and e.x >= arena.x1 and e.x <= arena.x2 then
+                return
+            end
+        end
+    end
+    arena_locked = false
+    arena = nil   -- ★ 一次性：清掉才不會走回 x1 又被關進去
+    print("LOG: arena released")
+end
 
 local current_hp = 0 -- 追蹤機甲當前 HP
 local max_hp = 1     -- 機甲最大 HP (在 setup 中獲取)
@@ -149,6 +187,9 @@ local function loadScene(scene)
     is_on_ground = true
     mech_y_old = mech_y
     camera_x = 0
+    -- [[ §15.5a-4 ]] 固定戰場：換場景時一律解除鎖定，再讀新場景的設定
+    arena = (current_scene and current_scene.arena) or nil
+    arena_locked = false
     controlling_weapon = nil       -- [[ S3 ]] 進新場景時解除任何武器接管
     weapon_fire_timer = 0
 
@@ -587,6 +628,14 @@ function StateMission.update()
     elseif new_x + mech_width > scene_width then
         new_x = scene_width - mech_width
     end
+    -- [[ §15.5a-4 ]] 固定戰場：鎖定期間再夾一次，範圍比場景邊界更緊
+    if arena_locked and arena then
+        if new_x < arena.x1 then
+            new_x = arena.x1
+        elseif new_x + mech_width > arena.x2 then
+            new_x = arena.x2 - mech_width
+        end
+    end
     
     -- 計算機甲本體碰撞框（3×2 格）
     local mech_grid = _G.GameState.mech_grid
@@ -724,10 +773,21 @@ function StateMission.update()
     end
 
     -- 3. 相機邏輯
+    -- [[ §15.5a-4 ]] 先更新固定戰場的鎖定狀態（用機體中心判定進場）
+    updateArena(mech_x + ((mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)) / 2)
+
     local target_camera_x = mech_x - 150 
     if target_camera_x < 0 then target_camera_x = 0 end
     local max_camera_x = ((current_scene and current_scene.width) or 400) - SCREEN_WIDTH
     if target_camera_x > max_camera_x then target_camera_x = max_camera_x end
+    -- [[ §15.5a-4 ]] 鎖定期間相機不捲出戰場。
+    -- ★ hi 用 max(lo, ...) 夾住：戰場若比螢幕窄，相機就固定在左界，不會反向跳。
+    if arena_locked and arena then
+        local lo = arena.x1
+        local hi = math.max(lo, arena.x2 - SCREEN_WIDTH)
+        if target_camera_x < lo then target_camera_x = lo end
+        if target_camera_x > hi then target_camera_x = hi end
+    end
     camera_x = target_camera_x
 
     -- 4. 更新實體控制器 (敵人、砲彈)，並套用造成的傷害

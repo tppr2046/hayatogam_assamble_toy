@@ -57,6 +57,24 @@ function Stone:init(x, y, ground_y, target_id, image_path)
         ground_y = ground_y,
         image = stone_img,
         damage = 15,  -- 砸到敵人的傷害
+        -- [[ §15.5a-6 ]] 石頭的歸屬。**只有飛行中才有意義**。
+        --   nil / "PLAYER" → 只傷敵人（切片以來的行為，不變）
+        --   "BOSS"         → 只傷玩家，且**不傷敵人**（BOSS 砸自己的小兵很難解釋）
+        -- ★★ 落地時一律清回 nil（見 update）—— 否則 BOSS 丟過來的石頭停在地上
+        --   還掛著傷害判定，玩家走過去撿就會莫名扣血。
+        --   清成中性之後它就是玩家的彈藥：BOSS 自己供應消耗品。
+        owner = nil,
+        mech_damage = 12,  -- 砸到玩家的傷害（只有 owner=="BOSS" 時會用到）
+        -- [[ §15.5a-6 ]] **臨時石頭**（BOSS 丟出來的那種）。nil＝永久石頭（既有行為，不變）。
+        -- 規則（2026-08-19 使用者拍板）：
+        --   1) **落地後** despawn_time 秒消失 —— 計時只在「站在地上」時走
+        --   2) 被爪子抓著時不會消失（沒落地就不計時，所以這條是自動成立的，不必特判）
+        --   3) 擊中敵人／BOSS 就消失（在 entity_controller 的命中分支移除）
+        --   4) 丟出去沒打中 → 落地後**重新計時**（落地那一刻歸零）
+        -- ★ 這樣「BOSS 供應彈藥」是有時限的：撿了要馬上用，不能囤一地。
+        despawn_time = nil,
+        despawn_timer = 0,
+        is_gone = false,
         target_id = target_id,  -- 指定要放到哪個目標
         is_placed = false  -- 是否已經放到指定目標
     }
@@ -66,8 +84,17 @@ end
 
 function Stone:update(dt, gravity, entity_controller)
     if self.is_grabbed or self.is_placed then
-        -- 被抓住或已放置時不更新物理
+        -- 被抓住或已放置時不更新物理（★ 也因此不計時 → 抓在爪子上不會消失）
         return
+    end
+
+    -- [[ §15.5a-6 ]] 臨時石頭：落地後開始倒數，時間到就標記消失
+    -- （實際從清單移除是在 entity_controller，那裡才拿得到陣列）
+    if self.despawn_time and self.is_grounded then
+        self.despawn_timer = (self.despawn_timer or 0) + dt
+        if self.despawn_timer >= self.despawn_time then
+            self.is_gone = true
+        end
     end
     
     -- 應用重力
@@ -82,6 +109,8 @@ function Stone:update(dt, gravity, entity_controller)
             self.vy = 0
             self.vx = 0  -- 落地後停止
             self.is_grounded = true
+            self.owner = nil  -- ★ [[ §15.5a-6 ]] 落地即歸零成中性，見 init 的註解
+            self.despawn_timer = 0  -- ★ 每次落地都**重新計時**（丟出去沒打中就是這條）
         end
     end
     
@@ -97,6 +126,15 @@ function Stone:draw(camera_x)
         return
     end
 
+    -- [[ §15.5a-6 ]] 臨時石頭：最後 1 秒閃爍。
+    -- ★ 不預告就直接消失的話，玩家會以為是 bug（正要去撿，石頭沒了）。
+    if self.despawn_time and self.is_grounded then
+        local left = self.despawn_time - (self.despawn_timer or 0)
+        if left <= 1.0 and (math.floor(playdate.getCurrentTimeMilliseconds() / 90) % 2) == 0 then
+            return
+        end
+    end
+
     local screen_x = self.x - camera_x
     if self.image then
         pcall(function() self.image:draw(screen_x, self.y) end)
@@ -107,11 +145,15 @@ function Stone:draw(camera_x)
     end
 end
 
-function Stone:launch(vx, vy)
+-- owner：nil/"PLAYER"＝玩家甩投（只傷敵人）、"BOSS"＝BOSS 投擲（只傷玩家）。
+-- ★ 只在飛行期間有效，落地時 update 會清回 nil。
+function Stone:launch(vx, vy, owner)
     -- 被拋出時設定速度
     self.vx = vx
     self.vy = vy
     self.is_grounded = false
     self.is_grabbed = false
+    self.owner = owner
+    self.despawn_timer = 0   -- 離地＝重新計時（落地時還會再歸零一次，兩邊都歸零才不會有殘值）
 end
 

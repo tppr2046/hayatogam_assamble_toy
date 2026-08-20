@@ -173,6 +173,12 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             enemy = Enemy:init(edata.x, edata.y, edata.type, safe_ground_y)
         end
         table.insert(controller.enemies, enemy)
+        -- [[ §15.5a ]] 平行制 BOSS 的手臂：各自是一個代理實體，一起放進 enemies。
+        -- ★ 這樣「子彈／雷射／爆風／飛彈／石頭／近戰」6 條命中路徑全部原樣沿用，
+        --   不必為了多一個弱點去改它們各自的命中判定（HANDOFF §3-5）。
+        for _, proxy in ipairs(enemy.arm_proxies or {}) do
+            table.insert(controller.enemies, proxy)
+        end
     end
 
     -- ============================================================
@@ -1381,9 +1387,31 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     for i = #self.stones, 1, -1 do
         local stone = self.stones[i]
         stone:update(dt, self.GRAVITY, self)  -- 傳入 entity_controller
+
+        -- [[ §15.5a-6 ]] 臨時石頭（BOSS 丟的）倒數結束 → 從場上移除。
+        -- ★ 移除只在這裡做（Stone 自己拿不到陣列），所以 Stone 只負責標記 is_gone。
+        if stone.is_gone then
+            table.remove(self.stones, i)
+            goto continue_stone
+        end
         
+        -- [[ §15.5a-6 ]] BOSS 投擲的石頭：飛行中**只傷玩家**，不傷敵人。
+        -- 落地時 Stone:update 會把 owner 清回 nil，之後就變成玩家的彈藥。
+        if stone.owner == "BOSS" and not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
+            if self:checkMechCollision(mech_x, mech_y, mech_width, mech_height,
+                                       stone.x, stone.y, stone.width, stone.height) then
+                mech_damage_taken = mech_damage_taken + (stone.mech_damage or 12)
+                self:addHitSpark(stone.x + stone.width / 2, stone.y + stone.height / 2)
+                -- ★ 砸中後轉中性並掉在原地：玩家可以立刻撿起來丟回去。
+                stone.owner = nil
+                stone.vx = 0
+                print("LOG: Boss stone hit mech!")
+            end
+        end
+
         -- 檢查石頭是否與敵人碰撞（造成傷害）
-        if not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
+        -- ★ owner=="BOSS" 的石頭排除在外（見上）—— 只有玩家甩投與中性石頭會砸敵人。
+        if stone.owner ~= "BOSS" and not stone.is_grabbed and (stone.vx ~= 0 or stone.vy ~= 0) then
             for _, enemy in ipairs(self.enemies) do
                 if self:canHitEnemy(enemy) and self:checkMechCollision(enemy.x, enemy.y, enemy.width, enemy.height, stone.x, stone.y, stone.width, stone.height) then
                     -- 特殊處理：地雷被石頭擊中時觸發
@@ -1420,6 +1448,13 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         print("LOG: Enemy killed by stone, starting explosion animation")
                     end
                     
+                    -- [[ §15.5a-6 ]] 臨時石頭：擊中敵人／BOSS 就消失（拍板）。
+                    -- 永久石頭維持原本的「減速後繼續掉落」，既有關卡不受影響。
+                    if stone.despawn_time then
+                        table.remove(self.stones, i)
+                        goto continue_stone
+                    end
+
                     -- 石頭減速但繼續受重力影響
                     stone.vx = stone.vx * 0.5  -- 減少水平速度
                     -- 不強制設定 vy = 0，讓石頭繼續受重力影響
@@ -1427,6 +1462,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                 end
             end
         end
+        ::continue_stone::
     end
     
     return mech_damage_taken

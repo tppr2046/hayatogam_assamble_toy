@@ -646,7 +646,10 @@ end
 -- 建立 BOSS（特殊敵人）。edata = { type="BOSS", boss_id, x, y }
 function Enemy:initBoss(edata, ground_y)
     local bd = (_G.BossData or {})[edata.boss_id]
-    if not bd or not bd.parts or #bd.parts == 0 then
+    -- [[ §15.5a ]] 平行制（part_mode=="PARALLEL"）沒有 `parts`，改用 head + arms，
+    -- 所以「缺 parts」不能一律當成資料壞掉。
+    local is_parallel = (bd and bd.part_mode == "PARALLEL")
+    if not bd or (not is_parallel and (not bd.parts or #bd.parts == 0)) then
         print("ERROR: BossData missing for " .. tostring(edata.boss_id))
         return Enemy:init(edata.x, edata.y or 0, "BASIC_ENEMY", ground_y)  -- 安全回退
     end
@@ -654,7 +657,7 @@ function Enemy:initBoss(edata, ground_y)
     local body_h = bd.body_h or 64
     local e = {
         is_boss = true, type_id = "BOSS", boss_id = edata.boss_id,
-        boss_data = bd, boss_parts = bd.parts, boss_phase = 1,
+        boss_data = bd, boss_parts = bd.parts or {}, boss_phase = 1,
         boss_x = edata.x, boss_y = ground_y - body_h,
         boss_body_w = body_w, boss_body_h = body_h,
         boss_ground_y = ground_y, origin_x = edata.x,
@@ -662,7 +665,8 @@ function Enemy:initBoss(edata, ground_y)
         boss_trans_time = bd.trans_time or 1.0, boss_invuln = 0,
         move_dir = -1,
         -- 傷害/碰撞管線需要的欄位
-        hp = bd.parts[1].hp, attack = (bd.parts[1].attack and bd.parts[1].attack.damage) or 5,
+        hp = (bd.parts and bd.parts[1] and bd.parts[1].hp) or 100,
+        attack = (bd.parts and bd.parts[1] and bd.parts[1].attack and bd.parts[1].attack.damage) or 5,
         ground_y = ground_y, is_alive = true, is_exploding = false,
         exploding_frame_timer = 0, exploding_duration = BOSS_DEATH_DURATION, exploding_frame_index = 0,
         exploding_image_table = nil, fire_timer = 0,
@@ -682,7 +686,7 @@ function Enemy:initBoss(edata, ground_y)
 
             -- 可旋轉瞄準的武器：裁成「軸心置中」的小圖，之後用 drawRotated 繞軸心轉
             e.aim_imgs = {}
-            for _, p in ipairs(bd.parts) do
+            for _, p in ipairs(bd.parts or {}) do
                 if p.aim and p.cell and p.pivot_x and p.pivot_y then
                     local src = tbl:getImage(p.cell)
                     if src then
@@ -702,8 +706,13 @@ function Enemy:initBoss(edata, ground_y)
             print("WARNING: failed to load boss sprite " .. tostring(bd.sprite))
         end
     end
-    e:bossPositionHitbox()
-    print("LOG: Created BOSS " .. tostring(edata.boss_id) .. " at " .. edata.x)
+    if is_parallel then
+        e:bossInitParallel(bd, ground_y)
+    else
+        e:bossPositionHitbox()
+    end
+    print("LOG: Created BOSS " .. tostring(edata.boss_id) .. " at " .. edata.x
+          .. (is_parallel and " (PARALLEL)" or ""))
     return e
 end
 
@@ -850,6 +859,17 @@ function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controlle
             print("LOG: Boss part destroyed -> phase " .. self.boss_phase .. "/" .. #self.boss_parts)
             return
         else
+            -- [[ §15.5a ]] 平行制：頭爆＝BOSS 死。**剩下的手臂要一起收掉**，
+            -- 否則它們的代理實體會永遠 is_alive=true —— ELIMINATE_ALL 與固定戰場
+            -- 的解鎖判定都是掃「範圍內還有沒有活著的敵人」，會把玩家鎖在戰場裡。
+            if self.part_mode == "PARALLEL" and not self._arms_cleared then
+                self._arms_cleared = true
+                for i, arm in ipairs(self.arms or {}) do
+                    arm.alive = false
+                    local pr = self.arm_proxies and self.arm_proxies[i]
+                    if pr then pr.is_alive = false; pr.is_exploding = false end
+                end
+            end
             -- 最後零件 → 真正死亡。
             -- [[ 演出 2026-08-08 ]] BOSS 的死亡爆炸拉長到 BOSS_DEATH_DURATION（3 秒），
             -- 期間在**機體各處連續炸開**（每 BOSS_DEATH_BURST_INTERVAL 秒隨機一發）。
@@ -878,6 +898,37 @@ function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controlle
         end
     end
     if not self.is_alive then return end
+
+    -- ======================================================================
+    -- [[ §15.5a ]] 平行制（巨大 BOSS）：頭與雙臂同時活著，走完全不同的一條更新路徑。
+    -- ★ 序列制的每一行都假設「boss_parts[boss_phase] 存在」，平行制沒有那個東西，
+    --   所以在這裡整段分流，而不是在下面逐行加 if。
+    -- ======================================================================
+    if self.part_mode == "PARALLEL" then
+        if self.boss_invuln and self.boss_invuln > 0 then
+            self.boss_invuln = self.boss_invuln - dt
+            self:bossSyncParallelBoxes()
+            return
+        end
+
+        -- [[ 演出 ]] 與序列制同一條規則：雙方都在畫面上才動作（畫面外不偷打）
+        local cam = (controller and controller.camera_x) or 0
+        local SCREEN_W = 400
+        local boss_on = (self.boss_x + (self.boss_body_w or 72) > cam) and (self.boss_x < cam + SCREEN_W)
+        local mech_on = mech_x and (mech_x + (mech_width or 48) > cam) and (mech_x < cam + SCREEN_W)
+        if not (boss_on and mech_on) then
+            self:bossSyncParallelBoxes()
+            return
+        end
+
+        self:bossUpdateParallel(dt, mech_x, mech_y, mech_width, mech_height, controller)
+        -- 拳擊震波的傷害走既有的 pending_mech_damage 管線（controller 每幀收回累加）
+        local slam = self:bossConsumeSlam(mech_x, mech_y, mech_width, mech_height)
+        if slam > 0 then
+            self.pending_mech_damage = (self.pending_mech_damage or 0) + slam
+        end
+        return
+    end
 
     -- 轉場無敵：閃爍、不攻擊、免傷（把 hp 釘在當前零件滿血）
     if self.boss_invuln and self.boss_invuln > 0 then
@@ -969,6 +1020,13 @@ function Enemy:bossLaser(atk, dt, mech_x, mech_y, mech_width, mech_height)
 end
 
 function Enemy:drawBoss(camera_x)
+    -- [[ §15.5a ]] 平行制走自己的繪製（本體＋雙臂＋頭，缺圖時全部程式繪製佔位）
+    if self.part_mode == "PARALLEL" then
+        self:bossDrawParallel(camera_x)
+        self:drawPartExplosion(camera_x)
+        self:drawBossHpBarParallel()
+        return
+    end
     local g = playdate.graphics
     -- [[ 演出 ]] 受擊震動：整台 BOSS 水平抖動
     local bx = self.boss_x - camera_x + (self.hit_shake_offset_x or 0)
@@ -1059,27 +1117,7 @@ function Enemy:drawBoss(camera_x)
         end
     end
 
-    -- [[ 演出 ]] 零件被打爆的爆炸特效（沿用 mine_explode 動畫表，與敵人死亡共用）
-    if self.part_explode_timer then
-        if not self.part_explode_table then
-            local okt, tbl = pcall(function() return playdate.graphics.imagetable.new("images/mine_explode") end)
-            if okt and tbl then self.part_explode_table = tbl end
-        end
-        if self.part_explode_table then
-            local dur = self.part_explode_duration or 0.8
-            local n = self.part_explode_table:getLength() or 3
-            local idx = math.floor((self.part_explode_timer / dur) * n) + 1
-            if idx < 1 then idx = 1 elseif idx > n then idx = n end
-            local frame = self.part_explode_table:getImage(idx)
-            if frame then
-                local fw, fh = frame:getSize()
-                pcall(function()
-                    frame:draw((self.part_explode_x or self.boss_x) - camera_x - fw / 2,
-                               (self.part_explode_y or self.boss_y) - fh / 2)
-                end)
-            end
-        end
-    end
+    self:drawPartExplosion(camera_x)
 
     -- [[ S6 ]] 雷射：充能＝細虛線警告（閃爍）；開火＝粗光束（含外圈白邊更醒目）
     if self.laser_phase == "charge" or self.laser_phase == "beam" then
@@ -1103,6 +1141,32 @@ function Enemy:drawBoss(camera_x)
     end
 
     self:drawBossHpBar()
+end
+
+-- [[ 演出 ]] 零件被打爆的爆炸特效（沿用 mine_explode 動畫表，與敵人死亡共用）。
+-- ★ 序列制與平行制共用這一個 —— 拆出來才不會有兩份會走樣的複本。
+function Enemy:drawPartExplosion(camera_x)
+    if self.part_explode_timer then
+        if not self.part_explode_table then
+            local okt, tbl = pcall(function() return playdate.graphics.imagetable.new("images/mine_explode") end)
+            if okt and tbl then self.part_explode_table = tbl end
+        end
+        if self.part_explode_table then
+            local dur = self.part_explode_duration or 0.8
+            local n = self.part_explode_table:getLength() or 3
+            local idx = math.floor((self.part_explode_timer / dur) * n) + 1
+            if idx < 1 then idx = 1 elseif idx > n then idx = n end
+            local frame = self.part_explode_table:getImage(idx)
+            if frame then
+                local fw, fh = frame:getSize()
+                pcall(function()
+                    frame:draw((self.part_explode_x or self.boss_x) - camera_x - fw / 2,
+                               (self.part_explode_y or self.boss_y) - fh / 2)
+                end)
+            end
+        end
+    end
+
 end
 
 -- 螢幕上方固定：BOSS 名稱、階段進度、當前零件血條

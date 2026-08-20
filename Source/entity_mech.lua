@@ -813,7 +813,8 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                     local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 4.0
                     local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult
                     local vy = 0  -- 初始 y 速度為 0，僅受重力影響
-                    stone:launch(vx, vy)
+                    -- [[ §15.5a-6 ]] 標記為玩家甩投：只傷敵人、不會回頭砸到自己。
+                    stone:launch(vx, vy, "PLAYER")
                     self.claw_grabbed_stone = nil
                     print("LOG: Released stone with vx=" .. math.floor(vx) .. " (arm angular vel=" .. math.floor(arm_angular_velocity) .. ")")
                 end

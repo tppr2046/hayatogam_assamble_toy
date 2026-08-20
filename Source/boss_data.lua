@@ -67,6 +67,89 @@ local bosses = {
                          damage = 5, thickness = 5 } },
         },
     },
+
+    -- ======================================================================
+    -- [[ §15.5a 巨大 BOSS ]] 2026-08-19　**平行零件制**（part_mode = "PARALLEL"）
+    -- ----------------------------------------------------------------------
+    -- ★ 與 OVERSEER 的模型完全不同：頭與雙臂**同時活著**，各有 HP。
+    --   頭 ＝ BOSS 本體（hp／命中框／死亡都走既有管線）；手臂 ＝ 代理實體。
+    --   實作在 entity_boss_parallel.lua，那裡的檔頭有完整說明。
+    -- ★ **只有打爆頭才算擊倒**。手臂是選擇：拆掉少一種攻擊，但雙臂全爆 → 頭部狂暴。
+    --
+    -- ⚠️ 美術尚未製作，**現在全部是程式繪製佔位**（白底黑框＋黑色頭＋白眼）。
+    --   放圖即自動生效：`sprite` 給本體與頭的 imagetable、`arms.sprite` 給手臂
+    --   （左右共用一套，右臂自動水平鏡射 —— §15.5a-7 的主要省圖點）。
+    --
+    -- 版面：遊戲可視高度只有 176px（240 − UI 64），地面線在 ground_y − 64。
+    --   ground_y = 220 的場景 → 地面在 156 → 本體高 150 剛好「上半身佔滿畫面」。
+    --   ★ 「只露上半身」在這裡不是靠裁切，而是**本體底邊就停在地面線**。
+    -- ======================================================================
+    ["BOSS2"] = {
+        name = "COLOSSUS",              -- ⚠️ 血條標題寬度上限見 BOSS1 的註解
+        part_mode = "PARALLEL",
+        drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
+        sprite = nil,                   -- 尚無圖 → 走程式繪製佔位
+        body_w = 130, body_h = 150,
+        cell_body = 1,
+        move_speed = 0,                 -- ★ 固定不動（§15.5a-4 拍板）；戰場鎖定靠 scene.arena
+        move_range = 0,
+        trans_time = 0,
+
+        -- 頭：弱點，也是 BOSS 本體的 hp
+        head = {
+            label = "HEAD",
+            hp = 140,
+            dx = 46, dy = 0, w = 40, h = 34,
+            muzzle_x = 46, muzzle_y = 22,     -- 朝左射出
+            cell = 2, cell_fire = 3,          -- 有圖時：平常／開火下探
+            -- ★★ 下探是這隻 BOSS 的關鍵設計（§15.5a-3）：
+            --   既是「要開火了」的預告，也是**水平槍唯一打得到頭的窗口**。
+            --   只帶 GUN 的配裝就靠這個窗口，才談得上「不限制零件」。
+            lower_dy = 26,
+            attack = { type = "VOLLEY", n = 1, cooldown = 2.6, telegraph = 0.9,
+                       strike_time = 0.15, recover = 0.5,
+                       damage = 6, speed_mult = 30, grav_mult = 18 },
+            -- 雙臂全爆後的狂暴（§15.5a-2：「全拆」要有代價）
+            rage = { cooldown_mult = 0.5, n = 2 },
+        },
+
+        -- 雙臂：可個別打爆，**不是**過關條件
+        arms = {
+            hp = 90,
+            sprite = nil,               -- 尚無圖 → 程式繪製佔位
+            w = 30, h = 100,
+            mounts = {
+                { id = "ARM_L", label = "L-ARM", dx = 2,  dy = 40, mirror = false },
+                { id = "ARM_R", label = "R-ARM", dx = 98, dy = 40, mirror = true  },
+            },
+            -- 兩種攻擊**輪替**（打完換下一種），不是隨機 —— 玩家要學得起來節奏。
+            attacks = {
+                -- 拳擊地面：★ 不改變地形（§15.5a-5）。只有落點周圍的震波傷害。
+                -- ★ 2026-08-19：舉在上方時**左右追著玩家移動**，停下來後才砸。
+                --   track_range＝約一個本體寬（130）→ 玩家跑出這個範圍就打不到，
+                --   「走位」因此是有效的解法；無限追蹤等於必中，那就沒得玩了。
+                --   warn＝追蹤停止後的發招預告（地面落點閃爍）＝玩家的反應窗口。
+                { type = "SLAM", cooldown = 3.2, telegraph = 0.9, raise = 28,
+                  track = true, track_range = 130, track_speed = 95, warn = 0.35,
+                  strike_time = 0.12, follow_through = 14, recover = 0.6,
+                  -- ★ 傷害範圍＝**手臂寬度再加一點點**（半徑 = w/2 + radius_pad = 15+8 = 23）。
+                  --   刻意做窄：範圍太大的話「拳頭追著你移動」就沒有意義了，
+                  --   站哪裡都一樣被打到，追蹤與預告兩段演出就白做了。
+                  --   要改成明確數值就直接寫 radius（會覆蓋這個計算）。
+                  damage = 10, radius_pad = 8 },
+                -- 投擲石頭：owner="BOSS" → 飛行中只傷玩家；落地後轉中性＝玩家的彈藥
+                -- ★ 2026-08-19：改成**算彈道丟到玩家身上**（舊版固定速度，一律落在玩家前方）。
+                --   speed_max 越大＝飛得越平越快；min/max_frames 夾住飛行時間。
+                { type = "THROW", cooldown = 4.2, telegraph = 0.7, raise = 24,
+                  strike_time = 0.12, follow_through = 8, recover = 0.5,
+                  -- ★ despawn＝**臨時石頭**：落地 3 秒後消失（2026-08-19 拍板）。
+                  --   撿了要馬上用，不能囤一地 —— BOSS 供應的彈藥是有時限的。
+                  --   抓在爪子上不倒數；打中 BOSS 就沒了；沒打中落地後重新計時。
+                  damage = 12, speed_max = 9, min_frames = 22, max_frames = 55, spread = 0.6,
+                  despawn = 3.0 },
+            },
+        },
+    },
 }
 
 return bosses
