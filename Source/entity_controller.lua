@@ -83,6 +83,14 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     -- 可選參數：scene.sky_parallax（預設 0.1，越小越遠）、scene.sky_y（預設 0）。
     controller.sky = nil
     controller.sky_parallax = (scene_data and scene_data.sky_parallax) or 0.1
+    -- [[ §15.5b 高速飛行 BOSS ]] scene.sky_scroll（px/秒）：天空層**自動捲動**。
+    -- ★★ 這是「速度感」的來源（使用者拍板）：BOSS 自己維持看得到、瞄得到的速度，
+    --   飛快的是**世界**。天空層本來就橫向無限平鋪，加一個時間項就成立，幾乎沒有成本。
+    -- ⚠️ 配套：這種關卡的地形要**平坦無特徵**（或整段 pit），
+    --   否則「天空在飛、地面卻靜止」會直接拆穿速度感。
+    -- 0（預設）＝維持原本只跟相機捲動的行為，既有關卡完全不受影響。
+    controller.sky_scroll = (scene_data and scene_data.sky_scroll) or 0
+    controller.sky_scroll_t = 0
     controller.sky_y = (scene_data and scene_data.sky_y) or 0
     controller.sky_w = 400
     if scene_data and scene_data.sky then
@@ -1262,6 +1270,11 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         end
     end
 
+    -- [[ §15.5b ]] 天空自動捲動的計時（sky_scroll = 0 時完全不生效）
+    if (self.sky_scroll or 0) ~= 0 then
+        self.sky_scroll_t = (self.sky_scroll_t or 0) + dt
+    end
+
     -- [[ §15.2 ]] 追蹤飛彈
     self:updateMissiles(dt)
 
@@ -1671,7 +1684,9 @@ function EntityController:draw(camera_x)
     if self.sky then
         local sw = self.sky_w or 400
         -- 取模讓平鋪起點永遠落在畫面左緣外，最多畫 2 次
-        local sx = -(((camera_x * (self.sky_parallax or 0.1)) % sw))
+        -- [[ §15.5b ]] 自動捲動的位移加在這裡（不影響 sky_scroll = 0 的既有關卡）
+        local auto = (self.sky_scroll or 0) * (self.sky_scroll_t or 0)
+        local sx = -((((camera_x * (self.sky_parallax or 0.1)) + auto) % sw))
         while sx < 400 do
             local dx = sx
             pcall(function() self.sky:draw(dx, self.sky_y or 0) end)

@@ -150,6 +150,67 @@ local bosses = {
             },
         },
     },
+
+    -- ======================================================================
+    -- [[ §15.5b 高速飛行 BOSS ]] 2026-08-19　`move_mode = "FLIGHT"`
+    -- ----------------------------------------------------------------------
+    -- ★★ 結構是**序列制**（與 OVERSEER 同一套 parts / boss_phase），
+    --   本隻只多一套「移動與出招的狀態機」（entity_boss_flight.lua）。
+    -- ★★ 「快」的感覺來自 `scene.sky_scroll`（天空自動捲動），**不是**它自己的移動速度 ——
+    --   它若真的飛很快，玩家武器裡只有追蹤飛彈打得到，就變成「不裝飛彈過不了」。
+    -- ★ 硬直（RECOVER）是核心節奏：每次出手完停在**畫面內**、可被打。
+    --   窗口長度依階段縮短 1.5 → 1.1 → 0.8，難度曲線就在這三個數字上。
+    --   ⚠️ 1.0 秒是門檻：GUN 冷卻 1.0 且**現在是手動**，窗口低於它＝手動槍一發都打不到。
+    -- ⚠️ 美術未做 → 走既有的程式繪製佔位（白底黑框 + 弱點方塊）。
+    -- ======================================================================
+    ["BOSS3"] = {
+        name = "COMET",                 -- ⚠️ 血條標題寬度上限見 BOSS1 的註解
+        move_mode = "FLIGHT",
+        drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
+        sprite = nil,
+        body_w = 64, body_h = 40,
+        cell_body = 1,
+        move_speed = 0, move_range = 0, -- 不走 bossMove（巡邏），由飛行狀態機接管
+        trans_time = 1.0,
+        flight = {
+            cruise_speed   = 70,        -- ★ 螢幕上的速度：刻意慢到瞄得準
+            bob_amp = 10, bob_speed = 1.6,
+            margin = 30, base_y = 34,
+            exit_speed = 260,
+            offscreen_time = 1.0,       -- 空白期（拍板 0.8~1.2）
+            warn_before = 0.5,          -- 入畫預告箭頭提前多久
+            dash_speed = 300,
+            dash_damage = 8, dash_push = 44,
+            spawn_type = "DRONE",
+            spawn_max = 3,              -- ⚠️ 上限：沒有的話玩家不清就滾雪球
+        },
+        parts = {
+            -- 階段 1：引擎。只有掠過投彈，窗口最寬 —— 教玩家這場戰鬥的節奏。
+            { id = "ENGINE", label = "ENGINE", hp = 55, cell = 2,
+              dx = 44, dy = 8, w = 20, h = 18, muzzle_x = 30, muzzle_y = 30,
+              reveal = "outer",
+              flight_phase = { attacks = { "BOMB" }, cruise_time = 2.0,
+                               telegraph = 0.6, recover = 1.5 },
+              attack = { damage = 6, speed_mult = 24, bomb_grav_mult = 14, bomb_n = 2 } },
+
+            -- 階段 2：武器莢艙。加入俯衝（出畫 → 衝回來）與定點齊射。
+            { id = "PODS", label = "PODS", hp = 70, cell = 3,
+              dx = 8, dy = 22, w = 34, h = 14, muzzle_x = 20, muzzle_y = 32,
+              reveal = "outer",
+              flight_phase = { attacks = { "DASH", "VOLLEY" }, cruise_time = 1.7,
+                               telegraph = 0.5, recover = 1.1 },
+              attack = { damage = 7, speed_mult = 30, grav_mult = 12, n = 3 } },
+
+            -- 階段 3：核心。全招式 + 放小兵，窗口最短。
+            { id = "CORE", label = "CORE", hp = 85, cell = 4,
+              dx = 24, dy = 12, w = 22, h = 20, muzzle_x = 28, muzzle_y = 30,
+              reveal = "internal",
+              flight_phase = { attacks = { "BOMB", "DASH", "VOLLEY", "SPAWN" },
+                               cruise_time = 1.4, telegraph = 0.4, recover = 0.8 },
+              attack = { damage = 8, speed_mult = 32, grav_mult = 12, n = 3,
+                         bomb_grav_mult = 16, bomb_n = 3 } },
+        },
+    },
 }
 
 return bosses

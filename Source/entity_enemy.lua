@@ -819,6 +819,8 @@ function Enemy:initBoss(edata, ground_y)
         e:bossInitParallel(bd, ground_y)
     else
         e:bossPositionHitbox()
+        -- [[ §15.5b ]] 飛行 BOSS：結構仍是序列制，只多一套移動/出招狀態機
+        if bd.move_mode == "FLIGHT" then e:bossInitFlight(bd, ground_y) end
     end
     print("LOG: Created BOSS " .. tostring(edata.boss_id) .. " at " .. edata.x
           .. (is_parallel and " (PARALLEL)" or ""))
@@ -1047,6 +1049,14 @@ function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controlle
         return
     end
 
+    -- [[ §15.5b ]] 飛行 BOSS：整段走自己的狀態機（巡航／出畫／衝回／攻擊／硬直）。
+    -- ★ 放在畫面內外判定**之前** —— 它本來就會刻意飛出畫面，
+    --   用通用的「雙方都在畫面上才動作」會把它凍在畫面外永遠回不來。
+    if self.move_mode == "FLIGHT" then
+        self:bossUpdateFlight(dt, mech_x, mech_y, mech_width, mech_height, controller)
+        return
+    end
+
     -- 正常階段：移動 + 依冷卻發射當前零件武器
     self:bossMove(dt); self:bossPositionHitbox()
 
@@ -1227,6 +1237,9 @@ function Enemy:drawBoss(camera_x)
     end
 
     self:drawPartExplosion(camera_x)
+
+    -- [[ §15.5b ]] 飛行 BOSS 的疊加演出（入畫預告箭頭、硬直的弱點提示）
+    if self.move_mode == "FLIGHT" then self:bossDrawFlightOverlay(camera_x) end
 
     -- [[ S6 ]] 雷射：充能＝細虛線警告（閃爍）；開火＝粗光束（含外圈白邊更醒目）
     if self.laser_phase == "charge" or self.laser_phase == "beam" then

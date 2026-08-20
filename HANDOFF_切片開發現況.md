@@ -322,6 +322,11 @@ Menu 鍵可切 CORE1/2/3。
 移除方式:刪 `addCoreSwitcher()` 與兩處呼叫。
 ⚠️ Playdate 系統選單**上限 3 個自訂項目**,關卡中已用滿。
 
+**7. `M014` 測試關 @ [M014.json](Source/levels/M014.json)　(2026-08-19 新增)**
+名稱 `14 COMET TEST`、`prerequisite: 0`。高速飛行 BOSS 的測試場:
+`sky_scroll: 140`(天空自動捲動)、固定戰場 576~976、**戰場內整段 pit + 移動平台**。
+⚠️ 它會出現在選關畫面。**正式版要刪掉這個檔**。
+
 **6. `M013` 測試關 @ [M013.json](Source/levels/M013.json)　(2026-08-19 新增)**
 名稱 `13 CHASER TEST`、`prerequisite: 0`。追擊型敵人的測試場:
 BOMBER×2 / RAMMER×1、中間一個 `pit`(試 RAMMER 的擊退),
@@ -483,6 +488,12 @@ for s in re.findall(r'\"([^\"]*)\"\s*,', io.open('Source/intro_data.lua',encodin
     **固定戰場**(`scene.arena`,左右界 + 範圍淡色底)、**背景的 `parallax` 欄位**
     (留空＝沿用 layer 慣例;**牆壁背景要填 1.0**)、**CRAWLER**(`WALL_ENEMY`)、**BOSS2**。
     → `check_editor_sync.py` 三項全 OK(敵人 10 種、BOSS 2 隻、地形型別)。
+  - ★ **2026-08-19 稍晚再補**:頂端新增**「天空捲動」**欄位(`scene.sky_scroll`,
+    高速飛行 BOSS 的速度感來源)、BOSS 清單加入 **BOSS3(COMET)**。
+    → `check_editor_sync.py`:敵人 12 種、**BOSS 3 隻**、地形型別全 OK。
+    → round-trip 實測 M011/M012/M014,`sky_scroll` / `arena` / `walls` / `platforms`
+      / `boss_id` 匯出後原樣還在。
+    ⚠️ 天空捲動是**畫面演出**,編輯器畫布上看不出來,那是正常的。
     → 另做了 **round-trip 實測**:把 M011/M012 餵進編輯器的
       `normalizeScene → sceneToJSON`,確認 `arena` / `walls` / `parallax` / `boss_id`
       / `WALL_ENEMY` 匯出後原樣還在。

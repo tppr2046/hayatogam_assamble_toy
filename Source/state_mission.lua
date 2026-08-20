@@ -133,7 +133,10 @@ local function updateArena(mech_center_x)
     if entity_controller and entity_controller.enemies then
         for _, e in ipairs(entity_controller.enemies) do
             local alive = (e.hp and e.hp > 0) or e.is_exploding
-            if alive and e.x >= arena.x1 and e.x <= arena.x2 then
+            -- ★ [[ §15.5b ]] 活著的 BOSS **不看位置**一律算在戰場內。
+            --   飛行 BOSS 會刻意飛出畫面（也就飛出 arena 範圍），
+            --   用位置判定的話它一出畫戰場就解鎖、相機跟著鬆開 —— 打到一半場地垮掉。
+            if alive and (e.is_boss or (e.x >= arena.x1 and e.x <= arena.x2)) then
                 return
             end
         end

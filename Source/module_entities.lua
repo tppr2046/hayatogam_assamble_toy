@@ -14,6 +14,7 @@
 import "entity_projectile"
 import "entity_enemy"
 import "entity_boss_parallel"   -- [[ §15.5a ]] 巨大 BOSS 的平行零件制（掛方法到 Enemy，必須在 entity_enemy 之後）
+import "entity_boss_flight"     -- [[ §15.5b ]] 高速飛行 BOSS 的飛行狀態機（同上）
 import "entity_stone"
 import "entity_mech"
 import "entity_mech_render"
