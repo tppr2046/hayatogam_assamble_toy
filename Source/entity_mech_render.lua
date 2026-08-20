@@ -743,14 +743,27 @@ function MechController:drawPartUI(part_id, x, y, size)
             -- 全自動的 GUN（operable=false）沒有操作，只畫面板。
             pcall(function() panel_img:draw(x, y) end)
             if pdata.operable then
-                local panel_w = panel_img:getSize()   -- A 鈕接在面板右邊（同 WHEEL/FEET 的作法）
+                local panel_w = panel_img:getSize()
                 local button_table = ui.canon_button  -- 共用 canon_button-table-32-32（1=放開 / 2=按下）
                 if button_table then
                     -- 按下狀態只在焦點是自己時才反映（同 CANON）
                     local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
                     local button_img = button_table:getImage(pressed and 2 or 1)
                     if button_img then
-                        pcall(function() button_img:draw(x + panel_w, y) end)
+                        -- ★★ A 鈕**必須留在零件自己的格子範圍內**。
+                        --   零件的操作面板寬度 = slot_x × 格寬（見上面的 UI 格迴圈：
+                        --   只有起始格會呼叫本函式，其餘格留白）。
+                        --   `gun_panel` 是 32px：
+                        --     GUN2 是 **2 格**(64px) → 鈕畫在 x+32 剛好落在第二格內（原本就正確）
+                        --     GUN / BACK_GUN 是 **1 格**(32px) → 畫在 x+32 會整顆掉到格子外
+                        --       （2026-08-19 GUN 改手動後浮現的 bug）
+                        --   → 優先接在面板右邊；放不下就往回夾，蓋在面板上
+                        --     （鈕圖四角是透明的，面板邊緣仍看得到）。
+                        local bw = button_img:getSize()
+                        local avail = (pdata.slot_x or 1) * size
+                        local bx = x + panel_w
+                        if bx + bw > x + avail then bx = x + avail - bw end
+                        pcall(function() button_img:draw(bx, y) end)
                     end
                 end
             end

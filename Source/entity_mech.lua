@@ -86,7 +86,6 @@ function MechController:init()
         claw_grabbed_stone = nil,  -- 當前抓住的石頭
         claw_is_closed = false,  -- 爪子開合狀態（A 鍵隨時切換，與是否抓到東西無關）
         claw_is_attacking = false,  -- 爪子是否在攻擊狀態
-        claw_last_attack_angle = 0,  -- 上次攻擊時的角度
         
         -- [[ §15.3 吊索鉤 ]] 掛住的索道（nil = 沒掛）
         hook_rope = nil,
@@ -213,7 +212,10 @@ function MechController:getOperableParts(mech_stats)
     local top = {}
     for _, item in ipairs(eq) do
         local pdata = _G.PartsData and _G.PartsData[item.id]
-        if not (pdata and pdata.operable == false) then
+        -- [[ §15.2 ]] 自動開火的槍不進焦點循環（裝了 AUTO_LOADER 時 GUN 會回到這一類）。
+        -- ★ 判定一律問 gunIsAuto，不要在這裡直接看 operable —— 那是兩個計算點。
+        local skip = (pdata and pdata.operable == false) or self:gunIsAuto(pdata)
+        if not skip then
             if item.row == 1 then
                 bottom[#bottom + 1] = item
             else
@@ -384,6 +386,82 @@ function MechController:shieldState()
 end
 
 -- 檢查發射方向是否被已安裝的零件阻擋（不包括當前發射的零件）
+-- [[ §15.2 GUN 改手動 ]] 2026-08-19
+-- ★★ 槍口座標的**唯一計算點**。原本這段公式被複製了三份
+--   （updateParts 的自動開火迴圈、HIGH_GUN 手動、雷射槍手動），
+--   GUN 改手動如果再抄第四份，就會是本專案最常出事的那個模式
+--   （HANDOFF §3-5：同一個值有多個計算點）。
+-- ★ 規則：有宣告 muzzle_x/y（相對**零件圖左上角**）就用圖算，否則用格子中心。
+--   圖畫多高、槍口就自動多高，不必再多一個欄位手動同步。
+-- ⚠️ y 公式必須與 entity_mech_render 的繪製端一致（同一套 align_image_top 規則）。
+function MechController:gunMuzzle(item, pdata, mech_x, mech_y, mech_grid)
+    local cell_size = mech_grid.cell_size
+    local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
+    local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
+    local gx = px + cell_size / 2
+    local gy = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
+    if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
+        local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
+        if oki and iw and ih then
+            local img_y = pdata.align_image_top
+                and (py_top + (pdata.image_offset_y or 0))
+                or  (py_top + (cell_size - ih) + (pdata.image_offset_y or 0))
+            gx = px + pdata.muzzle_x
+            gy = img_y + pdata.muzzle_y
+        end
+    end
+    return gx, gy
+end
+
+-- 打出一發一般子彈（GUN 系列共用：自動與手動都走這裡）。
+-- 回傳 true 表示真的打出去了（呼叫端據此歸零冷卻）。
+function MechController:fireGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller)
+    local fire_dir = pdata.fire_direction or "RIGHT"
+    if self:isFiringDirectionBlocked(fire_dir, item.id) then return false end
+    local gx, gy = self:gunMuzzle(item, pdata, mech_x, mech_y, mech_grid)
+    local base_speed = entity_controller.player_move_speed or 2.0
+    local dir_sign = (fire_dir == "LEFT") and -1 or 1
+    local vx = base_speed * (pdata.projectile_speed_mult or 1.0) * dir_sign
+    local vy = 0
+    -- [[ 斜坡跟隨 ]] 槍口位置與發射方向套用機體傾斜
+    gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+    entity_controller:addPlayerProjectile(gx, gy, vx, vy,
+        pdata.projectile_damage or 5, pdata.projectile_grav_mult or 1.0,
+        nil, nil, nil, pdata.self_block and item.id or nil)
+    return true
+end
+
+-- [[ §15.2 自動裝填 ]] 這把槍現在是不是「自動開火」？
+-- ★★ 這是「自動 / 手動」的**唯一判定點** —— 焦點循環（getOperableParts）、
+--   自動開火迴圈、手動按 A 三邊都讀它，否則會出現「進了焦點循環卻也自動開火」
+--   之類自相矛盾的狀態。
+-- 規則：
+--   1) 零件自己宣告 operable == false → 永遠自動（沒有這種槍了，但規則留著）
+--   2) 裝了 AUTO_LOADER → 所有 part_type=="GUN" 的槍變回自動
+--   3) 其餘 → 手動（2026-08-19 拍板：GUN 預設改成手動）
+function MechController:gunIsAuto(pdata)
+    if not pdata then return false end
+    if pdata.part_type ~= "GUN" then return false end
+    if pdata.operable == false then return true end
+    return self:hasAutoLoader()
+end
+
+-- 是否裝了自動裝填零件（每幀會被問很多次 → 用 updateParts 算好的快取）
+function MechController:hasAutoLoader()
+    if self._auto_loader_cache ~= nil then return self._auto_loader_cache end
+    local eq = _G.GameState and _G.GameState.mech_stats
+               and _G.GameState.mech_stats.equipped_parts or {}
+    for _, it in ipairs(eq) do
+        local pd = _G.PartsData and _G.PartsData[it.id]
+        if pd and pd.part_type == "AUTO_LOADER" then
+            self._auto_loader_cache = true
+            return true
+        end
+    end
+    self._auto_loader_cache = false
+    return false
+end
+
 function MechController:isFiringDirectionBlocked(firing_direction, active_part_id)
     local eq = _G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts
     if not eq then return false end
@@ -686,12 +764,42 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
         end
 
     elseif part_type == "GUN" then
-        -- [[ 雷射槍 GUN2 2026-08-11 ]] 手動：焦點在它身上時按 A 發射一道**會往前飛的貫穿光束**。
-        -- （全自動的 GUN 是 operable=false，根本不會成為焦點，不會走到這裡。）
+        -- 手動開火。★ 這裡有兩種槍：
+        --   (1) 雷射槍 GUN2 —— 有宣告 laser_length，打貫穿光束
+        --   (2) 一般子彈槍 GUN / BACK_GUN —— **2026-08-19 由自動改為手動**（§15.2 拍板）
         -- ★ pdata 必須在這裡自己取——本函式沒有函式層級的 pdata，
         --   漏掉的話它會是 nil、下面的守衛永遠 false，**按 A 完全沒反應且不會報錯**。
         local pdata = _G.PartsData and _G.PartsData[self.active_part_id]
-        if playdate.buttonJustPressed(playdate.kButtonA) then
+
+        -- [[ §15.2 ]] 一般子彈槍的手動發射：與自動開火迴圈**共用 fireGunOnce**，
+        -- 槍口與彈道只有一份程式（不再各抄一份公式）。
+        -- ⚠️ 這裡**不能用 early return** —— 本分支在 handlePartOperation 裡，
+        --    那個函式結尾要 `return dx`，提早 return 會回傳 nil、機體移動整個壞掉。
+        local is_bullet_gun = (pdata ~= nil) and (pdata.laser_length == nil)
+        if is_bullet_gun then
+            if playdate.buttonJustPressed(playdate.kButtonA) then
+                self.gun_button_pressed = true
+                local tmr = self.gun_fire_timers[self.active_part_id] or 999
+                if tmr >= (pdata.fire_cooldown or 1.0) then
+                    local eq = _G.GameState.mech_stats.equipped_parts or {}
+                    for _, item in ipairs(eq) do
+                        if item.id == self.active_part_id then
+                            if self:fireGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller) then
+                                self.gun_fire_timers[self.active_part_id] = 0
+                                if _G.SoundManager and _G.SoundManager.playCanonFire then
+                                    _G.SoundManager.playCanonFire()
+                                end
+                            end
+                            break
+                        end
+                    end
+                end
+            elseif playdate.buttonJustReleased(playdate.kButtonA) then
+                self.gun_button_pressed = false
+            end
+
+        elseif playdate.buttonJustPressed(playdate.kButtonA) then
+            -- [[ 雷射槍 GUN2 ]] 手動：按 A 發射一道會往前飛的貫穿光束
             self.gun_button_pressed = true
             local tmr = self.gun_fire_timers[self.active_part_id] or 999
             if pdata and tmr >= (pdata.fire_cooldown or 1.0)
@@ -786,15 +894,25 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             end
         end
 
-        -- 檢測爪臂快速轉動以觸發攻擊（沿用：crank 甩臂即攻擊）
+        -- 臂的角速度（度/幀）。★ **仍然要算** —— 投擲速度是由它決定的（見下方 A 鍵放開）。
+        --   2026-08-19 改制時一度連這行一起刪掉，結果放開石頭那行讀到同名的 nil 全域，
+        --   `pdc` 不會擋、一放石頭就 crash（HANDOFF §3-3c 的第 1 條）。
         local arm_angular_velocity = self.claw_arm_angle - self.claw_arm_angle_prev
-        if math.abs(arm_angular_velocity) >= 2 then  -- 轉動速度達到 2 度/幀即可攻擊
-            if not self.claw_last_attack_angle or math.abs(self.claw_arm_angle - self.claw_last_attack_angle) >= 20 then
-                self.claw_is_attacking = true
-                self.claw_last_attack_angle = self.claw_arm_angle
-            else
-                self.claw_is_attacking = false
-            end
+
+        -- [[ §15.6 CLAW 改制 ]] 2026-08-19（使用者拍板）
+        -- ★★ **揮動不再有攻擊力** —— 舊制是「crank 甩臂即攻擊」（轉速 ≥2°/幀且累積 20°）。
+        --   現在攻擊力只在**按 A 去抓**的那一下產生（見下方的 A 鍵處理）。
+        -- ★ 設計意圖（GDD §15.6）：製造取捨 ——
+        --   A 在「爪子張開」時是抓取＝攻擊；在「已抓著東西」時是放開/投擲＝**不攻擊**。
+        --   所以手上有箱子時你沒有攻擊手段，得決定
+        --   「先把箱子放下來打，還是先移過去把箱子放好」。
+        --   這與零件耐久同一種思路：**用取捨產生決策，而不是用數值產生變化。**
+        -- ⚠️ 這會改變 DELIVER 類關卡（M002/M003/M005/M008）的節奏，只能試玩判斷。
+        --   退路（GDD §15.6 已寫明）：改成「揮動時攻擊力不為零、但很低」，
+        --   而不是完全沒有 —— 屆時把上面那段甩臂偵測加回來、傷害另外乘一個係數即可。
+        if self.claw_attack_timer and self.claw_attack_timer > 0 then
+            self.claw_attack_timer = self.claw_attack_timer - (1 / 30)
+            self.claw_is_attacking = true
         else
             self.claw_is_attacking = false
         end
@@ -822,6 +940,11 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                 -- 閉合；嘗試抓取（由 state_mission 檢查爪尖範圍並執行 tryGrabStone）
                 self.claw_is_closed = true
                 self.try_grab = true
+                -- [[ §15.6 ]] ★ **這一下就是攻擊** —— 夾下去才有攻擊力。
+                --   給一個短窗口而不是只有一幀：命中判定在 state_mission 每幀跑一次，
+                --   只開一幀的話會與掉幀/順序耦合，變成偶爾打不到的玄學。
+                local pd = _G.PartsData and _G.PartsData["CLAW"]
+                self.claw_attack_timer = (pd and pd.claw_attack_window) or 0.15
             end
         end
 
@@ -908,6 +1031,11 @@ end
 
 -- 更新零件計時器和自動功能
 function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
+    -- [[ §15.2 自動裝填 ]] 每幀重算一次「有沒有裝自動裝填」。
+    -- ★ 刻意每幀重算而不是做快取失效 —— 裝備只有 6 格,掃一次幾乎免費,
+    --   而「改裝備時忘了清快取」是必然會發生的 bug。
+    self._auto_loader_cache = nil
+
     -- 更新 CANON 冷卻
     self.canon_fire_timer = self.canon_fire_timer + dt
     
@@ -933,60 +1061,20 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
             -- 每個零件各自累計冷卻（多把槍併裝時不會互搶）
             -- ★ 首次見到這個零件時的初值：**手動槍給滿**（一進關卡按 A 就能打），
             --   自動槍給 0（維持原本「等一個 CD 才開第一槍」的節奏，不改既有手感）。
+            -- ★ 首次見到這個零件時的初值：**手動槍給滿**（一進關卡按 A 就能打），
+            --   自動槍給 0（維持原本「等一個 CD 才開第一槍」的節奏）。
             if self.gun_fire_timers[item.id] == nil then
-                self.gun_fire_timers[item.id] = pdata.operable and pdata.fire_cooldown or 0
+                self.gun_fire_timers[item.id] = self:gunIsAuto(pdata) and 0 or pdata.fire_cooldown
             end
             local tmr = self.gun_fire_timers[item.id] + dt
             self.gun_fire_timers[item.id] = tmr
-            -- ★ operable=true 的槍是**手動**（雷射槍 GUN2），由 updateActivePart 按 A 發射，
-            --   不能在這裡自動打掉，否則會變成「自動 + 手動」兩邊都發。
-            -- [[ §15.9 反向槍 ]] 發射方向不再寫死 —— 由 parts_data 的 `fire_direction` 決定
-            -- （沒設就是 "RIGHT"，所以既有的 GUN/GUN2 行為完全不變）。
-            -- ★ 擋位判斷也要用同一個方向，否則反向槍會去檢查右側有沒有被擋。
-            local fire_dir = pdata.fire_direction or "RIGHT"
-            if (not pdata.operable) and tmr >= pdata.fire_cooldown
-               and not self:isFiringDirectionBlocked(fire_dir, item.id) then
-                local cell_size = mech_grid.cell_size
-                -- ★ 槍口位置要吃 image_offset_x/y ——「零件相對格子的位移」，
-                --   與 entity_mech_render / state_hq / state_mission 的繪製端**讀同一組欄位**。
-                local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
-                local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
-                local gun_x = px + cell_size / 2
-                local gun_y = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
-
-                -- [[ 2026-08-13 ]] ★ 零件若宣告了 `muzzle_x/muzzle_y`（**相對零件圖左上角**，
-                --   與 GUN2 的雷射槍同一套慣例），就改用「圖的實際位置 + 槍口偏移」。
-                --   為什麼需要：**圖比格子高**的零件（如高位槍要架在支柱上）用格子中心算槍口
-                --   會算在腳邊。改讀圖之後，**圖畫多高、槍口就自動多高**，不必再多一個欄位手動同步。
-                --   ⚠️ 這裡的 y 公式必須與 entity_mech_render 的繪製端一致（同一套 align_image_top 規則）。
-                if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
-                    local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
-                    if oki and iw and ih then
-                        local img_y
-                        if pdata.align_image_top then
-                            img_y = py_top + (pdata.image_offset_y or 0)
-                        else
-                            img_y = py_top + (cell_size - ih) + (pdata.image_offset_y or 0)
-                        end
-                        gun_x = px + pdata.muzzle_x
-                        gun_y = img_y + pdata.muzzle_y
-                    end
+            -- ★ 手動槍不能在這裡自動打掉，否則會變成「自動 + 手動」兩邊都發。
+            -- [[ §15.9 反向槍 ]] 發射方向由 parts_data 的 `fire_direction` 決定（沒設＝RIGHT）。
+            -- ★ 槍口與彈道全部交給 fireGunOnce —— 與手動按 A 走同一段程式。
+            if self:gunIsAuto(pdata) and tmr >= pdata.fire_cooldown then
+                if self:fireGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller) then
+                    self.gun_fire_timers[item.id] = 0
                 end
-
-                -- 使用與敵人相同的計算方式
-                local base_speed = entity_controller.player_move_speed or 2.0
-                local speed_mult = pdata.projectile_speed_mult or 1.0
-                local dir_sign = (fire_dir == "LEFT") and -1 or 1
-                local vx = base_speed * speed_mult * dir_sign  -- 水平發射（負值＝往左）
-                local vy = 0  -- GUN 直射，垂直速度為 0
-                local dmg = pdata.projectile_damage or 5
-                local grav_mult = pdata.projectile_grav_mult or 1.0
-
-                -- [[ 斜坡跟隨 ]] 槍口位置與發射方向套用機體傾斜
-                gun_x, gun_y, vx, vy = self:applyMechTilt(gun_x, gun_y, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
-
-                entity_controller:addPlayerProjectile(gun_x, gun_y, vx, vy, dmg, grav_mult)
-                self.gun_fire_timers[item.id] = 0
             end
         end
     end

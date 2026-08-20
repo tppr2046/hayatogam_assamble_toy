@@ -186,6 +186,37 @@ Start-Sleep 10; $null = $p.CloseMainWindow(); $null = $p.WaitForExit(8000)
 **log 全空不一定是遊戲掛了**,先加長等待再判斷 —— 我曾為此誤判成 `durability` 把遊戲弄壞,
 二分法查完才發現只是關太快。
 
+#### ★★★ 3-3a2. 模擬器的兩個陷阱(2026-08-19 查清,先讀這段再懷疑程式)
+
+**1. 視窗沒有焦點時模擬器會自動暫停 → log 全空。**
+症狀:`boot.log` 0 行,而且 `MainWindowTitle` 是 **`Playdate Simulator (Paused)`**。
+以前把它誤判成「等太短」或「程式壞了」,其實遊戲根本沒跑。
+```powershell
+$p = Start-Process ... -PassThru
+Start-Sleep 4
+$sh = New-Object -ComObject WScript.Shell; $null = $sh.AppActivate($p.Id)   # ★ 關鍵
+```
+★ **先看視窗標題再下結論**:`(Paused)` = 沒跑;`Console` = 出錯了(見下);
+`Playdate Simulator` = 正常。
+
+**2. 遊戲出 Lua 錯誤時,錯誤訊息不會出現在 stdout。**
+模擬器把它丟到自己的 **Console 視窗(GUI)**,同時**停住遊戲** ——
+遊戲一停就不再 print,stdout 緩衝區(約 1KB)永遠填不滿、也就永遠不 flush,
+最後被強制結束時整份遺失。所以症狀同樣是 **log 0 行**,很容易誤判成「模擬器又壞了」。
+★ **抓法**:把可疑的呼叫包 `pcall`,錯誤發生時 **印 60 次**把緩衝區灌爆:
+```lua
+local ok, err = pcall(function() ... end)
+if not ok then for i = 1, 60 do print("TMPERR: " .. tostring(err)) end end
+```
+2026-08-19 就是這樣抓到 `attempt to index a nil value (local 'mech_grid')`。
+
+**3. ⚠️ 用 §3-3b 直接開進關卡時,`_G.GameState.mech_grid` 也要自己給。**
+那是 HQ 設的,跳過 HQ 就是 nil。多數程式有 `mech_grid and ... or 3` 的守衛所以看不出來,
+但**槍械開火**那條路徑會直接 `mech_grid.cell_size` → 一開火就死。
+```lua
+_G.GameState.mech_grid = { cols = 3, rows = 2, cell_size = 16 }
+```
+
 #### ★★ 3-3b. 驗證「要按鍵才進得去」的畫面(2026-08-13 新增)
 
 **暫時把 `main.lua` 的起始狀態改掉,讓那個畫面在開機時真的跑一遍。**

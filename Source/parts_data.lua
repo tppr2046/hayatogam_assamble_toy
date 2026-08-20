@@ -28,8 +28,12 @@ local parts_data = {
         align_image_top = false,  -- 圖片底部對齊格子底部（預設行為）
         -- UI 操作介面圖片
         ui_panel = "images/gun_panel.png",
-        operation_hint = "Auto Fire",
-        operable = false,  -- 全自動、無操作 → 不進入焦點切換循環（無法選中）
+        -- ★★ 2026-08-19【改制】GUN 由全自動改為**手動**（GDD §15.2 拍板）。
+        --   代價已知且是刻意的：它會進入焦點循環，**所有既有關卡的難度基準都會變**。
+        --   要拿回自動火力＝裝 `AUTO_LOADER`（見本檔最下方），那是一個要付負重與格子的選擇。
+        --   ⚠️ 這一項只能靠實機試玩判斷好不好玩；退路是把這兩個欄位改回去（程式不必動）。
+        operation_hint = "A: Fire",
+        operable = true,
         requires_clear_right = true,  -- 槍口淨空：右側（同排）有零件則不可安裝，避免子彈穿過自己的零件
         -- GUN 特有屬性：砲彈發射
         fire_cooldown = 1.0,  -- 每 1 秒發射一次
@@ -108,8 +112,10 @@ local parts_data = {
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",   -- 沿用 GUN 的面板（GUN2 也是這樣共用）
-        operation_hint = "Auto Fire (Back)",
-        operable = false,
+        -- ★ 2026-08-19：跟著 GUN 一起改手動（同一個 part_type，行為要一致，
+        --   否則玩家得記住「哪把槍要按、哪把不用」——那正是 §15.8 已知的代價，不要再加重）
+        operation_hint = "A: Fire (Back)",
+        operable = true,
         -- ★ 圖 24 寬、格子 16 寬 → 多出來的 8px 是槍口。
         --   繪製是**左對齊格子左緣**的，所以要往左推 8px 槍口才會朝左伸出格外；
         --   不推的話槍身會侵入右邊那一格。
@@ -165,6 +171,39 @@ local parts_data = {
         -- ★ 子彈會被自己的零件擋掉（見 EntityController 的 self_block）
         self_block = true,
         -- ⚠️ 不再宣告 block_directions —— 它不擋別人的射線,別人也不擋它的安裝。
+    },
+
+    -- ================================================================
+    -- [[ §15.2 自動裝填 ]] 2026-08-19　★ 與「GUN 改手動」是**同一個改制的兩半**
+    -- ----------------------------------------------------------------------
+    -- 裝上它 → 所有 `part_type == "GUN"` 的槍**變回全自動**，並且**離開焦點循環**。
+    -- ★ 設計意圖：把原本免費的自動火力，變成一個要付**格子與負重**的選擇。
+    --   不裝＝火力要自己按、但省下一格去裝別的；裝了＝回到舊手感、但少一格。
+    --   這與零件耐久是同一種思路：**用取捨產生決策，而不是用數值產生變化。**
+    -- ★ 被動零件（operable = false），不進焦點循環 —— 它不佔切換壓力，
+    --   反而是**減少**切換壓力的那一個（把槍從循環裡拿掉）。
+    -- ★★ 自動/手動的判定全部集中在 `MechController:gunIsAuto()`，
+    --   焦點循環、自動開火迴圈、手動按 A 三邊都問它。
+    -- ⚠️ 待美術：`auto_loader.png`（16×16）。現在沿用 gun_panel 當面板圖。
+    -- ================================================================
+    ["AUTO_LOADER"] = {
+        name = "AUTOLOADER",
+        part_type = "AUTO_LOADER",
+        hp = 12,
+        weight = 5,                      -- 不便宜：它換回來的是「整場不用按開火」
+        attack = 0,
+        slot_x = 1,
+        slot_y = 1,
+        cost_steel = 20,
+        cost_copper = 25,
+        cost_rubber = 5,
+        color = gfx.kColorBlack,
+        image = "images/auto_loader.png",   -- ⚠️ 尚無此圖 → 載圖失敗會走既有的方塊佔位
+        placement_row = "TOP",
+        align_image_top = false,
+        ui_panel = "images/gun_panel.png",
+        operation_hint = "Passive: Auto Fire",
+        operable = false,
     },
 
     -- ================================================================
@@ -321,7 +360,10 @@ local parts_data = {
         part_type = "CLAW",  -- 功能類別
         hp = 45,
         weight = 8,
-        attack = 5,  -- 攻擊力（揮動攻擊）
+        -- [[ §15.6 改制 2026-08-19 ]] 攻擊力**只在按 A 夾下去的那一下**生效，揮動不再有攻擊力。
+        -- 取捨：手上抓著箱子時，A 是「放開/投擲」而不是攻擊 → 有貨在手就沒有攻擊手段。
+        attack = 5,
+        claw_attack_window = 0.15,   -- 夾下去之後的攻擊判定窗口（秒）
         slot_x = 2,
         slot_y = 1,
         -- 購買成本
