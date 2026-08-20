@@ -291,6 +291,12 @@ Menu 鍵可切 CORE1/2/3。
 移除方式:刪 `addCoreSwitcher()` 與兩處呼叫。
 ⚠️ Playdate 系統選單**上限 3 個自訂項目**,關卡中已用滿。
 
+**6. `M013` 測試關 @ [M013.json](Source/levels/M013.json)　(2026-08-19 新增)**
+名稱 `13 CHASER TEST`、`prerequisite: 0`。追擊型敵人的測試場:
+BOMBER×2 / RAMMER×1、中間一個 `pit`(試 RAMMER 的擊退),
+**重生點刻意放在最左邊 x=40** —— 那就是反向槍的場合。
+⚠️ 它會出現在選關畫面。**正式版要刪掉這個檔**。
+
 **5. `M012` 測試關 @ [M012.json](Source/levels/M012.json)　(2026-08-19 新增)**
 名稱 `12 CRAWLER TEST`、`prerequisite: 0`。爬牆敵人的測試場:
 兩面 `walls` 軌道 + 對齊的建築背景(`parallax: 1.0`)、兩隻 `WALL_ENEMY`。

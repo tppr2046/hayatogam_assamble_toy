@@ -1134,6 +1134,8 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         end
 
         if enemy.is_alive then
+            -- [[ §15.4 衝擊敵人 ]] 撞擊冷卻
+            if enemy.ram_cd and enemy.ram_cd > 0 then enemy.ram_cd = enemy.ram_cd - dt end
             enemy:update(dt, mech_x, mech_y, mech_width, mech_height, self)
 
             -- [[ S6 BOSS ]] 由敵人自行判定的傷害（如 BOSS 雷射光束命中）在此收回累加
@@ -1151,7 +1153,22 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     print("LOG: Mine triggered by player!")
                 end
                 
-                if enemy.attack_type == "CONTACT" then
+                if enemy.attack_type == "RAM" then
+                    -- [[ §15.4 衝擊敵人 ]] 一次性擊退 + 少量傷害（使用者拍板）。
+                    -- ★ 傷害刻意低：它的殺傷力來自**把玩家推下 pit**，不是扣血。
+                    -- ★ 一次性（不是持續推）—— 持續推會變成「被推到懸崖完全無法反抗」，
+                    --   那是挫折不是難度。撞完進冷卻，玩家有時間重新站位。
+                    if (enemy.ram_cd or 0) <= 0 then
+                        enemy.ram_cd = enemy.ram_cooldown or 1.2
+                        mech_damage_taken = mech_damage_taken + (enemy.attack or 4)
+                        -- 推的方向＝從敵人推向玩家（玩家在左就往左推）
+                        local dir = ((mech_x + mech_width / 2) < (enemy.x + enemy.width / 2)) and -1 or 1
+                        -- ★ 位移不在這裡套用 —— 機體座標歸 state_mission 管。
+                        --   這裡只累加「要推多少」，由那邊夾邊界後套上去（唯一計算點）。
+                        self.mech_push_x = (self.mech_push_x or 0) + dir * (enemy.ram_push or 40)
+                        print("LOG: RAMMER knocked the mech back")
+                    end
+                elseif enemy.attack_type == "CONTACT" then
                     -- 接觸傷害（一次性）
                     if not enemy.has_hit_player then
                         mech_damage_taken = mech_damage_taken + enemy.attack

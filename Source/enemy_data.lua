@@ -237,5 +237,61 @@ return {
         anim_fps = 12,
         bullet_offset_x = 6,
         bullet_offset_y = 24
+    },
+
+    -- ======================================================================
+    -- [[ §15.4 追擊型敵人 ]] 2026-08-19　自爆 BOMBER ／ 衝擊 RAMMER
+    -- ----------------------------------------------------------------------
+    -- ★★ 這兩隻是本作**第一種會朝玩家移動**的敵人。在此之前所有敵人都是
+    --   繞出生點巡邏或原地不動，所以「背後有東西逼近」做不出來 ——
+    --   **反向槍 BACK_GUN 一直沒有場合，就是卡在這裡。**
+    --   （現有關卡的重生點也全部在最右邊：M008 三個場景都是 x=760／場景寬 800。）
+    -- ★ 追法（使用者拍板）：偵測範圍內才追、脫離就放棄回原位。
+    --   走位是有效解法；一路追到底的話玩家無法脫離、只能硬打。
+    -- ⚠️ 兩隻都**不會走進 pit**（見 entity_enemy 的 CHASE 分支）——
+    --   會的話玩家只要站在坑後面就無敵了。
+    -- ⚠️ 美術未做：兩隻都沿用既有圖佔位。
+    -- ======================================================================
+
+    -- 自爆：靠近 → 停下 → 閃爍倒數 → 必爆（使用者拍板）
+    ["BOMBER_ENEMY"] = {
+        -- [[ §8.08 ]] 會掉資源（與 MINE 不同：MINE 是陷阱，這隻是敵人）
+        drop = { steel = {1, 2} },
+        name = "BOMBER", hp = 8, attack = 0,
+        move_type = "CHASE", attack_type = "EXPLODE",
+        -- 追擊
+        detect_range = 170,
+        give_up_range = 260,
+        chase_speed = 46,      -- 比玩家慢一些 → 逃得掉，但要花時間
+        return_speed = 26,
+        -- ★ 距離引爆：不必碰到。倒數一開始就**必爆**（跑掉也爆）——
+        --   可取消的話玩家後退一步就完全免疫，那就不是攻擊而是陷阱了。
+        explode_trigger_range = 46,
+        explode_delay = 1.0,   -- 反應窗口（MINE 是 2.0；這隻是主動撲上來的，給短一點）
+        explode_radius = 56,
+        explode_damage = 16,
+        image = "images/enemy01",   -- 佔位
+        warn_blink_speed = 12,      -- 沒有警示燈圖 → 走既有的「白框閃爍」後備
+        bullet_offset_x = 4,
+        bullet_offset_y = 16
+    },
+
+    -- 衝擊：撞到就把玩家推開一段（一次性），傷害低
+    ["RAMMER_ENEMY"] = {
+        drop = { steel = {2, 3} },
+        -- ★ attack 低是刻意的：它的殺傷力來自**把玩家推下 pit**，不是扣血。
+        name = "RAMMER", hp = 22, attack = 4,
+        move_type = "CHASE", attack_type = "RAM",
+        detect_range = 190,
+        give_up_range = 300,
+        chase_speed = 58,      -- 比自爆快 → 甩不太掉，但撞完會冷卻
+        return_speed = 30,
+        ram_push = 44,         -- 一次撞擊把機體推開幾 px　⚠️ 與 pit 的組合很致命，要試玩
+        ram_cooldown = 1.2,    -- 撞完的冷卻：玩家有時間重新站位
+        -- 佔位：用單張 enemy02。★ 不要用 enemy04 —— 那是 WALKER 的 imagetable，
+        -- 換幀邏輯寫在 MOVE_PAUSE 分支裡，CHASE 型別不會推進它，只會定格第 1 格。
+        image = "images/enemy02",
+        bullet_offset_x = 4,
+        bullet_offset_y = 16
     }
 }

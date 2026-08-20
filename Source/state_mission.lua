@@ -98,6 +98,22 @@ local mech_y_old = 0    -- 用於垂直碰撞檢查
 local Assets = {} 
 local entity_controller = nil 
 
+-- 機體 x 的邊界夾制。★ **唯一計算點** —— 玩家自己走、以及被衝擊敵人推開，
+-- 兩條路徑都走這裡；否則「走不出去但可以被推出去」這種洞遲早會出現。
+local function clampMechX(x)
+    local mech_grid = _G.GameState and _G.GameState.mech_grid
+    local mech_width = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
+    local scene_width = (current_scene and current_scene.width) or 400
+    if x < 0 then x = 0
+    elseif x + mech_width > scene_width then x = scene_width - mech_width end
+    -- [[ §15.5a-4 ]] 固定戰場：鎖定期間再夾一次，範圍比場景邊界更緊
+    if arena_locked and arena then
+        if x < arena.x1 then x = arena.x1
+        elseif x + mech_width > arena.x2 then x = arena.x2 - mech_width end
+    end
+    return x
+end
+
 -- 每幀更新固定戰場的鎖定狀態。arena 為 nil 時整個函式等於不存在。
 -- ⚠️ 這個函式**必須定義在 `local entity_controller` 之後** —— 定義在前面的話
 --    它會抓到同名的全域（nil），解鎖判斷就會靜默失效。
@@ -620,22 +636,8 @@ function StateMission.update()
         and (hooked_rope.y + (mech_controller.hook_len or 32))
         or (mech_y + mech_vy)
     
-    -- 邊界檢查：限制玩家不能超出關卡寬度
-    local scene_width = (current_scene and current_scene.width) or 400
-    local mech_width = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
-    if new_x < 0 then
-        new_x = 0
-    elseif new_x + mech_width > scene_width then
-        new_x = scene_width - mech_width
-    end
-    -- [[ §15.5a-4 ]] 固定戰場：鎖定期間再夾一次，範圍比場景邊界更緊
-    if arena_locked and arena then
-        if new_x < arena.x1 then
-            new_x = arena.x1
-        elseif new_x + mech_width > arena.x2 then
-            new_x = arena.x2 - mech_width
-        end
-    end
+    -- 邊界檢查：限制玩家不能超出關卡寬度（★ 與擊退共用 clampMechX，只有一個計算點）
+    new_x = clampMechX(new_x)
     
     -- 計算機甲本體碰撞框（3×2 格）
     local mech_grid = _G.GameState.mech_grid
@@ -812,6 +814,13 @@ function StateMission.update()
         if mech_controller and mech_controller.absorbDamage then
             damage = mech_controller:absorbDamage(damage)
         end
+        -- [[ §15.4 衝擊敵人 ]] 擊退位移：controller 只累加「要推多少」，
+        -- 這裡才真的動機體座標並夾邊界（與玩家自走同一個 clampMechX）。
+        if entity_controller.mech_push_x and entity_controller.mech_push_x ~= 0 then
+            mech_x = clampMechX(mech_x + entity_controller.mech_push_x)
+            entity_controller.mech_push_x = 0
+        end
+
         if damage and damage > 0 then
             current_hp = current_hp - damage
             -- 觸發玩家受擊震動效果和音效

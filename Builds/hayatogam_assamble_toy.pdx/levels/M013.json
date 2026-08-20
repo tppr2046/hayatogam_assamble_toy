@@ -1,0 +1,119 @@
+{
+ "id": "M013",
+ "name": "13 CHASER TEST",
+ "description": "S15.4 test: chasing enemies (BOMBER / RAMMER) and the BACK_GUN use case.",
+ "prerequisite": 0,
+ "time_limit": -1,
+ "objective": {
+  "type": "ELIMINATE_ALL",
+  "description": "Clear the chasers"
+ },
+ "reward_steel": 8,
+ "reward_copper": 8,
+ "reward_rubber": 8,
+ "scenes": [
+  {
+   "width": 832,
+   "ground_y": 220,
+   "sky": "images/bg_sky",
+   "objective": {
+    "type": "ELIMINATE_ALL",
+    "description": "Clear the chasers"
+   },
+   "dialog": {
+    "image": "images/dialog_bg",
+    "lines": [
+     "TEST LEVEL: chasing enemies.",
+     "BOMBER: closes in, stops, blinks, then detonates - it always goes off.",
+     "RAMMER: knocks the mech back on contact. Mind the pit.",
+     "Both give up if you leave their detection range.",
+     "Respawner on the LEFT: this is the BACK_GUN scenario."
+    ]
+   },
+   "backgrounds": [],
+   "terrain": [
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "pit",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    }
+   ],
+   "obstacles": [],
+   "stones": [],
+   "delivery_targets": [],
+   "enemies": [
+    {
+     "type": "BOMBER_ENEMY",
+     "x": 300,
+     "y": 0
+    },
+    {
+     "type": "RAMMER_ENEMY",
+     "x": 520,
+     "y": 0
+    },
+    {
+     "type": "BOMBER_ENEMY",
+     "x": 700,
+     "y": 0
+    }
+   ],
+   "respawns": [
+    {
+     "type": "RAMMER_ENEMY",
+     "x": 40,
+     "y": 0,
+     "interval": 8,
+     "max": 3
+    }
+   ]
+  }
+ ]
+}

@@ -119,6 +119,17 @@ function Enemy:init(x, y, type_id, ground_y)
         explode_delay = data.explode_delay or 2.0,
         explode_radius = data.explode_radius or 50,
         explode_damage = data.explode_damage or 20,
+        -- [[ §15.4 自爆敵人 ]] 距離引爆：★ 不設＝維持 MINE 的「踩到才觸發」，行為不變
+        explode_trigger_range = data.explode_trigger_range,
+        -- [[ §15.4 追擊型 ]] CHASE / RAM 的欄位。
+        -- ⚠️ 這個 init 是**逐欄複製**的：enemy_data 寫了但這裡沒列的欄位會被靜默忽略
+        --   （2026-08-19 就是這樣讓 RAMMER 的 detect_range 失效、整隻不動）。
+        detect_range  = data.detect_range,
+        give_up_range = data.give_up_range,
+        chase_speed   = data.chase_speed,
+        return_speed  = data.return_speed,
+        ram_push      = data.ram_push,
+        ram_cooldown  = data.ram_cooldown,
         is_triggered = false,
         explode_timer = 0,
         is_exploded = false,
@@ -445,6 +456,55 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             end
         end
     
+    elseif self.move_type == "CHASE" then
+        -- [[ §15.4 追擊型 ]] 2026-08-19。★★ 本作**第一種會朝玩家移動**的敵人 ——
+        --   在此之前所有敵人都是繞著出生點巡邏或原地不動（查證於 2026-08-19），
+        --   所以「背後有東西逼近」這件事以前根本做不出來，反向槍也因此一直沒有場合。
+        -- ★ 偵測範圍內才追、脫離就放棄回原位（使用者拍板）：
+        --   走位因此是有效的解法，而且「被追」是玩家自己踏進範圍觸發的，可預期。
+        --   一路追到底的版本壓力更大，但玩家無法脫離、只能硬打，與本作
+        --   「零件是取捨」的調性衝突。
+        local px = mech_x and (mech_x + (mech_width or 48) / 2) or nil
+        local cx = self.x + self.width / 2
+        local dist = px and math.abs(px - cx) or 99999
+
+        if not self.chasing then
+            if dist <= (self.detect_range or 160) then
+                self.chasing = true
+            end
+        elseif dist > (self.give_up_range or (self.detect_range or 160) * 1.5) then
+            self.chasing = false
+        end
+
+        -- 自爆型進入倒數後就**停住**（使用者拍板的三段式：靠近→停下→閃爍倒數→爆炸）
+        if not self.is_triggered then
+            local target = self.chasing and px or (self.origin_x + self.width / 2)
+            local d = (target or cx) - cx
+            if math.abs(d) > 2 then
+                local dir = (d > 0) and 1 or -1
+                local spd = self.chasing and (self.chase_speed or 40) or (self.return_speed or 24)
+                local new_x = self.x + dir * spd * dt
+                -- ★ 不走進 pit：追擊敵人自己掉下去的話，玩家只要站在坑後面就無敵了。
+                --   巡邏型從來不需要這條，因為它遇到非平地就折返。
+                local ahead = new_x + ((dir > 0) and self.width or 0)
+                local blocked = false
+                if controller and controller.getTerrainType then
+                    blocked = (controller:getTerrainType(ahead) == "pit")
+                end
+                if not blocked then
+                    self.x = new_x
+                    -- ★ 追擊會**跨斜坡**，所以要跟著地形調 y。
+                    --   巡邏型遇坡就折返 → 它們的 y 永遠不用動，這是這裡唯一不一樣的地方。
+                    if controller and controller.getGroundHeight then
+                        local gh = controller:getGroundHeight(self.x + self.width / 2)
+                        if gh and gh < (self.ground_y or 0) + 1000 then
+                            self.y = gh - self.height
+                        end
+                    end
+                end
+            end
+        end
+
     elseif self.move_type == "WALL" then
         -- [[ §15.4 爬牆敵人 ]] 沿著 scene.walls 的軌道**上下**移動。
         -- ★★ 為什麼主軸是垂直、而不是像 DRONE 那樣水平：
@@ -553,6 +613,19 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         if not self.is_triggered then
             -- 检查是否被触发（玩家或砲彈碰到）
             -- 这部分由 updateAll 或其他系统处理
+            -- [[ §15.4 自爆敵人 ]] ★ 多一條**距離引爆**：不必碰到，靠近就啟動倒數。
+            --   MINE 沒有這個欄位 → 行為完全不變（仍是踩到才觸發）。
+            --   ★ 倒數一旦開始就**必爆**（玩家跑掉也爆）—— 這是它與 MINE 的差別：
+            --     MINE 是陷阱（你踩它），自爆敵人是攻擊（它撲你），
+            --     可以取消的話玩家只要後退一步就完全免疫，那就不是攻擊了。
+            if self.explode_trigger_range and mech_x then
+                local px = mech_x + (mech_width or 48) / 2
+                if math.abs(px - (self.x + self.width / 2)) <= self.explode_trigger_range then
+                    self.is_triggered = true
+                    self.explode_timer = 0
+                    print("LOG: BOMBER armed")
+                end
+            end
         elseif not self.is_exploded then
             self.explode_timer = self.explode_timer + dt
             if self.explode_timer >= self.explode_delay then
