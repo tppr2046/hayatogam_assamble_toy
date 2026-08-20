@@ -532,7 +532,16 @@ function Enemy:bossDrawParallel(camera_x)
         if (self.head_drop or 0) > 0 and head.cell_fire then cell = head.cell_fire end
         if cell then
             local img = self.boss_sheet:getImage(cell)
-            if img then pcall(function() img:draw(hx, hy) end); head_drawn = true end
+            -- ★★ 頭的格子是**整張本體尺寸的畫布、只畫頭、其餘透明**（與 BOSS1 的
+            --   「各格原位對齊」同一個慣例），所以要畫在**本體原點**，不是 head.dx/dy。
+            --   下探只加 head_drop —— 整格往下移，等於只有頭往下移。
+            --   ⚠️ imagetable 的每一格尺寸都相同，不可能一格 130×150、另一格 40×34；
+            --     畫在 (hx,hy) 的話整顆頭會再被推開 head.dx，對不上（2026-08-19 修）。
+            --   head.dx/dy/w/h 仍然是**命中框**，那個不變。
+            if img then
+                pcall(function() img:draw(bx, by + (self.head_drop or 0)) end)
+                head_drawn = true
+            end
         end
     end
     if not head_drawn then

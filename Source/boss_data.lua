@@ -88,7 +88,9 @@ local bosses = {
         name = "COLOSSUS",              -- ⚠️ 血條標題寬度上限見 BOSS1 的註解
         part_mode = "PARALLEL",
         drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
-        sprite = nil,                   -- 尚無圖 → 走程式繪製佔位
+        -- ★ 路徑先指好：檔案不存在時載入會失敗（pcall）→ 自動走程式繪製佔位，
+        --   把圖放進 Source/images/ 重新編譯就生效，不必回來改資料。
+        sprite = "images/boss2",        -- boss2-table-130-150.png，3 格（本體／頭／頭-開火）
         body_w = 130, body_h = 150,
         cell_body = 1,
         move_speed = 0,                 -- ★ 固定不動（§15.5a-4 拍板）；戰場鎖定靠 scene.arena
@@ -116,7 +118,8 @@ local bosses = {
         -- 雙臂：可個別打爆，**不是**過關條件
         arms = {
             hp = 90,
-            sprite = nil,               -- 尚無圖 → 程式繪製佔位
+            sprite = "images/boss2_arm",  -- boss2_arm-table-30-100.png，2 格（待機／舉起）
+                                          -- ★ 左右共用一套，右臂由程式水平鏡射
             w = 30, h = 100,
             mounts = {
                 { id = "ARM_L", label = "L-ARM", dx = 2,  dy = 40, mirror = false },
@@ -167,7 +170,10 @@ local bosses = {
         name = "COMET",                 -- ⚠️ 血條標題寬度上限見 BOSS1 的註解
         move_mode = "FLIGHT",
         drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
-        sprite = nil,
+        -- ★ 同 BOSS2：路徑先指好，放圖即生效。
+        --   boss3-table-64-40.png，4 格（本體／ENGINE／PODS／CORE），
+        --   ★ 每格都是整張 64×40 的畫布、只畫該部位、其餘透明（與 boss1 同慣例）
+        sprite = "images/boss3",
         body_w = 64, body_h = 40,
         cell_body = 1,
         move_speed = 0, move_range = 0, -- 不走 bossMove（巡邏），由飛行狀態機接管
