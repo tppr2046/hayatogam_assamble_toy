@@ -365,6 +365,14 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             if self.is_paused then
                 self.anim_frame = 1
             elseif n > 1 then
+                -- ★ 一開始移動就**立刻**跳到第 2 格。
+                --   少了這行的話，停頓期間停在第 1 格，走起來還要等一個 walk_fps
+                --   的間隔（8fps＝125ms）才換圖 —— 每次起步都會閃一下待機圖。
+                --   2026-08-20 加 enemy1 的「待機／移動」兩格圖時實測看到的。
+                if (self.anim_frame or 1) < 2 then
+                    self.anim_frame = 2
+                    self.walk_timer = 0
+                end
                 self.walk_timer = self.walk_timer + dt
                 local step = 1 / (self.walk_fps or 8)
                 if self.walk_timer >= step then

@@ -6,9 +6,19 @@ return {
         -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（射擊類＝銅）
         drop = { copper = {1, 2} },
         name = "BASIC TRAINER UNIT", hp = 20, attack = 5, 
-        move_type = "MOVE FORWARD/BACK", attack_type = "FIRE BULLET",
+        -- [[ 2026-08-20 ]] 由 "MOVE FORWARD/BACK"（持續移動）改為 **"MOVE_PAUSE"（走走停停）**。
+        -- ★ 原因：新圖 enemy1 的第 1 格是**待機**，但舊的移動型別從來不會停下來
+        --   （只是每 2 秒可能換方向），實測待機格一次都不會出現。
+        -- ⚠️ 這會改變 **M001–M008 所有既有關卡**的敵人節奏 —— 使用者拍板要改。
+        -- ★ **刻意不設 `fire_only_when_stopped`** —— 那是 WALKER 的特性。
+        --   BASIC 的開火行為維持原樣，只有「移動」變成有停頓，戰鬥難度不受影響。
+        move_type = "MOVE_PAUSE", attack_type = "FIRE BULLET",
         -- 移動參數
-        move_probability = 0.7,  -- 70% 機率會移動
+        move_duration = 2.0,     -- 走這麼久（比 WALKER 的 1.6 長 → 仍以移動為主，節奏接近原本）
+        pause_duration = 1.0,    -- 停這麼久（待機格就是在這段時間出現）
+        walk_fps = 8,            -- 移動中的換幀速度（目前只有 2 格，多格圖時才看得出差別）
+        -- ★ MOVE_PAUSE 不讀 move_probability，保留給改回 MOVE FORWARD/BACK 時用
+        move_probability = 0.7,
         move_range = 100,        -- 移動範圍（像素）
         move_speed = 20,         -- 移動速度
         -- 砲彈屬性 multiplier：水平速度相對於玩家移動速度、以及重力的倍率
@@ -16,10 +26,11 @@ return {
         projectile_grav_mult = 20,  -- 20 = 重力感接近玩家
         -- 敵人圖片
         -- [[ 2026-08-20 換圖 ]] 由單張 enemy01.png 改為 **enemy1-table-38-32.png（2 格）**。
-        -- 第 1 格＝待機、第 2 格＝移動。換幀由 `anim_idle_move` 驅動（見 entity_enemy）。
-        -- ★ 不要設 `anim_fps` —— 那是「無條件循環」，會讓它站著也在走路。
+        -- 第 1 格＝待機、第 2 格＝移動。
+        -- ★ 換幀由 **MOVE_PAUSE 自己的走路動畫**負責（停下＝第 1 格、移動＝第 2 格起），
+        --   所以這裡**不設** `anim_idle_move` —— 兩邊都寫 self.image 就會變成兩個計算點。
+        -- ★ 也不要設 `anim_fps`（那是無條件循環，會讓它站著也在走路）。
         image = "images/enemy1",
-        anim_idle_move = true,
         -- 子彈發射位置（相對於敵人左上角的偏移，x, y）
         bullet_offset_x = 4,  -- 從敵人中心發射
         bullet_offset_y = 6   -- 從敵人中間高度發射
@@ -171,8 +182,14 @@ return {
         drop = { copper = {2, 3} },
         name = "PHANTOM", hp = 14, attack = 7,
         -- ★ 沿用 BASIC 的移動型別（"PATROL" 不是有效值，會變成完全不動）
-        move_type = "MOVE FORWARD/BACK", attack_type = "FIRE BULLET",
-        move_probability = 0.7,
+        -- [[ 2026-08-20 ]] 跟著 BASIC 一起改成走走停停（理由見 BASIC）。
+        -- ★ 停頓比 BASIC 短一點：它的隱形節奏是 3 秒隱形／1.5 秒現身，
+        --   停太久會常常「現身時剛好站著不動」，看起來像卡住。
+        move_type = "MOVE_PAUSE", attack_type = "FIRE BULLET",
+        move_duration = 2.2,
+        pause_duration = 0.8,
+        walk_fps = 8,
+        move_probability = 0.7,   -- ★ MOVE_PAUSE 不讀，保留給改回舊型別時用
         move_speed = 24,
         move_range = 90,
         -- 隱形節奏（秒）：隱形 3 秒 → 現身 1.5 秒（現身時才開火、才打得到）
@@ -183,10 +200,9 @@ return {
         fire_cooldown = 1.0,
         -- 暫時沿用 BASIC 的圖（隱形是靠「畫不畫」表現,不需要專屬圖也能測）
         -- [[ 2026-08-20 換圖 ]] 由單張 enemy01.png 改為 **enemy1-table-38-32.png（2 格）**。
-        -- 第 1 格＝待機、第 2 格＝移動。換幀由 `anim_idle_move` 驅動（見 entity_enemy）。
-        -- ★ 不要設 `anim_fps` —— 那是「無條件循環」，會讓它站著也在走路。
+        -- 第 1 格＝待機、第 2 格＝移動。換幀由 **MOVE_PAUSE 自己的走路動畫**負責，
+        -- 所以**不設** `anim_idle_move`（兩邊都寫 self.image 就成了兩個計算點）。
         image = "images/enemy1",
-        anim_idle_move = true,
         bullet_offset_x = 4,
         bullet_offset_y = 16
     },
