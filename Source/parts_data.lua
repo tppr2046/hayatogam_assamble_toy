@@ -436,6 +436,52 @@ local parts_data = {
         climb_power = 2  -- 爬坡力: 1=只能15度, 2=可爬15-30度, 3=可爬所有斜坡
     },
 
+    -- ================================================================
+    -- [[ 第三種輪子 ]] 2026-08-20（使用者交圖 wheel3.png 48×16）
+    -- ----------------------------------------------------------------
+    -- 使用者指定：**重量與 HP 都比 WHEEL1/2 高、速度較慢**。
+    --
+    -- ★★ 但只有那三項的話它會是「除了 HP 以外全面劣於 WHEEL2」的零件 —— 沒人會買。
+    --   所以給它一個**別人沒有的能力**當存在理由：`climb_power = 3`（可爬所有斜坡）。
+    --   定位因此成立 ——
+    --     WHEEL2 ＝ 機動（快、跳得高、輕）
+    --     WHEEL3 ＝ **耐打 ＋ 全地形**（慢、跳最低、重，但爬得上任何坡且最耐打）
+    --   ⚠️ 爬坡力是我依「讓它有存在理由」補的，**不在你指定的三項裡** ——
+    --     不要的話把 climb_power 改成 2 即可（那樣它就只剩 HP 這個優點）。
+    --
+    -- 對照表（含 FEET）：
+    --   　　　　  hp / 重 / 速 / 跳 / 爬 / 成本(鋼銅膠)
+    --   WHEEL1    35 / 4 / 2.0 / 30 / 1 / 10-5-10   ← 初始零件、不會壞
+    --   WHEEL2    50 / 4 / 2.0 / 42 / 2 / 40-15-50
+    --   WHEEL3    70 / 7 / 1.5 / 24 / 3 / 70-25-40  ← 本項
+    --   FEET      50 / 7 / 2.0 / 64 / 3 / 150-80-35 ← 跳最高、最貴
+    --
+    -- ★ `move_speed` 只影響**走路**；子彈速度用的是 state_mission 的常數 MOVE_SPEED，
+    --   不會因為換慢輪子就讓全場子彈變慢（查證於 2026-08-20）。
+    -- ================================================================
+    ["WHEEL3"] = {
+        name = "WHEEL 3",
+        part_type = "WHEEL",
+        hp = 70,                 -- 全四種底盤中最高
+        weight = 7,              -- 比兩顆輪子重（與 FEET 同重）
+        slot_x = 3,
+        slot_y = 1,
+        cost_steel = 70,
+        cost_copper = 25,
+        cost_rubber = 40,
+        color = gfx.kColorBlack,
+        image = "images/wheel3.png",
+        placement_row = "BOTTOM",
+        -- 圖是 48×16（與 wheel.png 同尺寸，剛好等於格高）→ 底部對齊，不必像 WHEEL2 那樣上緣對齊
+        align_image_top = false,
+        ui_panel = "images/wheel_panel.png",
+        ui_stick = "images/wheel_stick.png",
+        operation_hint = "Left/Right to move, A to Jump",
+        move_speed = 1.5,        -- ★ 較慢（其餘三種底盤都是 2.0）
+        jump_height = 24,        -- 最低：又重又慢的東西不該跳得高
+        climb_power = 3          -- ★ 存在理由：可爬所有斜坡（見上方說明）
+    },
+
     ["CANON1"] = {
         name = "CANON1",
         part_type = "CANON",  -- 功能類別
