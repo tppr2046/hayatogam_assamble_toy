@@ -25,12 +25,12 @@ return {
         projectile_speed_mult = 30, -- 30 = 水平速度接近玩家感覺
         projectile_grav_mult = 20,  -- 20 = 重力感接近玩家
         -- 敵人圖片
-        -- [[ 2026-08-20 換圖 ]] 由單張 enemy01.png 改為 **enemy1-table-38-32.png（2 格）**。
+        -- [[ 2026-08-20 換圖 ]] 由舊的單張圖改為 **enemy01-table-38-32.png（2 格）**。
         -- 第 1 格＝待機、第 2 格＝移動。
         -- ★ 換幀由 **MOVE_PAUSE 自己的走路動畫**負責（停下＝第 1 格、移動＝第 2 格起），
         --   所以這裡**不設** `anim_idle_move` —— 兩邊都寫 self.image 就會變成兩個計算點。
         -- ★ 也不要設 `anim_fps`（那是無條件循環，會讓它站著也在走路）。
-        image = "images/enemy1",
+        image = "images/enemy01",
         -- 子彈發射位置（相對於敵人左上角的偏移，x, y）
         bullet_offset_x = 4,  -- 從敵人中心發射
         bullet_offset_y = 6   -- 從敵人中間高度發射
@@ -199,10 +199,10 @@ return {
         projectile_grav_mult = 0.2,
         fire_cooldown = 1.0,
         -- 暫時沿用 BASIC 的圖（隱形是靠「畫不畫」表現,不需要專屬圖也能測）
-        -- [[ 2026-08-20 換圖 ]] 由單張 enemy01.png 改為 **enemy1-table-38-32.png（2 格）**。
+        -- [[ 2026-08-20 換圖 ]] 由舊的單張圖改為 **enemy01-table-38-32.png（2 格）**。
         -- 第 1 格＝待機、第 2 格＝移動。換幀由 **MOVE_PAUSE 自己的走路動畫**負責，
         -- 所以**不設** `anim_idle_move`（兩邊都寫 self.image 就成了兩個計算點）。
-        image = "images/enemy1",
+        image = "images/enemy01",
         bullet_offset_x = 4,
         bullet_offset_y = 16
     },
@@ -294,7 +294,7 @@ return {
         explode_delay = 1.0,   -- 反應窗口（MINE 是 2.0；這隻是主動撲上來的，給短一點）
         explode_radius = 56,
         explode_damage = 16,
-        image = "images/enemy1",    -- 佔位（沿用 BASIC 的 2 格圖：待機／移動）
+        image = "images/enemy01",    -- 佔位（沿用 BASIC 的 2 格圖：待機／移動）
         anim_idle_move = true,
         warn_blink_speed = 12,      -- 沒有警示燈圖 → 走既有的「白框閃爍」後備
         bullet_offset_x = 4,
@@ -313,9 +313,12 @@ return {
         return_speed = 30,
         ram_push = 44,         -- 一次撞擊把機體推開幾 px　⚠️ 與 pit 的組合很致命，要試玩
         ram_cooldown = 1.2,    -- 撞完的冷卻：玩家有時間重新站位
-        -- 佔位：用單張 enemy02。★ 不要用 enemy04 —— 那是 WALKER 的 imagetable，
-        -- 換幀邏輯寫在 MOVE_PAUSE 分支裡，CHASE 型別不會推進它，只會定格第 1 格。
+        -- [[ 2026-08-20 ]] 專屬圖 **enemy02-table-32-32.png（2 格）**：1=待機、2=移動。
+        -- ★ RAMMER 是 CHASE 型別，沒有 MOVE_PAUSE 的走路動畫，
+        --   所以換幀走通用的 `anim_idle_move`（看「這一幀 x 有沒有變」）。
+        -- ★ 待機格會在它**放棄追擊、回到出生點停下**時出現。
         image = "images/enemy02",
+        anim_idle_move = true,
         bullet_offset_x = 4,
         bullet_offset_y = 16
     }
