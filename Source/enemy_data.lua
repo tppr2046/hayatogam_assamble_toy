@@ -15,7 +15,11 @@ return {
         projectile_speed_mult = 30, -- 30 = 水平速度接近玩家感覺
         projectile_grav_mult = 20,  -- 20 = 重力感接近玩家
         -- 敵人圖片
-        image = "images/enemy01",
+        -- [[ 2026-08-20 換圖 ]] 由單張 enemy01.png 改為 **enemy1-table-38-32.png（2 格）**。
+        -- 第 1 格＝待機、第 2 格＝移動。換幀由 `anim_idle_move` 驅動（見 entity_enemy）。
+        -- ★ 不要設 `anim_fps` —— 那是「無條件循環」，會讓它站著也在走路。
+        image = "images/enemy1",
+        anim_idle_move = true,
         -- 子彈發射位置（相對於敵人左上角的偏移，x, y）
         bullet_offset_x = 4,  -- 從敵人中心發射
         bullet_offset_y = 6   -- 從敵人中間高度發射
@@ -178,7 +182,11 @@ return {
         projectile_grav_mult = 0.2,
         fire_cooldown = 1.0,
         -- 暫時沿用 BASIC 的圖（隱形是靠「畫不畫」表現,不需要專屬圖也能測）
-        image = "images/enemy01",
+        -- [[ 2026-08-20 換圖 ]] 由單張 enemy01.png 改為 **enemy1-table-38-32.png（2 格）**。
+        -- 第 1 格＝待機、第 2 格＝移動。換幀由 `anim_idle_move` 驅動（見 entity_enemy）。
+        -- ★ 不要設 `anim_fps` —— 那是「無條件循環」，會讓它站著也在走路。
+        image = "images/enemy1",
+        anim_idle_move = true,
         bullet_offset_x = 4,
         bullet_offset_y = 16
     },
@@ -270,7 +278,8 @@ return {
         explode_delay = 1.0,   -- 反應窗口（MINE 是 2.0；這隻是主動撲上來的，給短一點）
         explode_radius = 56,
         explode_damage = 16,
-        image = "images/enemy01",   -- 佔位
+        image = "images/enemy1",    -- 佔位（沿用 BASIC 的 2 格圖：待機／移動）
+        anim_idle_move = true,
         warn_blink_speed = 12,      -- 沒有警示燈圖 → 走既有的「白框閃爍」後備
         bullet_offset_x = 4,
         bullet_offset_y = 16

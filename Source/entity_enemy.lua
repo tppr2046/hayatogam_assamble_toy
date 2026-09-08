@@ -67,6 +67,11 @@ function Enemy:init(x, y, type_id, ground_y)
         image = enemy_img,  -- 儲存圖片
         imagetable = enemy_imagetable,  -- 動畫用（JUMP_ENEMY 依狀態指定幀；其餘看 anim_fps）
         anim_fps = data.anim_fps,       -- 設了就循環播放 imagetable（見 update）
+        -- [[ 2026-08-20 ]] 兩格式的「待機／移動」換幀（1=待機、2=移動）。
+        -- ★ 與 anim_fps 互斥：那個是無條件循環，這個是看有沒有真的位移。
+        anim_idle_move = data.anim_idle_move,
+        anim_prev_x = nil,              -- 上一幀的 x（用來判斷有沒有移動）
+        anim_move_hold = 0,             -- 移動狀態的殘留時間（避免單幀停頓造成閃爍）
         anim_frame = 1, anim_timer = 0,
         ground_y = ground_y,
         vx = 1.0, -- 基礎水平速度
@@ -552,6 +557,29 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         
         -- 上下振動（正弦波）
         self.drone_vertical_offset = math.sin(self.drone_vertical_time * self.vertical_speed) * self.vertical_oscillation
+    end
+
+    -- [[ 2026-08-20 ]] 待機／移動兩格換幀（`anim_idle_move`）。
+    -- ★ 放在**所有移動分支之後**：不管是巡邏、追擊、爬牆還是飛行，
+    --   一律用「這一幀 x 有沒有變」來判斷，不必為每種 move_type 各寫一份。
+    -- ★ 有自己換幀邏輯的型別不受影響：WALKER（MOVE_PAUSE）與 JUMP 都不設這個欄位，
+    --   設了 `anim_fps` 的（如 DRONE）也會在下面被跳過 —— 兩者互斥。
+    -- ★ move_hold 的用途：BASIC 遇到斜坡時會「原地反向」，那一幀沒有位移；
+    --   沒有殘留時間的話圖會閃一下待機格。0.15 秒足以吃掉這種單幀停頓。
+    if self.anim_idle_move and self.imagetable and not self.anim_fps then
+        local moved = (self.anim_prev_x ~= nil) and (math.abs(self.x - self.anim_prev_x) > 0.01)
+        if moved then
+            self.anim_move_hold = 0.15
+        elseif (self.anim_move_hold or 0) > 0 then
+            self.anim_move_hold = self.anim_move_hold - dt
+        end
+        local n = self.imagetable:getLength() or 1
+        local want = ((self.anim_move_hold or 0) > 0 and n > 1) and 2 or 1
+        if want ~= self.anim_frame then
+            self.anim_frame = want
+            self.image = self.imagetable:getImage(want)
+        end
+        self.anim_prev_x = self.x
     end
 
     -- [[ 交戰範圍 2026-08-11 ]] 離畫面太遠就不攻擊。
