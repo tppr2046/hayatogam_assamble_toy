@@ -1,0 +1,265 @@
+{
+ "id": "M015",
+ "name": "15 ENEMY GALLERY",
+ "description": "Preview level: every non-boss enemy in one scene, left to right.",
+ "prerequisite": 0,
+ "time_limit": -1,
+ "objective": {
+  "type": "REACH",
+  "description": "Reach the goal"
+ },
+ "reward_steel": 0,
+ "reward_copper": 0,
+ "reward_rubber": 0,
+ "scenes": [
+  {
+   "width": 2304,
+   "ground_y": 220,
+   "sky": "images/bg_sky",
+   "objective": {
+    "type": "REACH",
+    "description": "Reach the goal"
+   },
+   "reach": {
+    "x": 2224
+   },
+   "dialog": {
+    "image": "images/dialog_bg",
+    "lines": [
+     "ENEMY GALLERY - every non-boss enemy, left to right.",
+     "BASIC / HEAVY / SWORD / JUMP / WALKER / SHIELD / MINE",
+     "DRONE / PHANTOM / CRAWLER / BOMBER / RAMMER",
+     "PHANTOM is invisible most of the time (3s hidden, 1.5s shown).",
+     "BOMBER and RAMMER chase you. Walk to the right edge to finish."
+    ]
+   },
+   "backgrounds": [
+    {
+     "layer": 0,
+     "x": 1730,
+     "y": 28,
+     "image": "images/bg_building1.png",
+     "parallax": 1.0
+    }
+   ],
+   "terrain": [
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    },
+    {
+     "type": "flat",
+     "height_offset": 0
+    }
+   ],
+   "obstacles": [],
+   "stones": [],
+   "delivery_targets": [],
+   "walls": [
+    {
+     "x": 1780,
+     "y_top": 30,
+     "y_bottom": 150
+    }
+   ],
+   "enemies": [
+    {
+     "type": "BASIC_ENEMY",
+     "x": 250,
+     "y": 0
+    },
+    {
+     "type": "HEAVY_ENEMY",
+     "x": 420,
+     "y": 0
+    },
+    {
+     "type": "SWORD_ENEMY",
+     "x": 590,
+     "y": 0
+    },
+    {
+     "type": "JUMP_ENEMY",
+     "x": 760,
+     "y": 0
+    },
+    {
+     "type": "WALKER_ENEMY",
+     "x": 930,
+     "y": 0
+    },
+    {
+     "type": "SHIELD_ROBOT",
+     "x": 1100,
+     "y": 0
+    },
+    {
+     "type": "MINE",
+     "x": 1270,
+     "y": 0
+    },
+    {
+     "type": "DRONE",
+     "x": 1440,
+     "y": 0
+    },
+    {
+     "type": "STEALTH_ENEMY",
+     "x": 1610,
+     "y": 0
+    },
+    {
+     "type": "WALL_ENEMY",
+     "x": 1780,
+     "y": 0
+    },
+    {
+     "type": "BOMBER_ENEMY",
+     "x": 1950,
+     "y": 0
+    },
+    {
+     "type": "RAMMER_ENEMY",
+     "x": 2120,
+     "y": 0
+    }
+   ]
+  }
+ ]
+}

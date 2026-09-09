@@ -335,6 +335,14 @@ Menu 鍵可切 CORE1/2/3。
 移除方式:刪 `addCoreSwitcher()` 與兩處呼叫。
 ⚠️ Playdate 系統選單**上限 3 個自訂項目**,關卡中已用滿。
 
+**8. `M015` 敵人預覽關 @ [M015.json](Source/levels/M015.json)　(2026-09-09 新增)**
+名稱 `15 ENEMY GALLERY`、`prerequisite: 0`。**12 隻非 BOSS 敵人由左至右排開**,
+間距 ~170px(大於最大的 `move_range` 120,不會互相跑進對方的地盤)。
+★ 目標是 **REACH**(走到最右邊就結束)而不是 ELIMINATE_ALL —— 這是「看」的關卡,
+不是「打」的關卡,不必把每一隻都清掉。獎勵設 0。
+★ CRAWLER 那格附了 `walls` 軌道與 `parallax: 1.0` 的牆壁背景,否則它會退化成固定砲台。
+⚠️ 它會出現在選關畫面。**正式版要刪掉這個檔**。
+
 **7. `M014` 測試關 @ [M014.json](Source/levels/M014.json)　(2026-08-19 新增)**
 名稱 `14 COMET TEST`、`prerequisite: 0`。高速飛行 BOSS 的測試場:
 `sky_scroll: 140`(天空自動捲動)、固定戰場 576~976、**戰場內整段 pit + 移動平台**。
