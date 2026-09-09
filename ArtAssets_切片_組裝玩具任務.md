@@ -238,6 +238,61 @@ y=240 └───────────────────────�
 
 ---
 
+## 0.7 ★ 敵人 / BOSS ↔ 圖檔對照索引（2026-08-20 建立）
+
+> §0.6 是**待製作清單**（現在要畫什麼）；這一節是**完整索引**（現在有什麼、誰在用）。
+> ★ **不要手動維護這張表** —— 跑 `python tools/check_enemy_images.py` 會直接把它印出來，
+> 順便檢查「缺圖」與「孤兒圖」。改圖檔名之後**一定要跑一次**：
+> 某隻敵人指到不存在的檔案時，**pdc 不會擋、開機也不會報錯**，
+> 只有實際進到那一關才看得到黑方塊（2026-08-20 已經因此出過兩次事）。
+
+### 敵人（12 隻）
+
+| 型別 ID | 名稱 | 移動型別 | 圖檔 | 單格 | 格數 | 動畫方式 |
+|---|---|---|---|---|---|---|
+| `BASIC_ENEMY` | BASIC TRAINER UNIT | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 走路動畫（停=1／動=2） |
+| `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 同上　🟡 **暫代**（借 BASIC） |
+| `BOMBER_ENEMY` | BOMBER | CHASE | `enemy01-table-38-32.png` | 38×32 | 2 | `anim_idle_move`　🟡 **暫代**（借 BASIC） |
+| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy02-table-32-32.png` | 32×32 | 2 | `anim_idle_move` |
+| `HEAVY_ENEMY` | HEAVY ARMOR UNIT | IMMOBILE | `enemy2.png` | 32×32 | 1 | 靜態（與 SWORD 共用同一張） |
+| `SWORD_ENEMY` | SWORD UNIT | IMMOBILE | `enemy2.png` ＋ `enemy2_sword.png`(48×16) | 32×32 | 1 | 劍是獨立圖，繞軸心旋轉 |
+| `WALKER_ENEMY` | WALKER UNIT | MOVE_PAUSE | `enemy04-table-40-32.png` | 40×32 | 3 | 走路動畫（停=1／動=2~3 循環） |
+| `JUMP_ENEMY` | JUMP UNIT | JUMP | `enemy_jump-table-32-32.png` | 32×32 | 3 | 依跳躍狀態指定幀 |
+| `DRONE` | DRONE | AERIAL | `enemy_drone-table-32-32.png` | 32×32 | 6 | `anim_fps = 12`（旋翼無條件循環） |
+| `WALL_ENEMY` | CRAWLER | WALL | `enemy_drone-table-32-32.png` | 32×32 | 6 | 同上　🟡 **暫代**（借 DRONE） |
+| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `shield.png`(16×32) | 16×32 | 1 | 盾是獨立圖 |
+| `MINE` | MINE | IMMOBILE | `mine-table-32-16.png` | 32×16 | 3 | 1=本體／2・3=警示燈交替 |
+
+### BOSS（roster 5 個名額，已用 3 個）
+
+| ID | 名稱 | 制式 | 本體尺寸 | 圖檔 | 狀態 |
+|---|---|---|---|---|---|
+| `BOSS1` | OVERSEER | 序列制 | 72×72 | `boss1-table-72-72.png`（6 格） | ✅ 完成 |
+| `BOSS2` | COLOSSUS | 平行零件制 | 130×150 | `boss2-table-130-150.png`（3 格）<br>`boss2_arm-table-30-100.png`（2 格） | 🔴 兩張都未製作 → 程式繪製佔位 |
+| `BOSS3` | COMET | 序列制＋飛行 | 64×40 | `boss3-table-64-40.png`（4 格） | 🔴 未製作 → 程式繪製佔位 |
+
+### 🟡 目前借用別人圖的（共 3 隻，另有 2 隻 BOSS 完全沒圖）
+
+| 誰 | 借誰的 | 需要的是 |
+|---|---|---|
+| PHANTOM | BASIC | 隱形是靠「畫不畫」表現，**不畫也能玩** → 優先度最低 |
+| BOMBER | BASIC | ★「快爆了」的辨識度。畫成 **3 格**（1=本體、2・3=警示燈）就能直接沿用 MINE 的閃燈機制 |
+| CRAWLER | DRONE | ★ **頂面朝向**（它貼在側面牆上，玩家看到的是它的頂面） |
+
+### ★ 三種換幀方式的差別（新增敵人時挑一種，**不要同時設**）
+
+| 方式 | 何時用 | 注意 |
+|---|---|---|
+| `anim_fps = N` | 無條件循環（旋翼、待機呼吸） | **會讓它站著也在動** —— 有「停下」概念的敵人不要用 |
+| `MOVE_PAUSE` 內建走路動畫 | 走走停停型（BASIC／PHANTOM／WALKER） | 停=第 1 格、動=第 2 格起循環。**不必也不要**再設 `anim_idle_move` |
+| `anim_idle_move = true` | 其他會移動的型別（CHASE／WALL…） | 看「這一幀 x 有沒有變」。與 `anim_fps` 互斥 |
+
+⚠️ 還有一個容易漏的地方：**`Enemy:init` 是逐欄複製資料的**。
+在 `enemy_data` 新增欄位但沒有在 `init` 列進去，那個欄位會被**靜默忽略**
+（2026-08-19 就這樣讓 RAMMER 的 `detect_range` 失效、整隻不動）。
+
+---
+
 ## 1. BOSS（★最重、最優先）
 
 BOSS1「ASSEMBLY CORE」＝**核心 + 三個依序破壞的武器零件**。尺寸取自 [boss_data.lua](Source/boss_data.lua)，可改。
