@@ -1443,27 +1443,33 @@ function Enemy:drawGlitched(screen_x, draw_y, fmode, intensity)
     local g = gfx
     local w = self.width or 32
     local h = self.height or 32
-    local BANDS = 5
+    local BANDS = 7
     local bh = math.max(2, math.ceil(h / BANDS))
     local MAX_SHIFT = 10                     -- 最大橫向錯位（px）
     local slice = math.floor(playdate.getCurrentTimeMilliseconds() / 60)
 
     for i = 0, BANDS - 1 do
         local by = draw_y + i * bh
-        -- 偽亂數 -3..3 → 乘上強度得到位移
-        local r = ((slice * 31 + i * 17 + (self.glitch_seed or 0)) % 7) - 3
-        local ox = r * (MAX_SHIFT / 3) * intensity
+        -- ★ 最後一條要夾住：bh 是無條件進位的（32÷5 → 7，5×7 = 35 > 32），
+        --   不夾的話最後一條會超出圖的下緣。被裁切的圖畫不到那裡沒差，
+        --   但下面反白用的 fillRect **不吃裁切區**，會把敵人腳下幾 px 的地面一起反白。
+        local this_h = math.min(bh, h - i * bh)
+        if this_h > 0 then
+            -- 偽亂數 -3..3 → 乘上強度得到位移
+            local r = ((slice * 31 + i * 17 + (self.glitch_seed or 0)) % 7) - 3
+            local ox = r * (MAX_SHIFT / 3) * intensity
 
-        -- 只讓這一條帶顯示（裁切區要放寬到涵蓋位移，否則錯位的部分會被切掉）
-        g.setClipRect(screen_x - MAX_SHIFT, by, w + MAX_SHIFT * 2, bh)
-        pcall(function() self.image:draw(screen_x + ox, draw_y, fmode) end)
-        g.clearClipRect()
+            -- 只讓這一條帶顯示（裁切區要放寬到涵蓋位移，否則錯位的部分會被切掉）
+            g.setClipRect(screen_x - MAX_SHIFT, by, w + MAX_SHIFT * 2, this_h)
+            pcall(function() self.image:draw(screen_x + ox, draw_y, fmode) end)
+            g.clearClipRect()
 
-        -- 偶爾反白一條 —— 1-bit 上最像「訊號干擾」的表現。強度低時不做，免得收尾很吵。
-        if intensity > 0.4 and ((slice + i) % 5) == 0 then
-            g.setColor(g.kColorXOR)
-            g.fillRect(screen_x + ox, by, w, bh)
-            g.setColor(g.kColorBlack)
+            -- 偶爾反白一條 —— 1-bit 上最像「訊號干擾」的表現。強度低時不做，免得收尾很吵。
+            if intensity > 0.4 and ((slice + i) % 5) == 0 then
+                g.setColor(g.kColorXOR)
+                g.fillRect(screen_x + ox, by, w, this_h)
+                g.setColor(g.kColorBlack)
+            end
         end
     end
 end
