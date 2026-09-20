@@ -195,6 +195,11 @@ return {
         -- 隱形節奏（秒）：隱形 3 秒 → 現身 1.5 秒（現身時才開火、才打得到）
         cloak_duration  = 3.0,
         reveal_duration = 1.5,
+        -- [[ 2026-09-20 ]] 切換瞬間的 glitch（秒）。現身視窗的**頭尾各**這麼久。
+        -- ★ 只發生在「打得到」的期間 —— 見 entity_enemy 的 drawGlitched 說明。
+        -- ★ 1.5 秒的現身窗扣掉頭尾各 0.25 → 中間仍有 1.0 秒是穩定的，好瞄。
+        --   調大會變成「整段都在閃、難瞄」；不設這個欄位就完全是舊行為。
+        glitch_time = 0.25,
         projectile_speed_mult = 30,
         projectile_grav_mult = 0.2,
         fire_cooldown = 1.0,

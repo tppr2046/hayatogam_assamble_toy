@@ -82,6 +82,10 @@ function Enemy:init(x, y, type_id, ground_y)
         cloak_duration  = data.cloak_duration,
         reveal_duration = data.reveal_duration,
         cloaked = (data.cloak_duration ~= nil),   -- 有宣告就從「隱形」開始
+        -- [[ §15.4 隱形敵人 ]] 切換瞬間的 glitch（見 update / drawGlitched）
+        glitch_time = data.glitch_time,          -- nil = 不做 glitch，行為與舊版完全相同
+        glitch = 0,                              -- 當前強度 0~1
+        glitch_seed = math.random(0, 999),       -- ★ 每隻不同：同場多隻才不會整齊劃一地閃
         cloak_timer = 0,
         is_grounded = true,  -- 是否在地面上
         jump_state = "grounded",  -- "grounded", "jumping", "landing"（用於 JUMP_ENEMY 動畫）
@@ -259,8 +263,30 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self.cloak_timer = 0
             self.cloaked = not self.cloaked
         end
+        -- [[ §15.4 ]] 切換瞬間的 glitch 強度（0~1）。
+        -- ★★ glitch **只發生在「現身視窗」的頭尾** —— 也就是它**可以被打**的期間。
+        --   不放到隱形段，是因為本檔的既有規則是
+        --   「打不到的東西就不該看得到」（見 Enemy:draw 的註解）：
+        --   在真正隱形時閃給玩家看，就會製造「看得到卻打不到」的挫折。
+        --   → 現在的語意是「它正在**實體化／消失**」，而那兩段都還打得到，規則不破。
+        if self.glitch_time then
+            if self.cloaked then
+                self.glitch = 0
+            else
+                local gt = self.glitch_time
+                local into = self.cloak_timer            -- 現身了多久
+                local left = dur - self.cloak_timer      -- 還有多久要隱形
+                local a = (into < gt) and (1 - into / gt) or 0
+                local b = (left < gt) and (1 - left / gt) or 0
+                self.glitch = (a > b) and a or b
+            end
+        end
+
         if controller and controller.detector_active then
             self.cloaked = false
+            -- ★ 偵測器把它釘成永久現身 → 不該再週期性地閃。
+            --   （cloak_timer 仍在跑，不歸零的話會每 1.5 秒 glitch 一次，看起來像 bug。）
+            self.glitch = 0
         end
         -- 隱形中不開火（現身才攻擊 = 玩家的可預測空檔）
         if self.cloaked then
@@ -1401,6 +1427,47 @@ function Enemy:drawMineExplosion(screen_x)
     end
 end
 
+-- [[ §15.4 隱形敵人 ]] 1-bit 的 glitch：**橫向切片位移 ＋ 反白帶**。
+-- ----------------------------------------------------------------------
+-- ★ 為什麼是這個做法：1-bit 沒有半透明可用，「淡入淡出」表現不出來。
+--   訊號干擾式的**橫向錯位**是黑白畫面上少數讀得出「東西不穩定」的語彙，
+--   而且只用到 setClipRect + image:draw + XOR fillRect，全是安全的基本操作。
+-- ★ 位移的亂數**每 60ms 才換一次**，不是每幀 ——
+--   每幀都換會糊成雜訊，看起來像畫面壞掉而不是敵人在閃。
+-- ★ 不用 math.random：那樣同一幀重繪會抖動，而且會擾動其他也在用亂數的地方
+--   （敵人移動、掉落物）。改用「時間片 × 帶索引 × 每隻的種子」算出穩定的偽亂數。
+-- ⚠️ setClipRect 是本專案**第一次使用**的 API，所以刻意做了兩件事：
+--   (1) 畫圖包 pcall；(2) clearClipRect 一定在迴圈內成對呼叫 ——
+--   萬一裁切區沒清掉，之後畫的所有東西都會消失（會是很難查的全畫面故障）。
+function Enemy:drawGlitched(screen_x, draw_y, fmode, intensity)
+    local g = gfx
+    local w = self.width or 32
+    local h = self.height or 32
+    local BANDS = 5
+    local bh = math.max(2, math.ceil(h / BANDS))
+    local MAX_SHIFT = 10                     -- 最大橫向錯位（px）
+    local slice = math.floor(playdate.getCurrentTimeMilliseconds() / 60)
+
+    for i = 0, BANDS - 1 do
+        local by = draw_y + i * bh
+        -- 偽亂數 -3..3 → 乘上強度得到位移
+        local r = ((slice * 31 + i * 17 + (self.glitch_seed or 0)) % 7) - 3
+        local ox = r * (MAX_SHIFT / 3) * intensity
+
+        -- 只讓這一條帶顯示（裁切區要放寬到涵蓋位移，否則錯位的部分會被切掉）
+        g.setClipRect(screen_x - MAX_SHIFT, by, w + MAX_SHIFT * 2, bh)
+        pcall(function() self.image:draw(screen_x + ox, draw_y, fmode) end)
+        g.clearClipRect()
+
+        -- 偶爾反白一條 —— 1-bit 上最像「訊號干擾」的表現。強度低時不做，免得收尾很吵。
+        if intensity > 0.4 and ((slice + i) % 5) == 0 then
+            g.setColor(g.kColorXOR)
+            g.fillRect(screen_x + ox, by, w, bh)
+            g.setColor(g.kColorBlack)
+        end
+    end
+end
+
 function Enemy:draw(camera_x)
     -- [[ S6 ]] BOSS 專屬繪製（爆炸中則落到下方沿用死亡爆炸動畫）
     -- [[ 演出 2026-08-08 ]] BOSS **爆炸期間也照畫機體**。
@@ -1478,7 +1545,12 @@ function Enemy:draw(camera_x)
         local mirrored = (self.flip_x and true or false)
         if self.face_dir == 1 then mirrored = not mirrored end
         local fmode = mirrored and gfx.kImageFlippedX or gfx.kImageUnflipped
-        pcall(function() self.image:draw(screen_x, draw_y, fmode) end)
+        -- [[ §15.4 ]] 實體化／消失的瞬間走 glitch 版本（glitch == 0 時完全等同舊路徑）
+        if (self.glitch or 0) > 0 then
+            self:drawGlitched(screen_x, draw_y, fmode, self.glitch)
+        else
+            pcall(function() self.image:draw(screen_x, draw_y, fmode) end)
+        end
     else
         gfx.setColor(gfx.kColorBlack)
         gfx.fillRect(screen_x, draw_y, self.width, self.height)

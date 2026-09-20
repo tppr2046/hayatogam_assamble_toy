@@ -271,6 +271,15 @@ python tools/check_enemy_images.py
 2026-08-20 一天內就出過兩次:`enemy01` 更名、以及 `enemy2.png` 被誤刪
 (`enemy2.png` 與 `enemy02.png` 名字太像)。
 
+### ★ 3-3e. `setClipRect` 已開始使用(2026-09-20)
+
+PHANTOM 的 glitch 是本專案**第一個**用到 `gfx.setClipRect` 的地方
+([entity_enemy.lua](Source/entity_enemy.lua) 的 `Enemy:drawGlitched`)。
+
+⚠️ **裁切區沒清掉的話,之後畫的所有東西都會消失** —— 那會是很難查的**全畫面**故障,
+而且只在關卡中發生。所以那段刻意做成:`setClipRect` 與 `clearClipRect` **在同一個迴圈內成對**,
+中間只包一個 `pcall` 過的 `image:draw`。要再用這個 API 時請照同一個形狀寫。
+
 ### 3-4. ★ 1-bit 可讀性:黑字要有白底
 地面是純黑填充、天空層上半 45~68% 是黑的 —— **任何黑色文字/線條疊在上面都會消失**。
 已因此修過多次。現有的白底處理:HUD 血條、BOSS 血條、砲台提示、NPC 的 `PROTECT`、命中火花(黑線白描邊)。
