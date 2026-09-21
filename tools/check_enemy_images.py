@@ -112,8 +112,14 @@ for tid, body in blocks(read("Source/enemy_data.lua")):
     fps = field(body, r"anim_fps = (\d+)")
     if fps:
         anim.append("anim_fps=" + fps)
-    if "walk_fps" in body:
+    wf = field(body, r"walk_frames = \{([^}]*)\}")
+    if wf:
+        anim.append("walk[" + wf.replace(" ", "") + "]")
+    elif "walk_fps" in body:
         anim.append("walk")
+    xf = field(body, r"warn_frames = \{([^}]*)\}")
+    if xf:
+        anim.append("warn[" + xf.replace(" ", "") + "]")
     note = ("%d 格" % frames if frames else "") + (" · " + ",".join(anim) if anim else "")
     print("%-16s %-22s %-16s %-30s %-8s %s" % (tid, name, move, fn or ("缺圖→" + str(ref)), spec, note))
     # 附屬圖（劍 / 盾）

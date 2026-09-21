@@ -70,10 +70,17 @@ function Enemy:init(x, y, type_id, ground_y)
         -- [[ 2026-08-20 ]] 兩格式的「待機／移動」換幀（1=待機、2=移動）。
         -- ★ 與 anim_fps 互斥：那個是無條件循環，這個是看有沒有真的位移。
         anim_idle_move = data.anim_idle_move,
-        -- [[ 2026-09-21 ]] 移動時**循環整張表（含第 1 格）**，而不是固定停在第 2 格。
-        -- ★ 用在「站立格與走路共用第 1 格」的兩格圖（SHIELD_ROBOT）。
-        -- ★ 不能拿 `walk_fps` 當開關 —— 它在上面有預設值 8，每隻敵人都有。
-        anim_walk_cycle = data.anim_walk_cycle,
+        -- [[ 2026-09-21 ]] **每個狀態用哪幾格**，直接寫在資料裡（取代先前的 anim_walk_cycle）。
+        --   idle_frame  停著時顯示的格（預設 1）
+        --   walk_frames 移動時循環的格（預設 {2}）。例：{1,2}＝站立格與走路共用；{2,3}＝專用走路格
+        --   warn_frames 自爆倒數時交替的格。★ 是**換掉本體**，不是疊在上面（見 drawMineExplosion）
+        -- ★ 為什麼要明確列格號：「整張表循環」表達不了「只循環 2~3」——
+        --   BOMBER 的第 4~5 格是倒數格，整張循環的話走路時會閃出倒數圖。
+        -- ⚠️ 本 init 是逐欄複製的，新欄位**一定要列在這裡**，否則被靜默忽略（§15.4b）。
+        idle_frame       = data.idle_frame,
+        walk_frames      = data.walk_frames,
+        warn_frames      = data.warn_frames,
+        warn_blink_speed = data.warn_blink_speed,
         anim_prev_x = nil,              -- 上一幀的 x（用來判斷有沒有移動）
         anim_move_hold = 0,             -- 移動狀態的殘留時間（避免單幀停頓造成閃爍）
         anim_frame = 1, anim_timer = 0,
@@ -614,22 +621,34 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         local n = self.imagetable:getLength() or 1
         local moving = ((self.anim_move_hold or 0) > 0) and n > 1
         local want
-        if not moving then
-            want = 1
-        elseif self.anim_walk_cycle then
-            -- 走路循環：**從第 1 格開始循環整張表**（站立格與走路共用）。
-            -- ⚠️ 與 MOVE_PAUSE 的走路動畫不同 —— 那個是循環「第 2 格起」，
-            --   因為 WALKER 的第 1 格是專用的站立格，不參與走路。
-            self.walk_timer = (self.walk_timer or 0) + dt
-            local step = 1 / (self.walk_fps or 8)
-            if self.walk_timer >= step then
-                self.walk_timer = self.walk_timer - step
-                self.anim_walk_i = ((self.anim_walk_i or 1) % n) + 1
+        if self.warn_frames and self.is_triggered and not self.is_exploded then
+            -- ① 自爆倒數：**換掉本體圖**。優先於移動／待機（倒數時本來就停住不動）。
+            -- ★ 不走 drawMineExplosion 的「疊燈」—— BOMBER 的倒數格是**整隻身體**，
+            --   疊在第 1 格上面會透出不重疊的那幾 px（第 5 格與第 1 格只重疊 95%）。
+            local wf = self.warn_frames
+            local spd = self.warn_blink_speed or 10
+            want = wf[(math.floor((self.explode_timer or 0) * spd) % #wf) + 1]
+        elseif moving then
+            -- ② 移動：循環 walk_frames（預設 {2}＝固定停在第 2 格，RAMMER 就是這樣）
+            local wf = self.walk_frames or { 2 }
+            if #wf == 1 then
+                want = wf[1]
+            else
+                self.walk_timer = (self.walk_timer or 0) + dt
+                local step = 1 / (self.walk_fps or 8)
+                if self.walk_timer >= step then
+                    self.walk_timer = self.walk_timer - step
+                    self.anim_walk_i = ((self.anim_walk_i or 1) % #wf) + 1
+                end
+                want = wf[self.anim_walk_i or 1] or wf[1]
             end
-            want = self.anim_walk_i or 1
         else
-            want = 2
+            -- ③ 待機
+            want = self.idle_frame or 1
         end
+        -- 資料寫了超出表的格號時夾住，不要讓 getImage 回 nil 而整隻消失
+        if want > n then want = n end
+        if want < 1 then want = 1 end
         if want ~= self.anim_frame then
             self.anim_frame = want
             self.image = self.imagetable:getImage(want)
@@ -1424,7 +1443,10 @@ function Enemy:drawMineExplosion(screen_x)
             playdate.graphics.setColor(playdate.graphics.kColorWhite)
             playdate.graphics.drawRect(draw_x, draw_y, anim_size, anim_size)
         end
-    elseif self.is_triggered and not self.is_exploded then
+    elseif self.is_triggered and not self.is_exploded and not self.warn_frames then
+        -- ★ [[ 2026-09-21 ]] `and not self.warn_frames`：宣告了 warn_frames 的敵人（BOMBER）
+        --   倒數格是**整隻身體**，改由 update 的換幀區塊「換掉本體」；這裡的「疊燈」只給 MINE。
+        --   少了這個條件的話，會在換好的倒數格上**再疊一次**，而且預設格號 2/3 是走路格。
         -- [[ 2026-08-10 ]] 觸發後的警示燈：mine 的 imagetable 第 2/3 格交替閃爍。
         -- 警示燈與本體（第 1 格）畫在同一張 32×16 畫布的上下兩段，
         -- 所以用「和本體完全相同的座標」疊畫就會對位，不要另外加偏移。

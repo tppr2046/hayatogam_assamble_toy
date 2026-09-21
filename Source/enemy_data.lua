@@ -142,9 +142,8 @@ return {
         --   （沒有這個欄位時它永遠停在第 1 格 —— 就是「移動時沒有播放行走動作」的原因。）
         image = "images/enemy02",
         anim_idle_move = true,
-        -- [[ 2026-09-21 ]] 行走時**循環第 1↔2 格**（站立與走路共用第 1 格），
-        -- 而不是固定停在第 2 格。
-        anim_walk_cycle = true,
+        -- [[ 2026-09-21 ]] 行走時**循環第 1↔2 格**（站立與走路共用第 1 格）。
+        walk_frames = { 1, 2 },
         walk_fps = 6,
         bullet_offset_x = 4,
         bullet_offset_y = 6
@@ -311,9 +310,19 @@ return {
         explode_delay = 1.0,   -- 反應窗口（MINE 是 2.0；這隻是主動撲上來的，給短一點）
         explode_radius = 56,
         explode_damage = 16,
-        image = "images/enemy01",    -- 佔位（沿用 BASIC 的 2 格圖：待機／移動）
+        -- [[ 2026-09-21 ]] 專屬圖 **enemy03-table-32-32.png（5 格）**：
+        --   1＝待機　2~3＝行走　4~5＝爆炸前倒數閃爍（**整隻身體**，不是只有燈）
+        -- ★ 倒數格是換掉本體（見 entity_enemy 的換幀區塊），不走 MINE 的「疊燈」——
+        --   第 5 格與第 1 格只重疊 95%，疊著畫會透出輪廓。
+        -- ⚠️ 使用者交來的檔名是 `enemy03.png`（少了 -table-32-32），已改名 ——
+        --   沒有這個後綴 Playdate 會把整條 5 格當成**一張 160px 寬的圖**。
+        image = "images/enemy03",
         anim_idle_move = true,
-        warn_blink_speed = 12,      -- 沒有警示燈圖 → 走既有的「白框閃爍」後備
+        idle_frame  = 1,
+        walk_frames = { 2, 3 },
+        warn_frames = { 4, 5 },
+        walk_fps    = 8,
+        warn_blink_speed = 12,      -- 倒數格（4↔5）每秒切換次數
         bullet_offset_x = 4,
         bullet_offset_y = 16
     },
