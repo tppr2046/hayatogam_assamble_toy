@@ -213,7 +213,9 @@ return {
         projectile_speed_mult = 30,
         projectile_grav_mult = 0.2,
         fire_cooldown = 1.0,
-        -- 暫時沿用 BASIC 的圖（隱形是靠「畫不畫」表現,不需要專屬圖也能測）
+        -- 🟡 **暫代圖**：現在沿用 BASIC 的 enemy01。
+        -- ★ 2026-09-21 拍板：**PHANTOM 要有自己的圖**（先前這裡寫「不需要專屬圖」已作廢）——
+        --   它現身只有 1.5 秒，跟 BASIC 長一樣的話玩家分不出「這隻會消失」。
         -- [[ 2026-08-20 換圖 ]] 由舊的單張圖改為 **enemy01-table-38-32.png（2 格）**。
         -- 第 1 格＝待機、第 2 格＝移動。換幀由 **MOVE_PAUSE 自己的走路動畫**負責，
         -- 所以**不設** `anim_idle_move`（兩邊都寫 self.image 就成了兩個計算點）。
