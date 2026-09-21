@@ -70,6 +70,10 @@ function Enemy:init(x, y, type_id, ground_y)
         -- [[ 2026-08-20 ]] 兩格式的「待機／移動」換幀（1=待機、2=移動）。
         -- ★ 與 anim_fps 互斥：那個是無條件循環，這個是看有沒有真的位移。
         anim_idle_move = data.anim_idle_move,
+        -- [[ 2026-09-21 ]] 移動時**循環整張表（含第 1 格）**，而不是固定停在第 2 格。
+        -- ★ 用在「站立格與走路共用第 1 格」的兩格圖（SHIELD_ROBOT）。
+        -- ★ 不能拿 `walk_fps` 當開關 —— 它在上面有預設值 8，每隻敵人都有。
+        anim_walk_cycle = data.anim_walk_cycle,
         anim_prev_x = nil,              -- 上一幀的 x（用來判斷有沒有移動）
         anim_move_hold = 0,             -- 移動狀態的殘留時間（避免單幀停頓造成閃爍）
         anim_frame = 1, anim_timer = 0,
@@ -608,7 +612,24 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self.anim_move_hold = self.anim_move_hold - dt
         end
         local n = self.imagetable:getLength() or 1
-        local want = ((self.anim_move_hold or 0) > 0 and n > 1) and 2 or 1
+        local moving = ((self.anim_move_hold or 0) > 0) and n > 1
+        local want
+        if not moving then
+            want = 1
+        elseif self.anim_walk_cycle then
+            -- 走路循環：**從第 1 格開始循環整張表**（站立格與走路共用）。
+            -- ⚠️ 與 MOVE_PAUSE 的走路動畫不同 —— 那個是循環「第 2 格起」，
+            --   因為 WALKER 的第 1 格是專用的站立格，不參與走路。
+            self.walk_timer = (self.walk_timer or 0) + dt
+            local step = 1 / (self.walk_fps or 8)
+            if self.walk_timer >= step then
+                self.walk_timer = self.walk_timer - step
+                self.anim_walk_i = ((self.anim_walk_i or 1) % n) + 1
+            end
+            want = self.anim_walk_i or 1
+        else
+            want = 2
+        end
         if want ~= self.anim_frame then
             self.anim_frame = want
             self.image = self.imagetable:getImage(want)

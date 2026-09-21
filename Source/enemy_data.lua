@@ -142,6 +142,10 @@ return {
         --   （沒有這個欄位時它永遠停在第 1 格 —— 就是「移動時沒有播放行走動作」的原因。）
         image = "images/enemy02",
         anim_idle_move = true,
+        -- [[ 2026-09-21 ]] 行走時**循環第 1↔2 格**（站立與走路共用第 1 格），
+        -- 而不是固定停在第 2 格。
+        anim_walk_cycle = true,
+        walk_fps = 6,
         bullet_offset_x = 4,
         bullet_offset_y = 6
     },

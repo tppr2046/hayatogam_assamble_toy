@@ -253,14 +253,14 @@ y=240 └───────────────────────�
 | `BASIC_ENEMY` | BASIC TRAINER UNIT | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 走路動畫（停=1／動=2） |
 | `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 同上　🟡 **暫代**（借 BASIC） |
 | `BOMBER_ENEMY` | BOMBER | CHASE | `enemy01-table-38-32.png` | 38×32 | 2 | `anim_idle_move`　🟡 **暫代**（借 BASIC） |
-| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy02-table-32-32.png` | 32×32 | 2 | `anim_idle_move`。**與 SHIELD_ROBOT 共用** |
+| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy02-table-32-32.png` | 32×32 | 2 | `anim_idle_move`（停=1／動=2）。<br>🟡 **暫時與 SHIELD_ROBOT 共用** —— 專屬圖製作中，到位後改指新檔即可 |
 | `HEAVY_ENEMY` | HEAVY ARMOR UNIT | IMMOBILE | `enemy2.png` | 32×32 | 1 | 靜態（與 SWORD 共用同一張） |
 | `SWORD_ENEMY` | SWORD UNIT | IMMOBILE | `enemy2.png` ＋ `enemy2_sword.png`(48×16) | 32×32 | 1 | 劍是獨立圖，繞軸心旋轉 |
 | `WALKER_ENEMY` | WALKER UNIT | MOVE_PAUSE | `enemy04-table-40-32.png` | 40×32 | 3 | 走路動畫（停=1／動=2~3 循環） |
 | `JUMP_ENEMY` | JUMP UNIT | JUMP | `enemy_jump-table-32-32.png` | 32×32 | 3 | 依跳躍狀態指定幀 |
 | `DRONE` | DRONE | AERIAL | `enemy_drone-table-32-32.png` | 32×32 | 6 | `anim_fps = 12`（旋翼無條件循環） |
 | `WALL_ENEMY` | CRAWLER | WALL | `enemy_drone-table-32-32.png` | 32×32 | 6 | 同上　🟡 **暫代**（借 DRONE） |
-| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `enemy02-table-32-32.png` ＋ 盾 `shield.png`(16×32) | 32×32 | 2 | 1=待機 2=移動。**與 RAMMER 共用本體圖**。<br>★ 舉盾時不動＝待機格、收盾移動＝移動格，換幀直接對應狀態 |
+| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `enemy02-table-32-32.png` ＋ 盾 `shield.png`(16×32) | 32×32 | 2 | **走路循環 1↔2**（`anim_walk_cycle`，6fps），**站立與走路共用第 1 格**。<br>★ 舉盾時不動＝停在第 1 格、收盾移動＝走路循環，換幀直接對應狀態。<br>⚠️ 本體圖目前**與 RAMMER 共用**，RAMMER 的專屬圖製作中 |
 | `MINE` | MINE | IMMOBILE | `mine-table-32-16.png` | 32×16 | 3 | 1=本體／2・3=警示燈交替 |
 
 ### BOSS（roster 5 個名額，已用 3 個）
@@ -279,13 +279,17 @@ y=240 └───────────────────────�
 | BOMBER | BASIC | ★「快爆了」的辨識度。畫成 **3 格**（1=本體、2・3=警示燈）就能直接沿用 MINE 的閃燈機制 |
 | CRAWLER | DRONE | ★ **頂面朝向**（它貼在側面牆上，玩家看到的是它的頂面） |
 
-### ★ 三種換幀方式的差別（新增敵人時挑一種，**不要同時設**）
+### ★ 四種換幀方式的差別（新增敵人時挑一種，**不要同時設**）
 
-| 方式 | 何時用 | 注意 |
-|---|---|---|
-| `anim_fps = N` | 無條件循環（旋翼、待機呼吸） | **會讓它站著也在動** —— 有「停下」概念的敵人不要用 |
-| `MOVE_PAUSE` 內建走路動畫 | 走走停停型（BASIC／PHANTOM／WALKER） | 停=第 1 格、動=第 2 格起循環。**不必也不要**再設 `anim_idle_move` |
-| `anim_idle_move = true` | 其他會移動的型別（CHASE／WALL…） | 看「這一幀 x 有沒有變」。與 `anim_fps` 互斥 |
+| 方式 | 何時用 | 停著時 | 移動時 |
+|---|---|---|---|
+| `anim_fps = N` | 無條件循環（旋翼） | **也在動** —— 有「停下」概念的敵人不要用 | 循環整張表 |
+| `MOVE_PAUSE` 內建走路動畫 | 走走停停型（BASIC／PHANTOM／WALKER） | 第 1 格 | **第 2 格起**循環（第 1 格是專用站立格，不參與走路） |
+| `anim_idle_move = true` | 會移動、只有兩格的型別（BOMBER／RAMMER） | 第 1 格 | 固定第 2 格 |
+| `anim_idle_move` ＋ `anim_walk_cycle = true` | 同上，但要**走路動畫**（SHIELD_ROBOT） | 第 1 格 | **從第 1 格起**循環整張表（站立格與走路共用），速度看 `walk_fps` |
+
+⚠️ 不能拿 `walk_fps` 當「要不要走路循環」的開關 —— 它在 `Enemy:init` 有預設值 8，
+**每一隻敵人都有**，所以必須用 `anim_walk_cycle` 這個明確旗標。
 
 ⚠️ 還有一個容易漏的地方：**`Enemy:init` 是逐欄複製資料的**。
 在 `enemy_data` 新增欄位但沒有在 `init` 列進去，那個欄位會被**靜默忽略**
