@@ -656,7 +656,9 @@ local parts_data = {
 
 -- [[ G2b ]] 商店文字說明（集中管理，一處編修）。key = 零件 id。
 local descriptions = {
-    GUN    = "Auto-firing gun. Shoots forward on its own.",
+    -- ⚠️ GUN 的舊文案是 "Auto-firing gun."，但 GUN 已於 2026-08-19 改成**手動**
+    --   （§15.2，要自動火力得另外裝 AUTOLOADER）。文案沒跟上就會直接誤導玩家。
+    GUN    = "Gun. Press A to fire forward.",
     WHEEL1 = "Basic wheel. Move left and right.",
     WHEEL2 = "Tougher wheel. Climbs steeper slopes.",
     CLAW   = "Crank to swing the arm. Press A to grab or release.",
@@ -665,6 +667,18 @@ local descriptions = {
     CANON3 = "Mortar. Lobs shells that blast an area.",
     SWORD  = "Swing the blade with the crank.",
     FEET   = "Legs. Move around and press A to jump.",
+
+    -- [[ 2026-09-21 ]] M2.5 新零件的**暫代文案**（先讓說明框不是空的）。
+    -- ★ 寬度都量過：說明框可用 151px，這些都在 3~4 行內（量法見 HANDOFF §5-4）。
+    GUN2        = "Laser gun. Press A for a piercing beam.",
+    BACK_GUN    = "Rear gun. Press A to fire to the left.",
+    HIGH_GUN    = "Lob gun. Press A to arc shots over cover.",
+    AUTO_LOADER = "Autoloader. All guns fire by themselves.",
+    SHIELD      = "Shield. Blocks one hit, then recharges.",
+    MISSILE     = "Missile pod. Press A to launch a homing shot.",
+    DETECTOR    = "Detector. Keeps cloaked enemies visible.",
+    HOOK        = "Grapple. Press A to hook a rope, crank to reel.",
+    WHEEL3      = "Heavy wheel. Slow but tough. Climbs any slope.",
 }
 for pid, d in pairs(descriptions) do
     if parts_data[pid] then parts_data[pid].description = d end

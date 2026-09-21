@@ -33,6 +33,15 @@ local SHOP_LAYOUT = {
 local PV_CX, PV_CY = 249, 100   -- ★ 零件圖中心（調位置只改這兩個數字）
 local PV_TEXT_W    = 190        -- 文字置中用的寬度（以中心左右各半）
 local PV_NAME_DY   = -52        -- 名稱相對中心的 y
+-- [[ 2026-09-21 ]] 加上「數值行」。空間是從**零件圖的框**擠出來的：
+--   框原本給 60px 高，但最高的零件圖（FEET/WHEEL2 放大後 40px）用不到，
+--   縮成 44 並往上挪，就讓出一行，line1/line2 的位置完全不必動。
+-- ★ drawPartImage 是**置中於框**、不裁切 —— 所以改框＝改圖的中心，不會切到圖。
+local PV_IMG_DY    = -14        -- 零件圖中心相對 PV_CY（原本是 0）
+local PV_IMG_H     =  44        -- 圖框高度（原本 60）
+local PV_STAT_DY   =  12        -- ★ 新增：數值行（WT / HP / DMG）
+local PV_WIDE_W    = 240        -- 名稱行與數值行的置中寬度（比 PV_TEXT_W 寬，
+                                --   因為 y162 以上整條 x137~392 都沒有按鈕擋著）
 local PV_LINE1_DY  =  30        -- 第 1 行資訊（購買資源／耐久度）
 local PV_LINE2_DY  =  48        -- 第 2 行資訊（修理資源）
 
@@ -449,10 +458,33 @@ function StateShop.draw()
     -- ★ 全部以 PV_CX/PV_CY（零件圖中心）為基準 —— 那一區沒有框線可以對齊。
     do
         local tx0 = PV_CX - PV_TEXT_W // 2   -- 文字置中用的左緣
+        local wx0 = PV_CX - PV_WIDE_W // 2   -- 名稱行／數值行用的左緣
         gfx.setColor(gfx.kColorBlack)
-        drawCenteredOnWhite(partLabel(part_id), tx0, PV_TEXT_W, PV_CY + PV_NAME_DY)
+
+        -- 名稱 ＋ 佔用格數（格數接在名稱右邊）
+        -- ★ 組成**一個字串**再置中，而不是把 CELL 靠右對齊 ——
+        --   靠右的話遇到長名稱（AUTOLOADER）會疊在一起。
+        -- ★ 為什麼要顯示格數：上排只有 3 格，GDD §15.1 查證過
+        --   「真正的限制不是能不能裝兩個，而是零件寬度」。
+        local cells = part_data.slot_x or 1
+        drawCenteredOnWhite(partLabel(part_id) .. "   " .. cells .. " CELL",
+            wx0, PV_WIDE_W, PV_CY + PV_NAME_DY)
+
         -- drawPartImage 收的是矩形 → 給一個以中心為準的框，圖會置中於其中
-        drawPartImage(part_id, part_data, PV_CX - 60, PV_CY - 30, 120, 60, 2)
+        drawPartImage(part_id, part_data,
+            PV_CX - 60, PV_CY + PV_IMG_DY - PV_IMG_H // 2, 120, PV_IMG_H, 2)
+
+        -- 數值行：重量 / HP / 攻擊力
+        -- ★ 重量是**硬限制**（核心負重上限 16/24/34），不看這個沒辦法決定裝不裝。
+        -- ★ DMG 的欄位要挑對：射擊武器是 `projectile_damage`、近戰（CLAW）是 `attack`，
+        --   兩個都有的零件其值相同。**沒有傷害的零件（輪子/偵測器/自動裝填）不顯示**，
+        --   否則會出現沒有意義的「DMG 0」。
+        do
+            local bits = { "WT " .. (part_data.weight or 0), "HP " .. (part_data.hp or 0) }
+            local dmg = part_data.projectile_damage or part_data.attack
+            if dmg and dmg > 0 then bits[#bits + 1] = "DMG " .. dmg end
+            drawCenteredOnWhite(table.concat(bits, "  "), wx0, PV_WIDE_W, PV_CY + PV_STAT_DY)
+        end
 
         local line1_y = PV_CY + PV_LINE1_DY
         local line2_y = PV_CY + PV_LINE2_DY
