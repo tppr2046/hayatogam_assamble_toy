@@ -134,8 +134,14 @@ return {
         projectile_speed_mult = 25,
         projectile_grav_mult = 15,
         fire_cooldown = 1.5,
-        -- 敵人圖片（2026-08-07 由 enemy1 改為專屬圖 enemy02，32×32）
+        -- 敵人圖片。2026-08-07 由 enemy1 改成 enemy02；
+        -- 2026-08-20 起 enemy02 變成 **enemy02-table-32-32.png（2 格：1=待機 2=移動）**，
+        -- ⚠️ 且**與 RAMMER 共用同一張**（原本這裡寫「專屬圖」已不成立）。
+        -- ★ 2026-09-21 補上 anim_idle_move：盾牌機器人**舉盾時不動、收盾時才移動**，
+        --   所以換幀直接對應「舉盾＝待機格／收盾移動＝移動格」，不必另外寫條件。
+        --   （沒有這個欄位時它永遠停在第 1 格 —— 就是「移動時沒有播放行走動作」的原因。）
         image = "images/enemy02",
+        anim_idle_move = true,
         bullet_offset_x = 4,
         bullet_offset_y = 6
     },

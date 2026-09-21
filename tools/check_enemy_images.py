@@ -97,7 +97,10 @@ print("-" * 78)
 for tid, body in blocks(read("Source/enemy_data.lua")):
     name = field(body, r'name = "([^"]+)"') or "?"
     move = field(body, r'move_type = "([^"]+)"') or "?"
-    ref = field(body, r'image = "images/(\w+)"')
+    # ⚠️ 必須錨在行首縮排 —— `shield_image = "images/shield"` 這行**包含**
+    #    子字串 `image = "images/shield"`，不錨的話 SHIELD_ROBOT 會被抓成盾牌的圖
+    #    （2026-09-21 發現：索引表一直把它記成 shield.png，實際是 enemy02）。
+    ref = field(body, r'^\s*image = "images/(\w+)"')
     if ref:
         used_refs.add(ref)
     fn, spec, frames = resolve(ref)

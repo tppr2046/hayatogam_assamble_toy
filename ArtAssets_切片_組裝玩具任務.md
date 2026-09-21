@@ -181,7 +181,7 @@ y=240 └───────────────────────�
 |---|---|---|
 | `wheel3.png` | 48×16 | **第三種輪子 WHEEL3**（2026-08-20 接線）。定位＝**耐打 ＋ 全地形**：<br>hp 70（四種底盤最高）／重 7／速 1.5（唯一比 2.0 慢的）／跳 24（最低）／爬坡 3（可爬所有斜坡）。<br>★ 爬坡力是為了「讓它有存在理由」補的，不在使用者指定的三項裡 —— 不要的話改回 2。 |
 | `enemy01-table-38-32.png` | 38×32 **× 2 格** | 取代原本的單張圖。**1=待機／2=移動**。<br>使用者：BASIC_ENEMY／PHANTOM／BOMBER（後者仍是佔位）。<br>★ 前兩隻是 `MOVE_PAUSE`，換幀由它自己的走路動畫負責；BOMBER 是 `CHASE`，走通用的 `anim_idle_move`。<br>★ 兩者都**不要設 `anim_fps`** —— 那是無條件循環，會讓它站著也在走路。 |
-| `enemy02-table-32-32.png` | 32×32 **× 2 格** | **RAMMER 專屬圖**（2026-08-20，取代原本借用的單張 `enemy02.png`，該檔已刪）。**1=待機／2=移動**。<br>★ RAMMER 是 `CHASE`，換幀走 `anim_idle_move`；待機格會在它**放棄追擊、回到出生點停下**時出現。 |
+| `enemy02-table-32-32.png` | 32×32 **× 2 格** | **RAMMER ＋ SHIELD_ROBOT 共用**（2026-08-20，取代原本借用的單張 `enemy02.png`，該檔已刪）。**1=待機／2=移動**。<br>★ RAMMER 是 `CHASE`，換幀走 `anim_idle_move`；待機格會在它**放棄追擊、回到出生點停下**時出現。 |
 
 ✅ **2026-08-20 補完：BASIC 與 PHANTOM 已改成走走停停**（使用者拍板）。
 原本的 `MOVE FORWARD/BACK` 是持續移動、從不停下，待機格一次都不會出現；
@@ -253,14 +253,14 @@ y=240 └───────────────────────�
 | `BASIC_ENEMY` | BASIC TRAINER UNIT | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 走路動畫（停=1／動=2） |
 | `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 同上　🟡 **暫代**（借 BASIC） |
 | `BOMBER_ENEMY` | BOMBER | CHASE | `enemy01-table-38-32.png` | 38×32 | 2 | `anim_idle_move`　🟡 **暫代**（借 BASIC） |
-| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy02-table-32-32.png` | 32×32 | 2 | `anim_idle_move` |
+| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy02-table-32-32.png` | 32×32 | 2 | `anim_idle_move`。**與 SHIELD_ROBOT 共用** |
 | `HEAVY_ENEMY` | HEAVY ARMOR UNIT | IMMOBILE | `enemy2.png` | 32×32 | 1 | 靜態（與 SWORD 共用同一張） |
 | `SWORD_ENEMY` | SWORD UNIT | IMMOBILE | `enemy2.png` ＋ `enemy2_sword.png`(48×16) | 32×32 | 1 | 劍是獨立圖，繞軸心旋轉 |
 | `WALKER_ENEMY` | WALKER UNIT | MOVE_PAUSE | `enemy04-table-40-32.png` | 40×32 | 3 | 走路動畫（停=1／動=2~3 循環） |
 | `JUMP_ENEMY` | JUMP UNIT | JUMP | `enemy_jump-table-32-32.png` | 32×32 | 3 | 依跳躍狀態指定幀 |
 | `DRONE` | DRONE | AERIAL | `enemy_drone-table-32-32.png` | 32×32 | 6 | `anim_fps = 12`（旋翼無條件循環） |
 | `WALL_ENEMY` | CRAWLER | WALL | `enemy_drone-table-32-32.png` | 32×32 | 6 | 同上　🟡 **暫代**（借 DRONE） |
-| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `shield.png`(16×32) | 16×32 | 1 | 盾是獨立圖 |
+| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `enemy02-table-32-32.png` ＋ 盾 `shield.png`(16×32) | 32×32 | 2 | 1=待機 2=移動。**與 RAMMER 共用本體圖**。<br>★ 舉盾時不動＝待機格、收盾移動＝移動格，換幀直接對應狀態 |
 | `MINE` | MINE | IMMOBILE | `mine-table-32-16.png` | 32×16 | 3 | 1=本體／2・3=警示燈交替 |
 
 ### BOSS（roster 5 個名額，已用 3 個）
