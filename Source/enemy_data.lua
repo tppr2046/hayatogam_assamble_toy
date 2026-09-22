@@ -123,10 +123,13 @@ return {
         --   SHIELD_ROBOT 分支讀同一組），所以尺寸必須與圖一致，否則會出現
         --   「看起來擋住卻被打到」或「明明沒碰到卻被擋」。
         shield_image = "images/shield",
-        shield_width = 16,            -- ＝ shield.png 寬
-        shield_height = 32,           -- ＝ shield.png 高（原本 20，與新圖不符）
-        shield_offset_x = -14,        -- 向左；-14 讓盾稍微疊在車體上，看起來像被持著
-        shield_offset_y = 0,          -- 與敵人同底（敵人也是 32 高），盾才會站在地面線上
+        -- ★ 2026-09-22：盾已畫進 enemy06 第 2 格（x0~15 / y0~31）→ 判定框對齊那面盾。
+        --   （舊值 -14 是配 shield.png 疊在車體外側用的；現在盾在圖內，不再往外伸）
+        --   量法同 bullet_offset：照「面向左」量，面向右時由 Enemy:shieldBox 自動鏡射。
+        shield_width = 16,            -- ＝ 第 2 格盾的寬（x0~15）
+        shield_height = 32,           -- ＝ 第 2 格盾的高（y0~31）
+        shield_offset_x = 0,          -- 盾貼著圖的左緣
+        shield_offset_y = 0,
         -- 移動參數（盾牌收起時）
         move_speed = 25,
         move_range = 80,

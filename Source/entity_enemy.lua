@@ -814,6 +814,24 @@ end
 --   這正是 HANDOFF §3-5 反覆出事的模式。改成單一入口後，之後要加
 --   護甲、弱點、傷害倍率也只有一個地方要改。
 --
+-- [[ 2026-09-22 ]] 盾牌判定框（世界座標）＋「會被擋下的子彈水平方向」。
+-- ★ 唯一計算點：繪製與 entity_controller 的兩個擋彈分支都讀這裡。
+-- ★ shield_offset_x 是照「面向左」量的；面向右時整片鏡射到另一側，
+--   擋的方向也跟著反過來（與 Enemy:fire 的槍口鏡射同一規則）。
+--   以前判定框固定在左側 → 玩家繞到右邊時，圖上的盾在右、判定卻還在左。
+-- 回傳 x, y, w, h, block_vx（+1＝擋往右飛的子彈／-1＝擋往左飛的）；盾沒舉起回傳 nil。
+function Enemy:shieldBox()
+    if not self.shield_raised then return nil end
+    local w, h = self.shield_width or 0, self.shield_height or 0
+    local off_x = self.shield_offset_x or 0
+    local block_vx = 1
+    if self.face_dir == 1 then
+        off_x = self.width - off_x - w
+        block_vx = -1
+    end
+    return self.x + off_x, self.y + (self.shield_offset_y or 0), w, h, block_vx
+end
+
 -- 回傳 true = 傷害有生效。cloaked（隱形中）時回傳 false 且不扣血。
 -- ============================================================
 function Enemy:takeDamage(amount)
@@ -1638,8 +1656,9 @@ function Enemy:draw(camera_x)
     -- ★ [[ 2026-09-22 ]] `shield_in_sprite`：新圖 enemy06 已把盾畫進第 2 格，
     --   再疊一張 shield.png 就會出現兩面盾。擋子彈的判定框（shield_*）不受影響。
     if self.type_id == "SHIELD_ROBOT" and self.shield_raised and not self.shield_in_sprite then
-        local shield_x = screen_x + self.shield_offset_x
-        local shield_y = draw_y + self.shield_offset_y
+        local bx, by = self:shieldBox()
+        local shield_x = screen_x + (bx - self.x)
+        local shield_y = draw_y + (by - self.y)
         -- [[ 2026-08-12 ]] 有 shield.png 就畫圖，否則退回舊的黑底白框。
         -- ★ 位置與尺寸都來自 enemy_data 的 shield_* —— **擋子彈的判定用的是同一組**，
         --   所以畫出來的框就是擋得住的範圍，不會有視覺與判定不一致的問題。

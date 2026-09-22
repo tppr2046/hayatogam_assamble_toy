@@ -905,13 +905,14 @@ function EntityController:updatePlayerLasers(dt)
                         enemy.is_triggered = true
                         enemy.explode_timer = 0
                     else
-                        -- 盾牌機器人：盾在左側，擋下由左往右的攻擊（與砲彈同一條規則）
+                        -- 盾牌機器人：盾在面向的那一側，擋下迎面而來的攻擊（與砲彈同一條規則）
+                        -- ★ 判定框與方向都由 Enemy:shieldBox 算（會跟著 face_dir 鏡射）
                         local blocked = false
-                        if enemy.type_id == "SHIELD_ROBOT" and enemy.shield_raised and L.vx > 0 then
-                            local sx = enemy.x + (enemy.shield_offset_x or 0)
-                            local st = enemy.y + (enemy.shield_offset_y or 0)
-                            local sw = enemy.shield_width or 0
-                            local shh = enemy.shield_height or 0
+                        local sx, st, sw, shh, block_vx
+                        if enemy.type_id == "SHIELD_ROBOT" then
+                            sx, st, sw, shh, block_vx = enemy:shieldBox()
+                        end
+                        if sx and L.vx * block_vx > 0 then
                             if segIntersectsRect(L.x, L.y, segdx, segdy,
                                                  sx - half, st - half, sx + sw + half, st + shh + half) then
                                 blocked = true
@@ -1375,23 +1376,28 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         
                         -- 盾牌機器人的特殊邏輯
                         local shield_blocked = false
-                        if enemy.type_id == "SHIELD_ROBOT" and enemy.shield_raised then
-                            -- 盾牌在敵人左邊，阻擋從左邊來的子彈
-                            local shield_x = enemy.x + enemy.shield_offset_x
-                            local shield_right = shield_x + enemy.shield_width
-                            local shield_top = enemy.y + enemy.shield_offset_y
-                            local shield_bottom = shield_top + enemy.shield_height
+                        local bx, by, bw, bh, block_vx
+                        if enemy.type_id == "SHIELD_ROBOT" then
+                            bx, by, bw, bh, block_vx = enemy:shieldBox()
+                        end
+                        if bx then
+                            -- 盾牌在敵人面向的那一側，擋下迎面飛來的子彈
+                            -- ★ 判定框與方向都由 Enemy:shieldBox 算（會跟著 face_dir 鏡射）
+                            local shield_x = bx
+                            local shield_right = bx + bw
+                            local shield_top = by
+                            local shield_bottom = by + bh
                             
                             -- 判斷子彈是否在盾牌範圍內
                             if p.x >= shield_x and p.x <= shield_right and
                                p.y >= shield_top and p.y <= shield_bottom then
                                 -- 子彈在盾牌範圍內，檢查擊中位置
-                                -- 從左邊擊中時被擋（子彈向右移動 vx > 0）
-                                if p.vx > 0 then
+                                -- 迎面擊中時被擋（子彈飛行方向與 block_vx 同號）
+                                if p.vx * block_vx > 0 then
                                     p.active = false  -- 盾牌吸收子彈，不造成傷害
                                     shield_blocked = true
                                     self:addHitSpark(p.x, p.y)   -- [[ 命中特效 ]] 被盾擋下也有回饋
-                                    print("LOG: Shield blocks projectile from left!")
+                                    print("LOG: Shield blocks projectile!")
                                 end
                                 -- 從其他方向（右邊、上方、下方）擊中時造成傷害，繼續進行
                             end
