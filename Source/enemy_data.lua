@@ -281,10 +281,19 @@ return {
         projectile_speed_mult = 26,
         projectile_grav_mult = 8,
         fire_cooldown = 1.6,
-        image = "images/enemy_drone",   -- 佔位
-        anim_fps = 12,
-        bullet_offset_x = 6,
-        bullet_offset_y = 24
+        -- ★ 2026-09-22 專屬圖 **enemy07-table-32-32.png（3 格）**，取代借用的 DRONE 圖。
+        --   頂面朝向（貼在牆上，玩家看到的是它的背）。面向左＝頭在左、抓牆的腳在右。
+        --   1＝待機（爬到端點停頓時）　2~3＝爬行循環。
+        -- ★ 換幀走通用的 anim_idle_move（看 x **或 y** 有沒有變 —— 它是上下爬）。
+        --   原本的 `anim_fps` 已拿掉：那是無條件循環，停頓時也會繼續划腳。
+        image = "images/enemy07",
+        anim_idle_move = true,
+        idle_frame = 1,
+        walk_frames = { 2, 3 },
+        walk_fps = 8,
+        -- 子彈從**頭部尖端**射出（第 1 格 x7~9 / y14~17 → 取 (7, 16)）
+        bullet_offset_x = 7,
+        bullet_offset_y = 16
     },
 
     -- ======================================================================

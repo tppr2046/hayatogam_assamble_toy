@@ -168,7 +168,7 @@ y=240 └───────────────────────�
 |---|---|---|
 | `drop-table-8-8.png` | **8×8 × 3 格** | 1=鋼　2=銅　3=橡膠。現在是程式繪製佔位（方形／圓形／X） |
 
-### C. 敵人 —— **只剩 CRAWLER 還在借別人的圖**（2026-09-22；BOMBER／RAMMER／SHIELD 已完成，PHANTOM 改用 enemy02）
+### C. 敵人 —— ✅ **全部都有自己的圖了**（2026-09-22；BOMBER／RAMMER／SHIELD／CRAWLER 已完成，PHANTOM 改用 enemy02）
 
 > 獨佔自己圖的只有 WALKER／JUMP／MINE 三隻。
 > `enemy2`（HEAVY ARMOR ＋ SWORD UNIT）是**原本就設計成共用**的同底盤，不在待畫之列。
@@ -177,12 +177,13 @@ y=240 └───────────────────────�
 
 | 誰 | 現在借誰的 | 需要幾格 | 注意 |
 |---|---|---|---|
-| **CRAWLER**（爬牆） | DRONE 的 `enemy_drone`（32×32） | 目前吃 `anim_fps=12` 無條件循環 → 至少 2 格才看得出動 | ★ **玩家看到的是它的頂面** —— 它貼在側面牆上，朝向與其他敵人不同 |
+| ~~**CRAWLER**（爬牆）~~ | ~~DRONE 的 `enemy_drone`~~ | — | ✅ 2026-09-22 已改用 `enemy07`（見下表） |
 
 ### ✅ 已完成（2026-08-20）
 
 | 檔名 | 規格 | 說明 |
 |---|---|---|
+| `enemy07-table-32-32.png` | 32×32 **× 3 格** | **CRAWLER 專屬圖**（2026-09-22，取代借用的 DRONE 圖）。頂面朝向，面向左＝頭在左、抓牆的腳在右。1＝待機（端點停頓）　2~3＝爬行循環。<br>★ 走 `anim_idle_move`，移動判定看 x **或 y**（它是上下爬）。<br>★ 原本的 `anim_fps=12` 已拿掉 —— 停頓時也會划腳。<br>★ 子彈從頭部尖端 (7, 16) 射出。 |
 | `enemy06-table-32-32.png` | 32×32 **× 2 格** | **SHIELD ROBOT 新圖**（2026-09-22，取代 enemy02）。1＝待機**與**移動　2＝舉盾。<br>★ 換幀看**舉盾狀態**（`shield_frame`），不是看有沒有移動。<br>★ 盾畫進第 2 格了 → `shield_in_sprite`，**不再另外疊 shield.png**。<br>★ 第 2 格的盾是**整面 16×32**（x0~15 / y0~31，2026-09-22 改圖）→ 擋彈判定框 `shield_*` 對齊它：offset (0,0)、16×32。面向右時由 `Enemy:shieldBox` 自動鏡射。<br>★ 子彈從頭部小圓的圓心 (13, 8) 射出（圓環 x11~15 / y6~10）。 |
 | `enemy05-table-40-32.png` | 40×32 **× 3 格** | **RAMMER 專屬圖**（2026-09-22）。1＝待機**與**移動　2~3＝撞到機體時**播一次**（推板沿伸縮桿推出）。<br>★ 推板在圖的左側＝面向左（基準朝向），不需要 `flip_x`。圖寬 32→40，命中框跟著變寬。 |
 | `enemy03-table-32-32.png` | 32×32 **× 5 格** | **BOMBER 專屬圖**（2026-09-21）。<br>1＝待機　2~3＝行走　4~5＝爆炸前倒數閃爍（**整隻身體**）。<br>★ 倒數格是**換掉本體**，不走 MINE 的「疊燈」—— 第 5 格與第 1 格只重疊 95%，疊著畫會透出輪廓。<br>⚠️ 交來時檔名是 `enemy03.png`（少了 `-table-32-32`），已改名；沒有這個後綴會被當成一張 160px 寬的單張圖。 |
@@ -266,7 +267,7 @@ y=240 └───────────────────────�
 | `WALKER_ENEMY` | WALKER UNIT | MOVE_PAUSE | `enemy04-table-40-32.png` | 40×32 | 3 | 走路動畫（停=1／動=2~3 循環） |
 | `JUMP_ENEMY` | JUMP UNIT | JUMP | `enemy_jump-table-32-32.png` | 32×32 | 3 | 依跳躍狀態指定幀 |
 | `DRONE` | DRONE | AERIAL | `enemy_drone-table-32-32.png` | 32×32 | 6 | `anim_fps = 12`（旋翼無條件循環） |
-| `WALL_ENEMY` | CRAWLER | WALL | `enemy_drone-table-32-32.png` | 32×32 | 6 | 同上　🟡 **暫代**（借 DRONE） |
+| `WALL_ENEMY` | CRAWLER | WALL | `enemy07-table-32-32.png` | 32×32 | 3 | 爬行（停=1／爬=2↔3，看 y 有沒有變） |
 | `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `enemy06-table-32-32.png`（盾已畫在第 2 格） | 32×32 | 2 | 收盾（站著或走路）＝第 1 格／舉盾＝第 2 格（`shield_frame`） |
 | `MINE` | MINE | IMMOBILE | `mine-table-32-16.png` | 32×16 | 3 | 1=本體／2・3=警示燈交替 |
 
@@ -278,11 +279,9 @@ y=240 └───────────────────────�
 | `BOSS2` | COLOSSUS | 平行零件制 | 130×150 | `boss2-table-130-150.png`（3 格）<br>`boss2_arm-table-30-100.png`（2 格） | 🔴 兩張都未製作 → 程式繪製佔位 |
 | `BOSS3` | COMET | 序列制＋飛行 | 64×40 | `boss3-table-64-40.png`（4 格） | 🔴 未製作 → 程式繪製佔位 |
 
-### 🟡 目前借用別人圖的（共 1 隻，另有 2 隻 BOSS 完全沒圖）
+### 🟡 目前借用別人圖的（**0 隻**；另有 2 隻 BOSS 完全沒圖）
 
-| 誰 | 借誰的 | 需要的是 |
-|---|---|---|
-| CRAWLER | DRONE | ★ **頂面朝向**（它貼在側面牆上，玩家看到的是它的頂面） |
+（CRAWLER 已於 2026-09-22 改用 enemy07，一般敵人全部有專屬圖。）
 
 ### ★ 四種換幀方式的差別（新增敵人時挑一種，**不要同時設**）
 
@@ -290,14 +289,14 @@ y=240 └───────────────────────�
 |---|---|---|---|
 | `anim_fps = N` | 無條件循環（旋翼） | **也在動** —— 有「停下」概念的敵人不要用 | 循環整張表 |
 | `MOVE_PAUSE` 內建走路動畫 | 走走停停型（BASIC／PHANTOM／WALKER） | 第 1 格 | **第 2 格起**循環（第 1 格是專用站立格，不參與走路） |
-| `anim_idle_move = true` ＋ 格號表 | 其他會移動的型別（CHASE／SHIELD…） | `idle_frame`（預設 1） | 循環 `walk_frames`（預設 `{2}`＝固定第 2 格） |
+| `anim_idle_move = true` ＋ 格號表 | 其他會移動的型別（CHASE／SHIELD／WALL…）。移動＝這一幀 x **或 y** 有變 | `idle_frame`（預設 1） | 循環 `walk_frames`（預設 `{2}`＝固定第 2 格） |
 
 `anim_idle_move` 的**格號表**（2026-09-21 取代先前的 `anim_walk_cycle`）：
 
 | 欄位 | 意思 | 例 |
 |---|---|---|
 | `idle_frame` | 停著時的格 | 預設 1 |
-| `walk_frames` | 移動時循環的格，速度看 `walk_fps` | RAMMER 不設（＝固定第 2 格）／SHIELD `{1,2}`（站立與走路共用）／BOMBER `{2,3}` |
+| `walk_frames` | 移動時循環的格，速度看 `walk_fps` | RAMMER 不設（＝固定第 2 格）／SHIELD `{1,2}`（站立與走路共用）／BOMBER、CRAWLER `{2,3}` |
 | `warn_frames` | 自爆倒數時交替的格，速度看 `warn_blink_speed`。★ **換掉本體**，不是疊在上面 | BOMBER `{4,5}` |
 | `push_frames` | 衝擊命中時**播一次**的格（one-shot），速度看 `push_fps`。播完回到 idle／walk | RAMMER `{2,3}` |
 | `shield_frame` | **舉盾狀態**時固定的格（看 `shield_raised`，不看移動） | SHIELD_ROBOT `2` |

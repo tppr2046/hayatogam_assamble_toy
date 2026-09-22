@@ -618,13 +618,17 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
 
     -- [[ 2026-08-20 ]] 待機／移動兩格換幀（`anim_idle_move`）。
     -- ★ 放在**所有移動分支之後**：不管是巡邏、追擊、爬牆還是飛行，
-    --   一律用「這一幀 x 有沒有變」來判斷，不必為每種 move_type 各寫一份。
+    --   一律用「這一幀 x 或 y 有沒有變」來判斷，不必為每種 move_type 各寫一份。
+    --   （y 是 2026-09-22 為 CRAWLER 加的 —— 它是**上下**爬牆，只看 x 會永遠是待機格。
+    --    其他型別不受影響：本作只有 JUMP 會改 y，而 JUMP 不設 anim_idle_move。）
     -- ★ 有自己換幀邏輯的型別不受影響：WALKER（MOVE_PAUSE）與 JUMP 都不設這個欄位，
     --   設了 `anim_fps` 的（如 DRONE）也會在下面被跳過 —— 兩者互斥。
     -- ★ move_hold 的用途：BASIC 遇到斜坡時會「原地反向」，那一幀沒有位移；
     --   沒有殘留時間的話圖會閃一下待機格。0.15 秒足以吃掉這種單幀停頓。
     if self.anim_idle_move and self.imagetable and not self.anim_fps then
-        local moved = (self.anim_prev_x ~= nil) and (math.abs(self.x - self.anim_prev_x) > 0.01)
+        local moved = (self.anim_prev_x ~= nil) and
+                      (math.abs(self.x - self.anim_prev_x) > 0.01 or
+                       math.abs(self.y - (self.anim_prev_y or self.y)) > 0.01)
         if moved then
             self.anim_move_hold = 0.15
         elseif (self.anim_move_hold or 0) > 0 then
@@ -683,6 +687,7 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self.image = self.imagetable:getImage(want)
         end
         self.anim_prev_x = self.x
+        self.anim_prev_y = self.y
     end
 
     -- [[ 交戰範圍 2026-08-11 ]] 離畫面太遠就不攻擊。
