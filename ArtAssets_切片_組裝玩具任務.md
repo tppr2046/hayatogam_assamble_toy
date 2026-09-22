@@ -168,7 +168,7 @@ y=240 └───────────────────────�
 |---|---|---|
 | `drop-table-8-8.png` | **8×8 × 3 格** | 1=鋼　2=銅　3=橡膠。現在是程式繪製佔位（方形／圓形／X） |
 
-### C. 敵人 —— **只剩 CRAWLER 還在借別人的圖**（2026-09-22；BOMBER／RAMMER／SHIELD 已完成，PHANTOM 拍板維持原圖）
+### C. 敵人 —— **只剩 CRAWLER 還在借別人的圖**（2026-09-22；BOMBER／RAMMER／SHIELD 已完成，PHANTOM 改用 enemy02）
 
 > 獨佔自己圖的只有 WALKER／JUMP／MINE 三隻。
 > `enemy2`（HEAVY ARMOR ＋ SWORD UNIT）是**原本就設計成共用**的同底盤，不在待畫之列。
@@ -187,8 +187,8 @@ y=240 └───────────────────────�
 | `enemy05-table-40-32.png` | 40×32 **× 3 格** | **RAMMER 專屬圖**（2026-09-22）。1＝待機**與**移動　2~3＝撞到機體時**播一次**（推板沿伸縮桿推出）。<br>★ 推板在圖的左側＝面向左（基準朝向），不需要 `flip_x`。圖寬 32→40，命中框跟著變寬。 |
 | `enemy03-table-32-32.png` | 32×32 **× 5 格** | **BOMBER 專屬圖**（2026-09-21）。<br>1＝待機　2~3＝行走　4~5＝爆炸前倒數閃爍（**整隻身體**）。<br>★ 倒數格是**換掉本體**，不走 MINE 的「疊燈」—— 第 5 格與第 1 格只重疊 95%，疊著畫會透出輪廓。<br>⚠️ 交來時檔名是 `enemy03.png`（少了 `-table-32-32`），已改名；沒有這個後綴會被當成一張 160px 寬的單張圖。 |
 | `wheel3.png` | 48×16 | **第三種輪子 WHEEL3**（2026-08-20 接線）。定位＝**耐打 ＋ 全地形**：<br>hp 70（四種底盤最高）／重 7／速 1.5（唯一比 2.0 慢的）／跳 24（最低）／爬坡 3（可爬所有斜坡）。<br>★ 爬坡力是為了「讓它有存在理由」補的，不在使用者指定的三項裡 —— 不要的話改回 2。 |
-| `enemy01-table-38-32.png` | 38×32 **× 2 格** | 取代原本的單張圖。**1=待機／2=移動**。<br>使用者：BASIC_ENEMY／PHANTOM（BOMBER 已改用 enemy03）。<br>★ 前兩隻是 `MOVE_PAUSE`，換幀由它自己的走路動畫負責；BOMBER 是 `CHASE`，走通用的 `anim_idle_move`。<br>★ 兩者都**不要設 `anim_fps`** —— 那是無條件循環，會讓它站著也在走路。 |
-| ~~`enemy02-table-32-32.png`~~ | 32×32 × 2 格 | ⚠️ **2026-09-22 起已無讀取端**（SHIELD 改用 enemy06、RAMMER 改用 enemy05）→ 孤兒圖，待使用者確認是否刪除 |
+| `enemy01-table-38-32.png` | 38×32 **× 2 格** | 取代原本的單張圖。**1=待機／2=移動**。<br>使用者：**只剩 BASIC_ENEMY**（BOMBER 改用 enemy03、PHANTOM 改用 enemy02）。<br>★ BASIC 是 `MOVE_PAUSE`，換幀由它自己的走路動畫負責。<br>★ **不要設 `anim_fps`** —— 那是無條件循環，會讓它站著也在走路。 |
+| `enemy02-table-32-32.png` | 32×32 **× 2 格** | **PHANTOM 的圖**（2026-09-22 起；原本是 SHIELD ROBOT 的，SHIELD 已換 enemy06）。1＝待機　2＝移動。<br>★ PHANTOM 是 `MOVE_PAUSE`，換幀由它自己的走路動畫負責，**不設** `anim_idle_move`／`anim_fps`。<br>★ 面向左；子彈從槍管左端 (2, 8) 射出（槍管 x1~15 / y6~9）。 |
 
 ✅ **2026-08-20 補完：BASIC 與 PHANTOM 已改成走走停停**（使用者拍板）。
 原本的 `MOVE FORWARD/BACK` 是持續移動、從不停下，待機格一次都不會出現；
@@ -258,7 +258,7 @@ y=240 └───────────────────────�
 | 型別 ID | 名稱 | 移動型別 | 圖檔 | 單格 | 格數 | 動畫方式 |
 |---|---|---|---|---|---|---|
 | `BASIC_ENEMY` | BASIC TRAINER UNIT | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 走路動畫（停=1／動=2） |
-| `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 同上。★ **拍板沿用 BASIC 的圖**（辨識度交給 glitch） |
+| `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy02-table-32-32.png` | 32×32 | 2 | 走路動畫（停=1／動=2）＋切換時 glitch |
 | `BOMBER_ENEMY` | BOMBER | CHASE | `enemy03-table-32-32.png` | 32×32 | 5 | 待機 1／走路 2↔3／倒數 4↔5（`walk_frames`＋`warn_frames`） |
 | `RAMMER_ENEMY` | RAMMER | CHASE | `enemy05-table-40-32.png` | 40×32 | 3 | 待機與移動都是第 1 格；**撞到機體時播一次 2→3**（`push_frames`） |
 | `HEAVY_ENEMY` | HEAVY ARMOR UNIT | IMMOBILE | `enemy2.png` | 32×32 | 1 | 靜態（與 SWORD 共用同一張） |
@@ -278,11 +278,10 @@ y=240 └───────────────────────�
 | `BOSS2` | COLOSSUS | 平行零件制 | 130×150 | `boss2-table-130-150.png`（3 格）<br>`boss2_arm-table-30-100.png`（2 格） | 🔴 兩張都未製作 → 程式繪製佔位 |
 | `BOSS3` | COMET | 序列制＋飛行 | 64×40 | `boss3-table-64-40.png`（4 格） | 🔴 未製作 → 程式繪製佔位 |
 
-### 🟡 目前借用別人圖的（共 3 隻，另有 2 隻 BOSS 完全沒圖）
+### 🟡 目前借用別人圖的（共 1 隻，另有 2 隻 BOSS 完全沒圖）
 
 | 誰 | 借誰的 | 需要的是 |
 |---|---|---|
-| PHANTOM | BASIC | ★ 2026-09-22 拍板**維持原圖、不另外畫**（09-21 曾決定要畫，已撤回） |
 | CRAWLER | DRONE | ★ **頂面朝向**（它貼在側面牆上，玩家看到的是它的頂面） |
 
 ### ★ 四種換幀方式的差別（新增敵人時挑一種，**不要同時設**）

@@ -216,14 +216,16 @@ return {
         projectile_speed_mult = 30,
         projectile_grav_mult = 0.2,
         fire_cooldown = 1.0,
-        -- ★ 2026-09-22 拍板：**維持沿用 BASIC 的 enemy01，不另外畫**（09-21 曾決定要畫，已撤回）。
-        --   辨識度交給切換瞬間的 glitch 效果（見 entity_enemy 的 drawGlitched）。
-        -- [[ 2026-08-20 換圖 ]] 由舊的單張圖改為 **enemy01-table-38-32.png（2 格）**。
-        -- 第 1 格＝待機、第 2 格＝移動。換幀由 **MOVE_PAUSE 自己的走路動畫**負責，
-        -- 所以**不設** `anim_idle_move`（兩邊都寫 self.image 就成了兩個計算點）。
-        image = "images/enemy01",
-        bullet_offset_x = 4,
-        bullet_offset_y = 16
+        -- ★ 2026-09-22 拍板：**改用 enemy02-table-32-32.png（2 格）**
+        --   （先前 SHIELD ROBOT 的舊圖；SHIELD 已換 enemy06，這張空出來給 PHANTOM）。
+        --   1＝待機　2＝移動 —— PHANTOM 是 MOVE_PAUSE，換幀由它自己的走路動畫負責，
+        --   **不設** `anim_idle_move`（兩邊都寫 self.image 就成了兩個計算點）。
+        -- ★ 面向左（槍管朝左），不需要 flip_x。圖寬 38→32，命中框跟著變小。
+        image = "images/enemy02",
+        -- 子彈從**槍管左端**射出：槍管在第 1 格 x1~15 / y6~9 → 取 (2, 8)。
+        --   （舊值 (4,16) 在這張圖上是空白處）
+        bullet_offset_x = 2,
+        bullet_offset_y = 8
     },
 
     ["DRONE"] = {
