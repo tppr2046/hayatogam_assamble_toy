@@ -113,7 +113,9 @@ function Enemy:init(x, y, type_id, ground_y)
         landing_frame_timer = 0,  -- 著陸幀計時器
         move_timer = 0,
         fire_timer = 0,
-        fire_cooldown = 2.0, -- 每 2 秒發射一次
+        -- [[ 2026-09-22 修正 ]] 以前寫死 2.0、**沒讀資料** → 資料裡的 fire_cooldown 全部無效。
+        --   PHANTOM 因此一發都射不出來（現身窗 1.5 秒 < 2 秒，而隱形時計時歸零）。
+        fire_cooldown = data.fire_cooldown or 2.0,
         -- 子彈發射位置偏移
         bullet_offset_x = data.bullet_offset_x or (img_width / 2),
         bullet_offset_y = data.bullet_offset_y or (img_height / 2),
