@@ -1174,6 +1174,10 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         -- ★ 位移不在這裡套用 —— 機體座標歸 state_mission 管。
                         --   這裡只累加「要推多少」，由那邊夾邊界後套上去（唯一計算點）。
                         self.mech_push_x = (self.mech_push_x or 0) + dir * (enemy.ram_push or 40)
+                        -- [[ 2026-09-22 ]] 啟動一次性的推擊動畫（見 entity_enemy 的換幀區塊）。
+                        -- ★ 放在這裡而不是 enemy 自己偵測：「撞到了」只有這裡知道，
+                        --   在 enemy 端另外判斷就會變成第二個命中計算點。
+                        if enemy.push_frames then enemy.push_anim_t = 0 end
                         print("LOG: RAMMER knocked the mech back")
                     end
                 elseif enemy.attack_type == "CONTACT" then

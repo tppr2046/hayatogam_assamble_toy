@@ -168,7 +168,7 @@ y=240 └───────────────────────�
 |---|---|---|
 | `drop-table-8-8.png` | **8×8 × 3 格** | 1=鋼　2=銅　3=橡膠。現在是程式繪製佔位（方形／圓形／X） |
 
-### C. 敵人 —— **三隻還在借別人的圖**（2026-09-21 盤點；BOMBER 已完成）
+### C. 敵人 —— **兩隻還在借別人的圖**（2026-09-22；BOMBER、RAMMER 已完成）
 
 > 獨佔自己圖的只有 WALKER／JUMP／MINE 三隻。
 > `enemy2`（HEAVY ARMOR ＋ SWORD UNIT）是**原本就設計成共用**的同底盤，不在待畫之列。
@@ -178,17 +178,17 @@ y=240 └───────────────────────�
 | 誰 | 現在借誰的 | 需要幾格 | 注意 |
 |---|---|---|---|
 | **CRAWLER**（爬牆） | DRONE 的 `enemy_drone`（32×32） | 目前吃 `anim_fps=12` 無條件循環 → 至少 2 格才看得出動 | ★ **玩家看到的是它的頂面** —— 它貼在側面牆上，朝向與其他敵人不同 |
-| **RAMMER**（衝擊） | SHIELD ROBOT 的 `enemy02`（32×32） | 2 格（停=1／動=2） | 體型應比 BASIC 壯，讀得出「它會撞過來」。<br>若也要**走路循環**（站立與走路共用第 1 格），跟我說，我加 `anim_walk_cycle` |
 | **PHANTOM**（隱形） | BASIC 的 `enemy01`（38×32） | 2 格（走走停停型：停=1／動=2 起循環） | ★ **2026-09-21 拍板：要畫**（先前註解寫「不需要專屬圖」已作廢）。<br>它大部分時間隱形，**現身那 1.5 秒要一眼認出「這隻會消失」**；切換瞬間有 glitch 效果（橫向錯位＋反白），造型偏電子／不穩定感會相襯 |
 
 ### ✅ 已完成（2026-08-20）
 
 | 檔名 | 規格 | 說明 |
 |---|---|---|
+| `enemy05-table-40-32.png` | 40×32 **× 3 格** | **RAMMER 專屬圖**（2026-09-22）。1＝待機**與**移動　2~3＝撞到機體時**播一次**（推板沿伸縮桿推出）。<br>★ 推板在圖的左側＝面向左（基準朝向），不需要 `flip_x`。圖寬 32→40，命中框跟著變寬。 |
 | `enemy03-table-32-32.png` | 32×32 **× 5 格** | **BOMBER 專屬圖**（2026-09-21）。<br>1＝待機　2~3＝行走　4~5＝爆炸前倒數閃爍（**整隻身體**）。<br>★ 倒數格是**換掉本體**，不走 MINE 的「疊燈」—— 第 5 格與第 1 格只重疊 95%，疊著畫會透出輪廓。<br>⚠️ 交來時檔名是 `enemy03.png`（少了 `-table-32-32`），已改名；沒有這個後綴會被當成一張 160px 寬的單張圖。 |
 | `wheel3.png` | 48×16 | **第三種輪子 WHEEL3**（2026-08-20 接線）。定位＝**耐打 ＋ 全地形**：<br>hp 70（四種底盤最高）／重 7／速 1.5（唯一比 2.0 慢的）／跳 24（最低）／爬坡 3（可爬所有斜坡）。<br>★ 爬坡力是為了「讓它有存在理由」補的，不在使用者指定的三項裡 —— 不要的話改回 2。 |
 | `enemy01-table-38-32.png` | 38×32 **× 2 格** | 取代原本的單張圖。**1=待機／2=移動**。<br>使用者：BASIC_ENEMY／PHANTOM／BOMBER（後者仍是佔位）。<br>★ 前兩隻是 `MOVE_PAUSE`，換幀由它自己的走路動畫負責；BOMBER 是 `CHASE`，走通用的 `anim_idle_move`。<br>★ 兩者都**不要設 `anim_fps`** —— 那是無條件循環，會讓它站著也在走路。 |
-| `enemy02-table-32-32.png` | 32×32 **× 2 格** | **RAMMER ＋ SHIELD_ROBOT 共用**（2026-08-20，取代原本借用的單張 `enemy02.png`，該檔已刪）。**1=待機／2=移動**。<br>★ RAMMER 是 `CHASE`，換幀走 `anim_idle_move`；待機格會在它**放棄追擊、回到出生點停下**時出現。 |
+| `enemy02-table-32-32.png` | 32×32 **× 2 格** | **SHIELD_ROBOT 專屬**（2026-09-22 起 RAMMER 改用 enemy05）（2026-08-20，取代原本借用的單張 `enemy02.png`，該檔已刪）。**1=待機／2=移動**。<br>★ RAMMER 是 `CHASE`，換幀走 `anim_idle_move`；待機格會在它**放棄追擊、回到出生點停下**時出現。 |
 
 ✅ **2026-08-20 補完：BASIC 與 PHANTOM 已改成走走停停**（使用者拍板）。
 原本的 `MOVE FORWARD/BACK` 是持續移動、從不停下，待機格一次都不會出現；
@@ -260,14 +260,14 @@ y=240 └───────────────────────�
 | `BASIC_ENEMY` | BASIC TRAINER UNIT | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 走路動畫（停=1／動=2） |
 | `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy01-table-38-32.png` | 38×32 | 2 | 同上　🟡 **暫代**（借 BASIC） |
 | `BOMBER_ENEMY` | BOMBER | CHASE | `enemy03-table-32-32.png` | 32×32 | 5 | 待機 1／走路 2↔3／倒數 4↔5（`walk_frames`＋`warn_frames`） |
-| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy02-table-32-32.png` | 32×32 | 2 | `anim_idle_move`（停=1／動=2）。<br>🟡 **暫時與 SHIELD_ROBOT 共用** —— 專屬圖製作中，到位後改指新檔即可 |
+| `RAMMER_ENEMY` | RAMMER | CHASE | `enemy05-table-40-32.png` | 40×32 | 3 | 待機與移動都是第 1 格；**撞到機體時播一次 2→3**（`push_frames`） |
 | `HEAVY_ENEMY` | HEAVY ARMOR UNIT | IMMOBILE | `enemy2.png` | 32×32 | 1 | 靜態（與 SWORD 共用同一張） |
 | `SWORD_ENEMY` | SWORD UNIT | IMMOBILE | `enemy2.png` ＋ `enemy2_sword.png`(48×16) | 32×32 | 1 | 劍是獨立圖，繞軸心旋轉 |
 | `WALKER_ENEMY` | WALKER UNIT | MOVE_PAUSE | `enemy04-table-40-32.png` | 40×32 | 3 | 走路動畫（停=1／動=2~3 循環） |
 | `JUMP_ENEMY` | JUMP UNIT | JUMP | `enemy_jump-table-32-32.png` | 32×32 | 3 | 依跳躍狀態指定幀 |
 | `DRONE` | DRONE | AERIAL | `enemy_drone-table-32-32.png` | 32×32 | 6 | `anim_fps = 12`（旋翼無條件循環） |
 | `WALL_ENEMY` | CRAWLER | WALL | `enemy_drone-table-32-32.png` | 32×32 | 6 | 同上　🟡 **暫代**（借 DRONE） |
-| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `enemy02-table-32-32.png` ＋ 盾 `shield.png`(16×32) | 32×32 | 2 | **走路循環 1↔2**（`anim_walk_cycle`，6fps），**站立與走路共用第 1 格**。<br>★ 舉盾時不動＝停在第 1 格、收盾移動＝走路循環，換幀直接對應狀態。<br>⚠️ 本體圖目前**與 RAMMER 共用**，RAMMER 的專屬圖製作中 |
+| `SHIELD_ROBOT` | SHIELD ROBOT | SHIELD_MOVEMENT | `enemy02-table-32-32.png` ＋ 盾 `shield.png`(16×32) | 32×32 | 2 | **走路循環 1↔2**（`walk_frames={1,2}`，6fps），**站立與走路共用第 1 格**。<br>★ 舉盾時不動＝停在第 1 格、收盾移動＝走路循環，換幀直接對應狀態 |
 | `MINE` | MINE | IMMOBILE | `mine-table-32-16.png` | 32×16 | 3 | 1=本體／2・3=警示燈交替 |
 
 ### BOSS（roster 5 個名額，已用 3 個）
@@ -300,6 +300,7 @@ y=240 └───────────────────────�
 | `idle_frame` | 停著時的格 | 預設 1 |
 | `walk_frames` | 移動時循環的格，速度看 `walk_fps` | RAMMER 不設（＝固定第 2 格）／SHIELD `{1,2}`（站立與走路共用）／BOMBER `{2,3}` |
 | `warn_frames` | 自爆倒數時交替的格，速度看 `warn_blink_speed`。★ **換掉本體**，不是疊在上面 | BOMBER `{4,5}` |
+| `push_frames` | 衝擊命中時**播一次**的格（one-shot），速度看 `push_fps`。播完回到 idle／walk | RAMMER `{2,3}` |
 
 ★ 為什麼要明確列格號：「整張表循環」表達不了「只循環 2~3」——
 BOMBER 的第 4~5 格是倒數格，整張循環的話走路時會閃出倒數圖。

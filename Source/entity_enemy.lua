@@ -81,6 +81,11 @@ function Enemy:init(x, y, type_id, ground_y)
         walk_frames      = data.walk_frames,
         warn_frames      = data.warn_frames,
         warn_blink_speed = data.warn_blink_speed,
+        -- [[ 2026-09-22 ]] 衝擊敵人撞到機體時**播一次**的格（例 RAMMER {2,3}）。
+        -- ★ 是一次性（one-shot），不是循環：播完就回到 idle／walk 的格。
+        --   觸發點在 entity_controller 的 RAM 命中分支（設 push_anim_t = 0）。
+        push_frames      = data.push_frames,
+        push_fps         = data.push_fps,
         anim_prev_x = nil,              -- 上一幀的 x（用來判斷有沒有移動）
         anim_move_hold = 0,             -- 移動狀態的殘留時間（避免單幀停頓造成閃爍）
         anim_frame = 1, anim_timer = 0,
@@ -621,7 +626,21 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         local n = self.imagetable:getLength() or 1
         local moving = ((self.anim_move_hold or 0) > 0) and n > 1
         local want
-        if self.warn_frames and self.is_triggered and not self.is_exploded then
+        -- ⓪ 推擊（一次性）：撞到機體那一刻由 controller 啟動，播完 push_frames 就結束。
+        --   ★ 優先權最高 —— 撞擊時它仍在「移動」狀態，不先判斷的話會被走路格蓋掉。
+        if self.push_frames and self.push_anim_t then
+            local step = 1 / (self.push_fps or 8)
+            local i = math.floor(self.push_anim_t / step) + 1
+            if i <= #self.push_frames then
+                want = self.push_frames[i]
+                self.push_anim_t = self.push_anim_t + dt
+            else
+                self.push_anim_t = nil      -- 播完一次，下面照常選格
+            end
+        end
+        if want then
+            -- 推擊動畫進行中，已經選好格了
+        elseif self.warn_frames and self.is_triggered and not self.is_exploded then
             -- ① 自爆倒數：**換掉本體圖**。優先於移動／待機（倒數時本來就停住不動）。
             -- ★ 不走 drawMineExplosion 的「疊燈」—— BOMBER 的倒數格是**整隻身體**，
             --   疊在第 1 格上面會透出不重疊的那幾 px（第 5 格與第 1 格只重疊 95%）。
