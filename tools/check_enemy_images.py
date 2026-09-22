@@ -123,6 +123,9 @@ for tid, body in blocks(read("Source/enemy_data.lua")):
     pf = field(body, r"push_frames = \{([^}]*)\}")
     if pf:
         anim.append("push[" + pf.replace(" ", "") + "]")
+    sf = field(body, r"shield_frame = (\d+)")
+    if sf:
+        anim.append("shield[" + sf + "]")
     note = ("%d 格" % frames if frames else "") + (" · " + ",".join(anim) if anim else "")
     print("%-16s %-22s %-16s %-30s %-8s %s" % (tid, name, move, fn or ("缺圖→" + str(ref)), spec, note))
     # 附屬圖（劍 / 盾）

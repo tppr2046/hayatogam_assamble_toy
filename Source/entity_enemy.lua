@@ -86,6 +86,11 @@ function Enemy:init(x, y, type_id, ground_y)
         --   觸發點在 entity_controller 的 RAM 命中分支（設 push_anim_t = 0）。
         push_frames      = data.push_frames,
         push_fps         = data.push_fps,
+        -- [[ 2026-09-22 ]] 盾牌機器人**舉盾時**顯示的格（例 SHIELD_ROBOT 2）。
+        --   看的是 shield_raised 這個狀態，不是有沒有移動。
+        shield_frame     = data.shield_frame,
+        -- 盾已經畫進本體圖裡了 → 不要再另外疊畫 shield_image（否則會出現兩面盾）
+        shield_in_sprite = data.shield_in_sprite,
         anim_prev_x = nil,              -- 上一幀的 x（用來判斷有沒有移動）
         anim_move_hold = 0,             -- 移動狀態的殘留時間（避免單幀停頓造成閃爍）
         anim_frame = 1, anim_timer = 0,
@@ -640,6 +645,9 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         end
         if want then
             -- 推擊動畫進行中，已經選好格了
+        elseif self.shield_frame and self.shield_raised then
+            -- 舉盾：固定這一格（舉盾期間本來就不移動）
+            want = self.shield_frame
         elseif self.warn_frames and self.is_triggered and not self.is_exploded then
             -- ① 自爆倒數：**換掉本體圖**。優先於移動／待機（倒數時本來就停住不動）。
             -- ★ 不走 drawMineExplosion 的「疊燈」—— BOMBER 的倒數格是**整隻身體**，
@@ -1625,7 +1633,9 @@ function Enemy:draw(camera_x)
     end
     
     -- 繪製盾牌（盾牌機器人）
-    if self.type_id == "SHIELD_ROBOT" and self.shield_raised then
+    -- ★ [[ 2026-09-22 ]] `shield_in_sprite`：新圖 enemy06 已把盾畫進第 2 格，
+    --   再疊一張 shield.png 就會出現兩面盾。擋子彈的判定框（shield_*）不受影響。
+    if self.type_id == "SHIELD_ROBOT" and self.shield_raised and not self.shield_in_sprite then
         local shield_x = screen_x + self.shield_offset_x
         local shield_y = draw_y + self.shield_offset_y
         -- [[ 2026-08-12 ]] 有 shield.png 就畫圖，否則退回舊的黑底白框。

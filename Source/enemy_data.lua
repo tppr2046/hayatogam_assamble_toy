@@ -134,19 +134,23 @@ return {
         projectile_speed_mult = 25,
         projectile_grav_mult = 15,
         fire_cooldown = 1.5,
-        -- 敵人圖片。2026-08-07 由 enemy1 改成 enemy02；
-        -- 2026-08-20 起 enemy02 變成 **enemy02-table-32-32.png（2 格：1=待機 2=移動）**，
-        -- ★ 2026-09-22 起 RAMMER 改用自己的 enemy05，enemy02 **又回到 SHIELD_ROBOT 專屬**。
-        -- ★ 2026-09-21 補上 anim_idle_move：盾牌機器人**舉盾時不動、收盾時才移動**，
-        --   所以換幀直接對應「舉盾＝待機格／收盾移動＝移動格」，不必另外寫條件。
-        --   （沒有這個欄位時它永遠停在第 1 格 —— 就是「移動時沒有播放行走動作」的原因。）
-        image = "images/enemy02",
+        -- [[ 2026-09-22 ]] 專屬圖改為 **enemy06-table-32-32.png（2 格）**：
+        --   1＝待機**與**移動（同一格）　2＝舉盾
+        -- ★ 換幀看的是**舉盾狀態**（shield_raised），不是有沒有移動：
+        --   舉盾時固定第 2 格；收盾時不論站著或走路都是第 1 格。
+        -- ★ 盾已經畫進第 2 格了 → shield_in_sprite = true，**不再另外疊畫 shield.png**。
+        -- ★ 面向左（頭、眼、手臂都在左側），與素材基準朝向一致 → 不需要 flip_x。
+        -- （enemy02 是舊圖，已無讀取端）
+        image = "images/enemy06",
         anim_idle_move = true,
-        -- [[ 2026-09-21 ]] 行走時**循環第 1↔2 格**（站立與走路共用第 1 格）。
-        walk_frames = { 1, 2 },
-        walk_fps = 6,
-        bullet_offset_x = 4,
-        bullet_offset_y = 6
+        idle_frame   = 1,
+        walk_frames  = { 1 },
+        shield_frame = 2,
+        shield_in_sprite = true,
+        -- 子彈從**頭部小圓的圓心**發射。量自 enemy06 第 1 格：
+        --   圓環 x11~15 / y6~10，圓心 (13, 8)。座標以「面向左」量，面向右時程式會自動鏡射。
+        bullet_offset_x = 13,
+        bullet_offset_y = 8
     },
 
     -- [[ 2026-08-12 ]] 本切片最後一種新敵人。行為＝BASIC 的變體：
@@ -212,9 +216,8 @@ return {
         projectile_speed_mult = 30,
         projectile_grav_mult = 0.2,
         fire_cooldown = 1.0,
-        -- 🟡 **暫代圖**：現在沿用 BASIC 的 enemy01。
-        -- ★ 2026-09-21 拍板：**PHANTOM 要有自己的圖**（先前這裡寫「不需要專屬圖」已作廢）——
-        --   它現身只有 1.5 秒，跟 BASIC 長一樣的話玩家分不出「這隻會消失」。
+        -- ★ 2026-09-22 拍板：**維持沿用 BASIC 的 enemy01，不另外畫**（09-21 曾決定要畫，已撤回）。
+        --   辨識度交給切換瞬間的 glitch 效果（見 entity_enemy 的 drawGlitched）。
         -- [[ 2026-08-20 換圖 ]] 由舊的單張圖改為 **enemy01-table-38-32.png（2 格）**。
         -- 第 1 格＝待機、第 2 格＝移動。換幀由 **MOVE_PAUSE 自己的走路動畫**負責，
         -- 所以**不設** `anim_idle_move`（兩邊都寫 self.image 就成了兩個計算點）。
