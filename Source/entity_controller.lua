@@ -1213,7 +1213,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                 elseif enemy.attack_type == "CONTACT" then
                     -- 接觸傷害（一次性）
                     if not enemy.has_hit_player then
-                        mech_damage_taken = mech_damage_taken + enemy.attack
+                        mech_damage_taken = mech_damage_taken + (enemy.attack or 0)
                         enemy.has_hit_player = true
                     end
                 elseif enemy.attack_type == "EXPLODE" then
@@ -1227,7 +1227,9 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     end
                 else
                     -- 持續傷害
-                    mech_damage_taken = mech_damage_taken + enemy.attack * dt
+                    -- ★ `or 0`：BOSS 的手臂代理等「不是用接觸傷害打人」的實體可能沒有 attack。
+                    --   沒有這個防呆的話一碰到就是 nil 做算術，整個 update 崩掉（2026-09-23 實際發生）。
+                    mech_damage_taken = mech_damage_taken + (enemy.attack or 0) * dt
                 end
             else
                 enemy.has_hit_player = false  -- 離開碰撞範圍後重置

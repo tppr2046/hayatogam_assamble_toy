@@ -38,6 +38,13 @@ local function makeArmProxy(boss, arm)
         arm = arm,
         x = arm.x, y = arm.y, width = arm.w, height = arm.h,
         hp = arm.hp,
+        -- ★★ 2026-09-23 必填：controller 的接觸傷害分支會讀 `attack`，
+        --   沒有這個欄位就是 **nil 做算術 → 整個 update 崩潰**
+        --   （新圖的手臂下段垂到地面，玩家走過去一定會碰到，所以一定會走進那條分支）。
+        -- ★ 預設 0＝**碰到不扣血**：手臂靠砸擊打人，那一招有預告、有落點、閃得掉；
+        --   站著不動就被持續扣血是沒有預告的傷害，玩家只會覺得莫名其妙。
+        --   要讓它變成「碰到就痛」的話，在 boss_data 的 arms 填 contact_damage。
+        attack = (boss.boss_data and boss.boss_data.arms and boss.boss_data.arms.contact_damage) or 0,
         is_alive = true,
         is_exploding = false,
         hit_shake_timer = 0, hit_shake_offset_x = 0,
