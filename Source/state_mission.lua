@@ -1240,10 +1240,16 @@ function StateMission.draw()
     gfx.setFont(font)
     
     -- 計算畫面震動偏移
-    local shake_offset = 0
+    -- ★★ 2026-09-23 使用者拍板：改成**上下**搖（原本是左右）。
+    --   上下沒辦法沿用舊做法 —— 舊的是把位移加進 camera_x 傳給各繪製端，
+    --   但繪製端的 y 是**絕對座標**，沒有一個等價的參數可以加。
+    --   → 改用 `setDrawOffset`：整個世界圖層一起平移，一行搞定，
+    --     而且新增的繪製自動跟著震，不必記得每個地方都加一次位移。
+    --   ⚠️ 只包住世界圖層 —— 畫完要立刻歸零，否則 HUD／操作面板也會跟著跳。
+    local shake_y = 0
     if camera_shake_timer < camera_shake_duration then
-        -- 正弦波震動：產生左右搖晃（增加頻率到20以加快震動）
-        shake_offset = math.sin(camera_shake_timer * math.pi * 20) * camera_shake_intensity
+        -- 正弦波震動（頻率 20＝夠快，看得出是震動而不是漂移）
+        shake_y = math.sin(camera_shake_timer * math.pi * 20) * camera_shake_intensity
     end
     
     -- 若對話中，先繪製對話畫面
@@ -1270,9 +1276,12 @@ function StateMission.draw()
         return
     end
 
-    -- 1. 繪製實體 (地面、障礙物、敵人) - 應用震動偏移
+    -- [[ 震動 ]] 世界圖層整體上下平移（HUD 不在這個範圍內 —— 見下面的歸零）
+    if shake_y ~= 0 then gfx.setDrawOffset(0, shake_y) end
+
+    -- 1. 繪製實體 (地面、障礙物、敵人)
     if entity_controller then
-        entity_controller:draw(camera_x + shake_offset) 
+        entity_controller:draw(camera_x) 
     end
 
     -- 2. 繪製機甲（使用 MechController）或爆炸動畫
@@ -1303,19 +1312,22 @@ function StateMission.draw()
                 local ok, fw, fh = pcall(function() return frame:getSize() end)
                 fw = (ok and fw) or 50
                 fh = (ok and fh) or 50
-                local cx = mech_x + mech_draw_w / 2 - camera_x + shake_offset
+                local cx = mech_x + mech_draw_w / 2 - camera_x
                 local cy = mech_y + mech_draw_h / 2
                 pcall(function() frame:draw(cx - fw / 2, cy - fh / 2) end)
             end
         end
     elseif mech_controller then
-        mech_controller:drawMech(mech_x + shake_offset, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
+        mech_controller:drawMech(mech_x, mech_y, camera_x, _G.GameState.mech_grid, _G.GameState, feet_imagetable, feet_current_frame, entity_controller)
     end
 
     -- 2.5 [[ 前景層 ]] 畫在機體之上、HUD/操作面板之下（會擋住玩家，不會擋住 UI）
     if entity_controller and entity_controller.drawForeground then
-        entity_controller:drawForeground(camera_x + shake_offset)
+        entity_controller:drawForeground(camera_x)
     end
+
+    -- [[ 震動 ]] 世界圖層畫完 → 立刻歸零，之後的 HUD／BOSS 血條／操作面板都不震
+    if shake_y ~= 0 then gfx.setDrawOffset(0, 0) end
 
     -- 3. [[ 版面 ]] 玩家血條已移到下方操作面板右側，成為面板的一部分
     --    （見「4. 繪製控制介面 UI」）。原本在左上角，會與 BOSS 血條的白底重疊
