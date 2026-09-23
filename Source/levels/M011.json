@@ -98,14 +98,7 @@
    ],
    "obstacles": [],
    "stones": [
-    {
-     "x": 600,
-     "y": 0
-    },
-    {
-     "x": 650,
-     "y": 0
-    }
+
    ],
    "delivery_targets": [],
    "weapons": [
