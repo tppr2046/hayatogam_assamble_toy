@@ -100,7 +100,7 @@ y=240 └───────────────────────�
 | **FEET** | `feet.png`（48×20）+ `feet_walk-table-48-20.png`（4 格） | 2026-08-07 改矮 |
 | **爆炸特效** | `mine_explode-table-50-50.png`（3 格） | 2026-08-07 重繪。地雷／敵人死亡／BOSS 死亡共用 |
 | **飛行敵人 DRONE** | `enemy_drone-table-32-32.png`（6 格） | 2026-08-09 專屬圖，`anim_fps = 12` |
-| **揮劍敵人 SWORD** | `enemy2.png`（32×32）+ `enemy2_sword.png`（48×16） | 2026-08-10 重繪。身體 40→32 高;劍軸心重量測（見 §6.5 #40） |
+| **揮劍敵人 SWORD** | `enemy2.png`（32×32）+ `enemy2_sword.png`（48×16） | 2026-08-10 重繪。身體 40→32 高;劍軸心重量測（見 §6.5 #40）。★ 2026-09-23 起 `enemy2` **只有 SWORD 在用**（HEAVY 已改 `enemy08`） |
 | **地雷 MINE** | `mine-table-32-16.png`（3 格） | 2026-08-10 由單張改 3 格:本體＋警示燈閃爍（見 §6.5 #41） |
 | **CLAW 開合開關鈕** | `claw-button-table-32-32.png`（2 格） | 2026-08-10 取代佔位圖。**1=開 / 2=夾起**（見 §6.5 #42） |
 | **盾牌（SHIELD_ROBOT）** | ~~`shield.png`（16×32）~~ | ⚠️ 2026-09-22 起**不再使用**（盾已畫進 enemy06 第 2 格，`shield_in_sprite`）。檔案保留給未來不畫盾的變體。`shield_*` 現在只是擋彈判定框 |
@@ -171,7 +171,8 @@ y=240 └───────────────────────�
 ### C. 敵人 —— ✅ **全部都有自己的圖了**（2026-09-22；BOMBER／RAMMER／SHIELD／CRAWLER 已完成，PHANTOM 改用 enemy02）
 
 > 獨佔自己圖的只有 WALKER／JUMP／MINE 三隻。
-> `enemy2`（HEAVY ARMOR ＋ SWORD UNIT）是**原本就設計成共用**的同底盤，不在待畫之列。
+> ~~`enemy2`（HEAVY ARMOR ＋ SWORD UNIT）是原本就設計成共用的同底盤~~ →
+> 2026-09-23 起 **HEAVY 改用專屬圖 `enemy08`**，`enemy2` 現在只剩 SWORD UNIT 在用。
 > ★ 命名照 §0 的慣例：`<名稱>-table-<單格寬>-<單格高>.png`。尺寸可自訂 ——
 > **命中框是讀圖算的**，不是寫死的，換圖不必改程式。
 
@@ -183,6 +184,7 @@ y=240 └───────────────────────�
 
 | 檔名 | 規格 | 說明 |
 |---|---|---|
+| `enemy08-table-32-32.png` | 32×32 **× 3 格** | **HEAVY ARMOR UNIT 專屬圖**（2026-09-23，取代與 SWORD 共用的 `enemy2`）。1＝待機　2~3＝走路循環。<br>★ 同時改玩法：從不會動的 `IMMOBILE` 改成**走走停停** `MOVE_PAUSE`，攻擊由沒有實作的 `SWING ATTACK` 改成 `FIRE BULLET`。<br>★ 走路動畫由 MOVE_PAUSE 分支自己控制，**不要設 anim_fps**。`walk_fps = 6`（比 WALKER 慢，配合重量感）。<br>★ 子彈從頭部砲管口 (4, 4) 射出（砲管 x4~7 / y3~5），只在**停下時**開火，間隔 3 秒。 |
 | `enemy07-table-32-32.png` | 32×32 **× 3 格** | **CRAWLER 專屬圖**（2026-09-22，取代借用的 DRONE 圖）。頂面朝向，面向左＝頭在左、抓牆的腳在右。1＝待機（端點停頓）　2~3＝爬行循環。<br>★ 走 `anim_idle_move`，移動判定看 x **或 y**（它是上下爬）。<br>★ 原本的 `anim_fps=12` 已拿掉 —— 停頓時也會划腳。<br>★ 子彈從頭部尖端 (7, 16) 射出。 |
 | `enemy06-table-32-32.png` | 32×32 **× 2 格** | **SHIELD ROBOT 新圖**（2026-09-22，取代 enemy02）。1＝待機**與**移動　2＝舉盾。<br>★ 換幀看**舉盾狀態**（`shield_frame`），不是看有沒有移動。<br>★ 盾畫進第 2 格了 → `shield_in_sprite`，**不再另外疊 shield.png**。<br>★ 第 2 格的盾是**整面 16×32**（x0~15 / y0~31，2026-09-22 改圖）→ 擋彈判定框 `shield_*` 對齊它：offset (0,0)、16×32。面向右時由 `Enemy:shieldBox` 自動鏡射。<br>★ 子彈從頭部小圓的圓心 (13, 8) 射出（圓環 x11~15 / y6~10）。 |
 | `enemy05-table-40-32.png` | 40×32 **× 3 格** | **RAMMER 專屬圖**（2026-09-22）。1＝待機**與**移動　2~3＝撞到機體時**播一次**（推板沿伸縮桿推出）。<br>★ 推板在圖的左側＝面向左（基準朝向），不需要 `flip_x`。圖寬 32→40，命中框跟著變寬。 |
@@ -262,7 +264,7 @@ y=240 └───────────────────────�
 | `STEALTH_ENEMY` | PHANTOM | MOVE_PAUSE | `enemy02-table-32-32.png` | 32×32 | 2 | 走路動畫（停=1／動=2）＋切換時 glitch |
 | `BOMBER_ENEMY` | BOMBER | CHASE | `enemy03-table-32-32.png` | 32×32 | 5 | 待機 1／走路 2↔3／倒數 4↔5（`walk_frames`＋`warn_frames`） |
 | `RAMMER_ENEMY` | RAMMER | CHASE | `enemy05-table-40-32.png` | 40×32 | 3 | 待機與移動都是第 1 格；**撞到機體時播一次 2→3**（`push_frames`） |
-| `HEAVY_ENEMY` | HEAVY ARMOR UNIT | IMMOBILE | `enemy2.png` | 32×32 | 1 | 靜態（與 SWORD 共用同一張） |
+| `HEAVY_ENEMY` | HEAVY ARMOR UNIT | MOVE_PAUSE | `enemy08-table-32-32.png` | 32×32 | 3 | 走路動畫（停=1／動=2↔3），停下才開火 |
 | `SWORD_ENEMY` | SWORD UNIT | IMMOBILE | `enemy2.png` ＋ `enemy2_sword.png`(48×16) | 32×32 | 1 | 劍是獨立圖，繞軸心旋轉 |
 | `WALKER_ENEMY` | WALKER UNIT | MOVE_PAUSE | `enemy04-table-40-32.png` | 40×32 | 3 | 走路動畫（停=1／動=2~3 循環） |
 | `JUMP_ENEMY` | JUMP UNIT | JUMP | `enemy_jump-table-32-32.png` | 32×32 | 3 | 依跳躍狀態指定幀 |
@@ -288,7 +290,7 @@ y=240 └───────────────────────�
 | 方式 | 何時用 | 停著時 | 移動時 |
 |---|---|---|---|
 | `anim_fps = N` | 無條件循環（旋翼） | **也在動** —— 有「停下」概念的敵人不要用 | 循環整張表 |
-| `MOVE_PAUSE` 內建走路動畫 | 走走停停型（BASIC／PHANTOM／WALKER） | 第 1 格 | **第 2 格起**循環（第 1 格是專用站立格，不參與走路） |
+| `MOVE_PAUSE` 內建走路動畫 | 走走停停型（BASIC／PHANTOM／WALKER／HEAVY） | 第 1 格 | **第 2 格起**循環（第 1 格是專用站立格，不參與走路） |
 | `anim_idle_move = true` ＋ 格號表 | 其他會移動的型別（CHASE／SHIELD／WALL…）。移動＝這一幀 x **或 y** 有變 | `idle_frame`（預設 1） | 循環 `walk_frames`（預設 `{2}`＝固定第 2 格） |
 
 `anim_idle_move` 的**格號表**（2026-09-21 取代先前的 `anim_walk_cycle`）：

@@ -40,12 +40,29 @@ return {
         -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（最硬＝最值錢）
         drop = { steel = {4, 6} },
         name = "HEAVY ARMOR UNIT", hp = 80, attack = 10, 
-        move_type = "IMMOBILE", attack_type = "SWING ATTACK",
-        -- 敵人圖片
-        image = "images/enemy2",
-        -- 子彈發射位置
+        -- ★ 2026-09-23 改版（使用者拍板）：
+        --   ① 不再是固定砲台 —— 改成**走走停停**（MOVE_PAUSE），配合 enemy08 的走路格。
+        --   ② `attack_type` 由 `"SWING ATTACK"` 改為 `"FIRE BULLET"`。
+        --      ⚠️ `"SWING ATTACK"` **程式裡從來沒有對應分支** —— 也就是說改版前
+        --      這隻其實完全不會攻擊，只是一塊 80 血的路障。
+        move_type = "MOVE_PAUSE", attack_type = "FIRE BULLET",
+        -- 移動／停頓的循環（秒）。★ 最硬的敵人＝最慢，壓迫感來自推進而不是速度
+        move_duration = 2.0,
+        pause_duration = 2.0,
+        move_speed = 16,              -- ★ 比 BASIC(20) 還慢
+        move_range = 70,
+        -- ★ 只在停下時開火（與 WALKER 同一條規則：移動中不攻擊）
+        fire_only_when_stopped = true,
+        fire_cooldown = 3.0,          -- 重砲節奏，玩家有時間走位
+        projectile_speed_mult = 26,
+        projectile_grav_mult = 16,
+        -- ★ 2026-09-23 專屬圖 **enemy08-table-32-32.png（3 格）**，取代與 SWORD 共用的 enemy2。
+        --   1＝待機　2~3＝走路循環（換幀由 MOVE_PAUSE 分支自己控制，**不要設 anim_fps**）。
+        image = "images/enemy08",
+        walk_fps = 6,                 -- 比 WALKER(8) 慢，配合它的重量感
+        -- 子彈從**頭部砲管口**射出（第 1 格砲管 x4~7 / y3~5 → 取 (4, 4)）
         bullet_offset_x = 4,
-        bullet_offset_y = 6
+        bullet_offset_y = 4
     },
     
     ["JUMP_ENEMY"] = {
