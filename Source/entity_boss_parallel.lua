@@ -58,6 +58,70 @@ local function makeArmProxy(boss, arm)
 end
 
 -- ==========================================================================
+-- 五部位組裝（rig）—— 2026-09-23 COLOSSUS 新圖
+-- ==========================================================================
+--
+-- ★★ 為什麼要把每一格「裁出來」：整格是 110×102、部位只佔其中一小塊。
+--   要繞白點旋轉就得用 drawRotated，而它是**繞圖片中心轉**的 ——
+--   所以旋轉件要裁成「軸心正好在中心」的小圖（與 BOSS1 的 aim_imgs 同一招）。
+-- ★ 不旋轉的件（本體／腿／下段）維持整格原位貼上，位置自然就對，不必填偏移。
+-- ★ 左側一律是右側的水平鏡射：鏡射版在載入時就做好一份，
+--   **不要在繪製時每幀轉換**（drawRotated 吃不到 flip 參數）。
+
+-- 把整格原封不動複製一份（可選鏡射）。回傳 110×102 的圖，畫在本體原點即可。
+local function rigWholeCell(sheet, cell, mirrored, w, h)
+    local src = sheet:getImage(cell)
+    if not src then return nil end
+    local ok, buf = pcall(function() return gfx.image.new(w, h) end)
+    if not (ok and buf) then return nil end
+    gfx.pushContext(buf)
+    gfx.clear(gfx.kColorClear)
+    src:draw(0, 0, mirrored and gfx.kImageFlippedX or gfx.kImageUnflipped)
+    gfx.popContext()
+    return buf
+end
+
+-- 把某一格裁成「軸心置中」的方形小圖，供 drawRotated 繞軸心旋轉。
+-- ★ size 只要蓋得住「軸心到部位最遠端」即可 —— 伸縮是**畫的時候**才套的縮放，
+--   不影響這張緩衝圖的大小。
+local function rigPivotCell(sheet, cell, pivot_x, pivot_y, mirrored, span, size)
+    local src = sheet:getImage(cell)
+    if not src then return nil end
+    local ok, buf = pcall(function() return gfx.image.new(size, size) end)
+    if not (ok and buf) then return nil end
+    -- 鏡射後軸心的 x 也要跟著鏡射，否則轉軸會跑到另一邊
+    local px = mirrored and ((span - 1) - pivot_x) or pivot_x
+    gfx.pushContext(buf)
+    gfx.clear(gfx.kColorClear)
+    src:draw(-(px - size / 2), -(pivot_y - size / 2),
+             mirrored and gfx.kImageFlippedX or gfx.kImageUnflipped)
+    gfx.popContext()
+    return buf
+end
+
+-- 載入 rig 的所有圖。沒有 rig 資料或載圖失敗 → 回傳 nil，繪製端自動退回舊的佔位畫法。
+local function buildRig(sheet, bd)
+    local r = bd.rig
+    if not (sheet and r) then return nil end
+    local span = r.mirror_span or bd.body_w or 110
+    local W, H = bd.body_w or 110, bd.body_h or 102
+    local rig = { span = span, data = r }
+    rig.legs   = { rigWholeCell(sheet, r.legs.cell, false, W, H),
+                   rigWholeCell(sheet, r.legs.cell, true,  W, H) }
+    rig.lower  = { rigWholeCell(sheet, r.arm_lower.cell, false, W, H),
+                   rigWholeCell(sheet, r.arm_lower.cell, true,  W, H) }
+    -- 旋轉件：肩的範圍小（64 夠），上段含伸縮前的長度也只有 32
+    rig.shoulder = { rigPivotCell(sheet, r.shoulder.cell, r.shoulder.pivot_x, r.shoulder.pivot_y, false, span, 80),
+                     rigPivotCell(sheet, r.shoulder.cell, r.shoulder.pivot_x, r.shoulder.pivot_y, true,  span, 80) }
+    rig.upper    = { rigPivotCell(sheet, r.arm_upper.cell, r.arm_upper.pivot_x, r.arm_upper.pivot_y, false, span, 80),
+                     rigPivotCell(sheet, r.arm_upper.cell, r.arm_upper.pivot_x, r.arm_upper.pivot_y, true,  span, 80) }
+    if not (rig.legs[1] and rig.lower[1] and rig.shoulder[1] and rig.upper[1]) then return nil end
+    -- 上段的自然長度＝兩個白點的距離。伸縮倍率就是「實際長度 ÷ 這個值」。
+    rig.upper_len = math.max(1, (r.arm_upper.joint_y or 45) - (r.arm_upper.pivot_y or 21))
+    return rig
+end
+
+-- ==========================================================================
 -- 初始化
 -- ==========================================================================
 
@@ -103,12 +167,26 @@ function Enemy:bossInitParallel(bd, ground_y)
     end
 
     -- 手臂圖（左右共用一套，右臂鏡射 —— §15.5a-7 的主要省圖點）
+    -- ★ 舊路徑：手臂是另一張 imagetable（boss2_arm）。新圖把手臂併進 boss2 的 5 格，
+    --   走下面的 rig；`ad.sprite` 沒填就不會進來，兩條路可以並存。
     if ad and ad.sprite then
         local ok, tbl = pcall(function() return gfx.imagetable.new(ad.sprite) end)
         if ok and tbl then self.arm_sheet = tbl end
     end
 
+    -- [[ 2026-09-23 ]] 五部位組裝（腿／肩／上段／下段＋鏡射版）
+    self.boss_rig = buildRig(self.boss_sheet, bd)
+    self.body_bob_t = 0
+    self.body_bob = 0
+
     self:bossSyncParallelBoxes()
+end
+
+-- 上半身的垂直位移：待機時的呼吸 ＋ 開火預告的下蹲。
+-- ★ 新圖沒有獨立的頭格 → 「頭下探」改成整個上半身往下蹲，腿不動。
+--   舊圖（有 cell/cell_fire 的 BOSS）不受影響：它們的 head_drop 一樣走這裡。
+function Enemy:bossBodyOffsetY()
+    return (self.body_bob or 0) + (self.head_drop or 0)
 end
 
 -- 把頭與手臂的世界座標／命中框對齊本體。**每幀都要叫**（頭會下探、手臂會動）。
@@ -117,8 +195,12 @@ function Enemy:bossSyncParallelBoxes()
     local head = self.boss_head or {}
     self.width  = head.w or 40
     self.height = head.h or 40
+    -- ★ bodyOffsetY＝上半身相對本體原點的位移（待機呼吸 ＋ 開火前的下蹲）。
+    --   **這是唯一計算點**：頭的命中框、手臂的命中框、繪製端都讀它，
+    --   各算一次的話就會出現「圖動了、判定沒動」（HANDOFF §3-5）。
+    local body_dy = self:bossBodyOffsetY()
     self.x = self.boss_x + (head.dx or 0)
-    self.y = self.boss_y + (head.dy or 0) + (self.head_drop or 0)
+    self.y = self.boss_y + (head.dy or 0) + body_dy
     if head.muzzle_x and head.muzzle_y then
         self.bullet_offset_x = head.muzzle_x - (head.dx or 0)
         self.bullet_offset_y = head.muzzle_y - (head.dy or 0)
@@ -130,7 +212,7 @@ function Enemy:bossSyncParallelBoxes()
     for i, arm in ipairs(self.arms or {}) do
         -- track_dx＝舉在上方時左右追著玩家移動的位移（見 bossAdvanceSlot 的 TELEGRAPH）
         arm.x = self.boss_x + arm.dx + (arm.track_dx or 0)
-        arm.y = self.boss_y + arm.dy + (arm.swing_dy or 0)
+        arm.y = self.boss_y + arm.dy + (arm.swing_dy or 0) + body_dy
         local p = self.arm_proxies[i]
         if p then p.x, p.y = arm.x, arm.y end
     end
@@ -197,6 +279,14 @@ function Enemy:bossUpdateParallel(dt, mech_x, mech_y, mech_width, mech_height, c
     local bd = self.boss_data
     local head = self.boss_head or {}
 
+    -- [[ 2026-09-23 待機呼吸 ]] 身體微幅上下緩慢移動（腿不動 —— 繪製端不套這個位移）。
+    -- ★ 放在最前面：下面有好幾個 early return，放後面會變成「出手時不呼吸」。
+    local bob = bd.rig and bd.rig.idle_bob
+    if bob then
+        self.body_bob_t = (self.body_bob_t or 0) + dt * (bob.speed or 0.8)
+        self.body_bob = math.sin(self.body_bob_t * math.pi * 2) * (bob.amp or 2.5)
+    end
+
     -- 進行中的動作：推進它的階段
     if self.attack_slot then
         self:bossAdvanceSlot(dt, mech_x, mech_y, controller)
@@ -231,6 +321,21 @@ function Enemy:bossUpdateParallel(dt, mech_x, mech_y, mech_width, mech_height, c
     if #candidates == 0 then
         self:bossSyncParallelBoxes()
         return
+    end
+
+    -- ★★ 2026-09-23：**兩隻手都能出手時，挑玩家那一側的那隻**。
+    --   各臂只追自己那一側（見 bossAdvanceSlot），所以錯邊的手根本打不到玩家 ——
+    --   隨機挑會變成一半的出手是空揮。
+    --   ★ 只在「手臂之間」做這個篩選；手與頭之間仍然是隨機（那是出手比重，交給冷卻）。
+    local arm_cands = {}
+    for _, c in ipairs(candidates) do if c.arm then table.insert(arm_cands, c) end end
+    if #arm_cands > 1 then
+        local player_left = (self.aim_mx or self.boss_x) < (self.boss_x + (self.boss_body_w or 110) / 2)
+        local keep = {}
+        for _, c in ipairs(candidates) do
+            if (not c.arm) or (c.arm.mirror == player_left) then table.insert(keep, c) end
+        end
+        if #keep > 0 then candidates = keep end
     end
 
     -- ★ 隨機挑一個 —— 不做優先權。手臂與頭用不同的冷卻長度來分配出手比重，
@@ -271,9 +376,19 @@ function Enemy:bossAdvanceSlot(dt, mech_x, mech_y, controller)
             if atk.track then
                 local half = (atk.track_range or self.boss_body_w or 130) / 2
                 -- ★ aim_mx/aim_my＝玩家中心，由 updateBoss 每幀算一次。
-                --   這裡不要自己用 mech_x 再算一次（那是左緣、不是中心）。
+                --   這裡不要自己用 mech_x 再算一次（那是左緣、不是中線）。
                 local want = (self.aim_mx or self.boss_x) - self.boss_x - arm.dx - arm.w / 2
-                if want > half then want = half elseif want < -half then want = -half end
+                -- ★★ 2026-09-23：**各臂只管自己那一側**（使用者拍板）。
+                --   手臂是掛在肩上的連桿，橫越身體的話上段會被拉成一條長桿橫在胸前，
+                --   下段還會跑到另一隻手那邊去（實際合成出來確認過）。
+                --   往內只留 track_inward 的餘裕，讓它還能稍微收回來一點。
+                --   ★ 涵蓋範圍沒有變小 —— 改由「玩家在哪一側就那隻手出拳」補上（見 bossUpdateParallel）。
+                local inward = atk.track_inward or 10
+                local lo, hi
+                if arm.mirror then lo, hi = -half, inward    -- 左臂：只往左
+                else               lo, hi = -inward, half    -- 右臂：只往右
+                end
+                if want > hi then want = hi elseif want < lo then want = lo end
                 local cur = arm.track_dx or 0
                 local step = (atk.track_speed or 90) * dt
                 local diff = want - cur
@@ -454,6 +569,14 @@ function Enemy:bossDrawParallel(camera_x)
     local by = self.boss_y
     local head = self.boss_head or {}
 
+    -- [[ 2026-09-23 五部位組裝 ]] 有 rig 就走這條，畫完直接把頭的佔位一起跳過。
+    if self.boss_rig then
+        self:bossDrawRig(bx, by, camera_x)
+        self:bossDrawWarn(bx, by, camera_x)
+        self:bossDrawRage(bx, by)
+        return
+    end
+
     -- 本體（上半身）
     local body_drawn = false
     if self.boss_sheet and bd.cell_body then
@@ -503,25 +626,7 @@ function Enemy:bossDrawParallel(camera_x)
         end
     end
 
-    -- [[ 發招預告 ]] 手臂舉在上方、追蹤停止的那一段：地面落點閃爍。
-    -- ★ 只用本專案已有先例的原語（fillRect / fillTriangle / drawLine），
-    --   1-bit 上先鋪白再畫黑，才不會被深色背景吃掉（§3-4）。
-    local slot = self.attack_slot
-    if slot and slot.phase == "WARN" and slot.arm then
-        local arm = slot.arm
-        local gx = arm.x - camera_x + arm.w / 2
-        local gy = (self.boss_ground_y or (by + self.boss_body_h))
-        local r = self:bossSlamRadius(arm, slot.atk)   -- 與命中判定同一個計算點
-        if (math.floor(playdate.getCurrentTimeMilliseconds() / 70) % 2) == 0 then
-            -- 震波範圍：地面上的一條粗線
-            g.setColor(g.kColorWhite); g.fillRect(gx - r, gy - 5, r * 2, 6)
-            g.setColor(g.kColorBlack); g.fillRect(gx - r, gy - 3, r * 2, 2)
-            -- 落點：向下的箭頭（與序列制的弱點提示同一種語彙）
-            local ay = gy - 30
-            g.setColor(g.kColorWhite); g.fillTriangle(gx - 9, ay - 11, gx + 9, ay - 11, gx, ay + 3)
-            g.setColor(g.kColorBlack); g.fillTriangle(gx - 7, ay - 9, gx + 7, ay - 9, gx, ay + 1)
-        end
-    end
+    self:bossDrawWarn(bx, by, camera_x)
 
     -- 頭（下探時整顆往下移；self.y 已經算進 head_drop，這裡直接用命中框座標畫）
     local hx = bx + (head.dx or 0)
@@ -553,11 +658,127 @@ function Enemy:bossDrawParallel(camera_x)
         g.setColor(g.kColorBlack)
     end
 
-    -- 狂暴提示：雙臂全爆後頭部持續閃動外框
-    if self:bossIsRaging() and (math.floor(playdate.getCurrentTimeMilliseconds() / 120) % 2) == 0 then
-        g.setColor(g.kColorBlack); g.setLineWidth(2)
-        g.drawRect(hx - 4, hy - 4, (head.w or 40) + 8, (head.h or 40) + 8)
-        g.setLineWidth(1)
+    self:bossDrawRage(bx, by)
+end
+
+-- [[ 發招預告 ]] 手臂舉在上方、追蹤停止的那一段：地面落點閃爍。
+-- ★ 抽成函式：舊的佔位畫法與新的 rig 都要用，只留一份。
+-- ★ 只用本專案已有先例的原語（fillRect / fillTriangle / drawLine），
+--   1-bit 上先鋪白再畫黑，才不會被深色背景吃掉（§3-4）。
+function Enemy:bossDrawWarn(bx, by, camera_x)
+    local g = gfx
+    local slot = self.attack_slot
+    if not (slot and slot.phase == "WARN" and slot.arm) then return end
+    local arm = slot.arm
+    local gx = arm.x - camera_x + arm.w / 2
+    local gy = (self.boss_ground_y or (by + self.boss_body_h))
+    local r = self:bossSlamRadius(arm, slot.atk)   -- 與命中判定同一個計算點
+    if (math.floor(playdate.getCurrentTimeMilliseconds() / 70) % 2) == 0 then
+        -- 震波範圍：地面上的一條粗線
+        g.setColor(g.kColorWhite); g.fillRect(gx - r, gy - 5, r * 2, 6)
+        g.setColor(g.kColorBlack); g.fillRect(gx - r, gy - 3, r * 2, 2)
+        -- 落點：向下的箭頭（與序列制的弱點提示同一種語彙）
+        local ay = gy - 30
+        g.setColor(g.kColorWhite); g.fillTriangle(gx - 9, ay - 11, gx + 9, ay - 11, gx, ay + 3)
+        g.setColor(g.kColorBlack); g.fillTriangle(gx - 7, ay - 9, gx + 7, ay - 9, gx, ay + 1)
+    end
+end
+
+-- 狂暴提示：雙臂全爆後頭部持續閃動外框（同樣兩條繪製路徑共用）
+function Enemy:bossDrawRage(bx, by)
+    if not self:bossIsRaging() then return end
+    if (math.floor(playdate.getCurrentTimeMilliseconds() / 120) % 2) ~= 0 then return end
+    local g = gfx
+    local head = self.boss_head or {}
+    local hx = bx + (head.dx or 0)
+    local hy = by + (head.dy or 0) + self:bossBodyOffsetY()
+    g.setColor(g.kColorBlack); g.setLineWidth(2)
+    g.drawRect(hx - 4, hy - 4, (head.w or 40) + 8, (head.h or 40) + 8)
+    g.setLineWidth(1)
+end
+
+-- ==========================================================================
+-- rig 繪製（腿／本體／肩／上段／下段，左右各一套）
+-- ==========================================================================
+--
+-- 疊圖順序：腿 → 本體 → 肩 → 上段 → 下段。
+-- ★ 下段畫最後 —— 它是會伸到身體前面來的那一截，被本體蓋住就看不出在動。
+-- ★ 腿**不套**身體位移：使用者拍板「待機時身體微幅上下、腿不動」。
+function Enemy:bossDrawRig(bx, by, camera_x)
+    local g = gfx
+    local rig = self.boss_rig
+    local r = rig.data
+    local body_dy = self:bossBodyOffsetY()
+
+    -- 腿（固定不動）
+    for i = 1, 2 do
+        local img = rig.legs[i]
+        if img then pcall(function() img:draw(bx, by) end) end
+    end
+
+    -- 本體（含呼吸與下蹲）
+    if self.boss_sheet and self.boss_data.cell_body then
+        local img = self.boss_sheet:getImage(self.boss_data.cell_body)
+        if img then pcall(function() img:draw(bx, by + body_dy) end) end
+    end
+
+    for _, arm in ipairs(self.arms or {}) do
+        if arm.alive then
+            local mi = arm.mirror and 2 or 1
+            -- 肩的轉軸（世界座標→螢幕座標）。鏡射的那隻軸心也要鏡射。
+            local px = r.shoulder.pivot_x
+            if arm.mirror then px = (rig.span - 1) - px end
+            local sx = bx + px
+            local sy = by + r.shoulder.pivot_y + body_dy
+
+            -- ★★ 下段的「接點」＝上段那顆下白點。下段會左右移動（track_dx）
+            --   與往下攻擊（swing_dy），接點就跟著跑 —— 上段要對準它。
+            --   ★ 讀 arm.x/arm.y（bossSyncParallelBoxes 算好的），不要用 dx 重算。
+            local anchor_local_x = r.arm_lower.anchor_x - r.arm_lower.x0
+            if arm.mirror then
+                anchor_local_x = (r.arm_lower.x1 - r.arm_lower.x0) - anchor_local_x
+            end
+            local ax = arm.x - camera_x + (self.hit_shake_offset_x or 0) + anchor_local_x
+            local ay = arm.y + (r.arm_lower.anchor_y - r.arm_lower.y0)
+
+            -- 上段：從肩的轉軸指向接點。長度超過自然長度就**沿著自己的軸伸長**
+            -- （使用者拍板：可伸縮，這樣才留得住 ±65 的追蹤範圍）。
+            local dx, dy = ax - sx, ay - sy
+            local len = math.sqrt(dx * dx + dy * dy)
+            -- ★ 角度以「垂直向下」為 0。drawRotated 的正角是**順時針**，
+            --   而順時針會把向下的軸轉向左邊 → 要往右擺就得給負角，所以這裡取負號。
+            local angle = -math.deg(math.atan(dx, dy))
+            local yscale = (len > 0) and (len / rig.upper_len) or 1
+
+            -- 肩：跟著上段轉，但夾在 ±max_angle 之內
+            local maxa = r.shoulder.max_angle or 45
+            local sa = math.max(-maxa, math.min(maxa, angle))
+            local simg = rig.shoulder[mi]
+            if simg then pcall(function() simg:drawRotated(sx, sy, sa) end) end
+
+            local uimg = rig.upper[mi]
+            if uimg then pcall(function() uimg:drawRotated(sx, sy, angle, 1, yscale) end) end
+
+            -- 下段：不旋轉，保持直立（它只左右移動與往下攻擊）
+            -- ★ 整格圖已經畫在自然位置上，所以只要補「相對自然位置的位移」：
+            --   左右＝track_dx、上下＝swing_dy + 身體位移。兩者都已含在 arm.x/arm.y 裡。
+            local limg = rig.lower[mi]
+            if limg then
+                local ox = arm.x - (self.boss_x + arm.dx)
+                local oy = arm.y - (self.boss_y + arm.dy)
+                pcall(function() limg:draw(bx + ox, by + oy) end)
+            end
+
+            -- 受擊閃爍（只閃下段＝命中框那一塊）
+            if arm.hit_flash and arm.hit_flash > 0 then
+                arm.hit_flash = arm.hit_flash - 1 / 30
+                if (math.floor(playdate.getCurrentTimeMilliseconds() / 50) % 2) == 0 then
+                    local hx = arm.x - camera_x + (self.hit_shake_offset_x or 0)
+                    g.setColor(g.kColorXOR); g.fillRect(hx, arm.y, arm.w, arm.h)
+                    g.setColor(g.kColorBlack)
+                end
+            end
+        end
     end
 end
 

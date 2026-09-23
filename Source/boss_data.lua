@@ -90,9 +90,35 @@ local bosses = {
         drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
         -- ★ 路徑先指好：檔案不存在時載入會失敗（pcall）→ 自動走程式繪製佔位，
         --   把圖放進 Source/images/ 重新編譯就生效，不必回來改資料。
-        sprite = "images/boss2",        -- boss2-table-130-150.png，3 格（本體／頭／頭-開火）
-        body_w = 130, body_h = 150,
+        -- ★ 2026-09-23 換上使用者的圖：**boss2-table-110-102.png，5 格**
+        --   1＝本體　2＝手臂上段　3＝腿　4＝手臂下段　5＝肩
+        --   ★★ 腿／肩／上段／下段**只畫右側**，左側由程式水平鏡射（§15.5a-7 的省圖點）。
+        --     每一格都畫在**組裝後的位置**上（與 BOSS1 的「各格原位對齊」同一個慣例），
+        --     所以格子裡的座標就是組裝座標，不必再填一組偏移。
+        sprite = "images/boss2",
+        body_w = 110, body_h = 102,
         cell_body = 1,
+
+        -- [[ 五部位組裝 ]] 座標都是**畫格內座標**（110×102）。
+        rig = {
+            -- 左右鏡射軸：畫格中線。鏡射後的 x = (mirror_span - 1) - x
+            mirror_span = 110,
+            legs     = { cell = 3, x0 = 61, y0 = 66, x1 = 82,  y1 = 101 },
+            -- 肩：跟著上段轉，但**轉動範圍只有約 45 度**（使用者拍板）
+            shoulder = { cell = 5, x0 = 79, y0 = 6,  x1 = 109, y1 = 37,
+                         pivot_x = 95, pivot_y = 21, max_angle = 45 },
+            -- 上段：連結肩與下段，**繞上面那個白點旋轉**。
+            -- ★ 兩個白點相距 24 px（(95,21)→(95,45)）＝它的自然長度。
+            --   下段被追蹤拉遠時會超過 24 → 上段沿著自己的軸**伸長**（使用者拍板：可伸縮）。
+            arm_upper = { cell = 2, x0 = 89, y0 = 17, x1 = 102, y1 = 49,
+                          pivot_x = 95, pivot_y = 21, joint_x = 95, joint_y = 45 },
+            -- 下段：會左右移動並往下攻擊。**不旋轉**（保持直立）。
+            -- ★ anchor＝接上段的那一點，與上段的下白點同一個位置。
+            arm_lower = { cell = 4, x0 = 83, y0 = 41, x1 = 107, y1 = 101,
+                          anchor_x = 95, anchor_y = 45 },
+            -- 待機時身體**微幅上下緩慢移動**，腿不動（使用者拍板）
+            idle_bob = { amp = 2.5, speed = 0.8 },
+        },
         move_speed = 0,                 -- ★ 固定不動（§15.5a-4 拍板）；戰場鎖定靠 scene.arena
         move_range = 0,
         trans_time = 0,
@@ -101,13 +127,17 @@ local bosses = {
         head = {
             label = "HEAD",
             hp = 140,
-            dx = 46, dy = 0, w = 40, h = 34,
-            muzzle_x = 46, muzzle_y = 22,     -- 朝左射出
-            cell = 2, cell_fire = 3,          -- 有圖時：平常／開火下探
+            -- ★ 2026-09-23：新圖的弱點是**中央臉部**（使用者拍板），量自第 1 格
+            dx = 50, dy = 14, w = 16, h = 18,
+            muzzle_x = 51, muzzle_y = 26,     -- 朝左射出（臉部左緣、凹槽中線）
+            -- ★ 新圖**沒有獨立的頭格** —— 臉是本體的一部分。
+            --   所以「下探」改成**整個上半身往下蹲**（本體＋肩＋雙臂一起，腿不動）。
+            --   命中框照舊吃 head_drop，機制完全沒變。
+            cell = nil, cell_fire = nil,
             -- ★★ 下探是這隻 BOSS 的關鍵設計（§15.5a-3）：
             --   既是「要開火了」的預告，也是**水平槍唯一打得到頭的窗口**。
             --   只帶 GUN 的配裝就靠這個窗口，才談得上「不限制零件」。
-            lower_dy = 26,
+            lower_dy = 16,                    -- ★ 新圖較矮（102 vs 150），下探距離跟著縮
             attack = { type = "VOLLEY", n = 1, cooldown = 2.6, telegraph = 0.9,
                        strike_time = 0.15, recover = 0.5,
                        damage = 6, speed_mult = 30, grav_mult = 18 },
@@ -118,12 +148,13 @@ local bosses = {
         -- 雙臂：可個別打爆，**不是**過關條件
         arms = {
             hp = 90,
-            sprite = "images/boss2_arm",  -- boss2_arm-table-30-100.png，2 格（待機／舉起）
-                                          -- ★ 左右共用一套，右臂由程式水平鏡射
-            w = 30, h = 100,
+            -- ★ 2026-09-23：手臂的圖併進 boss2 的 5 格裡（見上面的 rig），不再另外一張。
+            -- ★★ 命中框＝**只有下段**（使用者拍板）：會動、會砸下來的那一截才是弱點。
+            --   量自第 4 格：x83~107 / y41~101 → 25×61。左臂是它的鏡射（x2~26）。
+            w = 25, h = 61,
             mounts = {
-                { id = "ARM_L", label = "L-ARM", dx = 2,  dy = 40, mirror = false },
-                { id = "ARM_R", label = "R-ARM", dx = 98, dy = 40, mirror = true  },
+                { id = "ARM_L", label = "L-ARM", dx = 2,  dy = 41, mirror = true  },
+                { id = "ARM_R", label = "R-ARM", dx = 83, dy = 41, mirror = false },
             },
             -- 兩種攻擊**輪替**（打完換下一種），不是隨機 —— 玩家要學得起來節奏。
             attacks = {
@@ -132,8 +163,18 @@ local bosses = {
                 --   track_range＝約一個本體寬（130）→ 玩家跑出這個範圍就打不到，
                 --   「走位」因此是有效的解法；無限追蹤等於必中，那就沒得玩了。
                 --   warn＝追蹤停止後的發招預告（地面落點閃爍）＝玩家的反應窗口。
-                { type = "SLAM", cooldown = 3.2, telegraph = 0.9, raise = 28,
-                  track = true, track_range = 130, track_speed = 95, warn = 0.35,
+                -- ★ 2026-09-23 raise 28→10：新圖的上段只有 24 px 長，舉超過它的長度
+                --   接點就跑到肩軸**上方**，上段會翻過肩膀變成一根橫桿（合成確認過）。
+                { type = "SLAM", cooldown = 3.2, telegraph = 0.9, raise = 10,
+                  -- ★ 2026-09-23：track_range 仍是「兩隻手加起來」的涵蓋範圍，
+                  --   但**每隻手只往自己那一側追**，往內只留 track_inward 的餘裕。
+                  -- ★★ 2026-09-23 track_range 130→40（每邊 ±20）。理由是**畫面**：
+                  --   上段是一根實心黑棒，拉超過約 1.2 倍就不像手臂、像橫樑。
+                  --   ★ 涵蓋範圍沒有因此出現死角 —— 打擊半徑 20.5、兩肩相距 81，
+                  --     兩隻手各 ±20 的話涵蓋範圍剛好接得起來（身體正下方也打得到）。
+                  --   ★ 再加上「玩家在哪一側就那隻手出拳」（見 bossUpdateParallel），
+                  --     追蹤變短並沒有讓走位變成必勝解。
+                  track = true, track_range = 40, track_speed = 95, track_inward = 20, warn = 0.35,
                   strike_time = 0.12, follow_through = 14, recover = 0.6,
                   -- ★ 傷害範圍＝**手臂寬度再加一點點**（半徑 = w/2 + radius_pad = 15+8 = 23）。
                   --   刻意做窄：範圍太大的話「拳頭追著你移動」就沒有意義了，
@@ -143,7 +184,7 @@ local bosses = {
                 -- 投擲石頭：owner="BOSS" → 飛行中只傷玩家；落地後轉中性＝玩家的彈藥
                 -- ★ 2026-08-19：改成**算彈道丟到玩家身上**（舊版固定速度，一律落在玩家前方）。
                 --   speed_max 越大＝飛得越平越快；min/max_frames 夾住飛行時間。
-                { type = "THROW", cooldown = 4.2, telegraph = 0.7, raise = 24,
+                { type = "THROW", cooldown = 4.2, telegraph = 0.7, raise = 10,   -- ★ 同上：不可超過上段長度 24
                   strike_time = 0.12, follow_through = 8, recover = 0.5,
                   -- ★ despawn＝**臨時石頭**：落地 3 秒後消失（2026-08-19 拍板）。
                   --   撿了要馬上用，不能囤一地 —— BOSS 供應的彈藥是有時限的。
