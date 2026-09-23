@@ -156,7 +156,9 @@ local bosses = {
                 { id = "ARM_L", label = "L-ARM", dx = 2,  dy = 41, mirror = true  },
                 { id = "ARM_R", label = "R-ARM", dx = 83, dy = 41, mirror = false },
             },
-            -- 兩種攻擊**輪替**（打完換下一種），不是隨機 —— 玩家要學得起來節奏。
+            -- 攻擊清單：打完換下一種（輪替，不是隨機 —— 玩家要學得起來節奏）。
+            -- ★ 2026-09-23 起只剩 SLAM 一種 → 輪替退化成「一直是 SLAM」，程式不必改。
+            -- ★★ 子彈**只從頭部發射**（使用者拍板）：手臂沒有任何遠程攻擊。
             attacks = {
                 -- 拳擊地面：★ 不改變地形（§15.5a-5）。只有落點周圍的震波傷害。
                 -- ★ 2026-08-19：舉在上方時**左右追著玩家移動**，停下來後才砸。
@@ -166,31 +168,29 @@ local bosses = {
                 -- ★ 2026-09-23 raise 28→10：新圖的上段只有 24 px 長，舉超過它的長度
                 --   接點就跑到肩軸**上方**，上段會翻過肩膀變成一根橫桿（合成確認過）。
                 { type = "SLAM", cooldown = 3.2, telegraph = 0.9, raise = 10,
-                  -- ★ 2026-09-23：track_range 仍是「兩隻手加起來」的涵蓋範圍，
-                  --   但**每隻手只往自己那一側追**，往內只留 track_inward 的餘裕。
-                  -- ★★ 2026-09-23 track_range 130→40（每邊 ±20）。理由是**畫面**：
-                  --   上段是一根實心黑棒，拉超過約 1.2 倍就不像手臂、像橫樑。
-                  --   ★ 涵蓋範圍沒有因此出現死角 —— 打擊半徑 20.5、兩肩相距 81，
-                  --     兩隻手各 ±20 的話涵蓋範圍剛好接得起來（身體正下方也打得到）。
-                  --   ★ 再加上「玩家在哪一側就那隻手出拳」（見 bossUpdateParallel），
-                  --     追蹤變短並沒有讓走位變成必勝解。
-                  track = true, track_range = 40, track_speed = 95, track_inward = 20, warn = 0.35,
+                  -- ★★ track_range/2＝往外能追多遠，track_inward＝往內能追多遠。
+                  --   2026-09-23 一修：130→40，理由是**畫面** —— 上段是一根實心黑棒，
+                  --   拉超過約 1.2 倍就不像手臂、像橫樑（離線合成確認過）。
+                  --   2026-09-23 二修（使用者拍板）：**±35，而且往內也是 35 → 可以越過中線**。
+                  -- ★ 分成內外兩個數字，是因為「越過身體」是畫面上最容易出問題的方向：
+                  --   哪天要收回保守設定，只調 track_inward 就好，不必動涵蓋範圍。
+                  -- ★ 再加上「玩家在哪一側就那隻手出拳」（見 bossUpdateParallel），
+                  --   追蹤範圍變短並沒有讓走位變成必勝解。
+                  track = true, track_range = 70, track_speed = 95, track_inward = 35, warn = 0.35,
                   strike_time = 0.12, follow_through = 14, recover = 0.6,
                   -- ★ 傷害範圍＝**手臂寬度再加一點點**（半徑 = w/2 + radius_pad = 15+8 = 23）。
                   --   刻意做窄：範圍太大的話「拳頭追著你移動」就沒有意義了，
                   --   站哪裡都一樣被打到，追蹤與預告兩段演出就白做了。
                   --   要改成明確數值就直接寫 radius（會覆蓋這個計算）。
                   damage = 10, radius_pad = 8 },
-                -- 投擲石頭：owner="BOSS" → 飛行中只傷玩家；落地後轉中性＝玩家的彈藥
-                -- ★ 2026-08-19：改成**算彈道丟到玩家身上**（舊版固定速度，一律落在玩家前方）。
-                --   speed_max 越大＝飛得越平越快；min/max_frames 夾住飛行時間。
-                { type = "THROW", cooldown = 4.2, telegraph = 0.7, raise = 10,   -- ★ 同上：不可超過上段長度 24
-                  strike_time = 0.12, follow_through = 8, recover = 0.5,
-                  -- ★ despawn＝**臨時石頭**：落地 3 秒後消失（2026-08-19 拍板）。
-                  --   撿了要馬上用，不能囤一地 —— BOSS 供應的彈藥是有時限的。
-                  --   抓在爪子上不倒數；打中 BOSS 就沒了；沒打中落地後重新計時。
-                  damage = 12, speed_max = 9, min_frames = 22, max_frames = 55, spread = 0.6,
-                  despawn = 3.0 },
+                -- ★★ 2026-09-23 使用者拍板：**投擲石頭這招取消**。
+                --   原本是 owner="BOSS" 的 Stone：飛行中只傷玩家，落地後轉中性＝玩家的彈藥。
+                --   ★ Stone 本身沒有拿掉 —— 關卡裡的石頭與玩家的抓取照舊，只是 COLOSSUS 不再丟。
+                --   ★ bossStrike 的 THROW 分支也留著（沒有資料走進去），要復原只要把下面解除註解。
+                -- { type = "THROW", cooldown = 4.2, telegraph = 0.7, raise = 10,
+                --   strike_time = 0.12, follow_through = 8, recover = 0.5,
+                --   damage = 12, speed_max = 9, min_frames = 22, max_frames = 55, spread = 0.6,
+                --   despawn = 3.0 },
             },
         },
     },

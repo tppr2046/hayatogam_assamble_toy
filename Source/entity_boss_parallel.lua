@@ -213,6 +213,11 @@ function Enemy:bossSyncParallelBoxes()
         -- track_dx＝舉在上方時左右追著玩家移動的位移（見 bossAdvanceSlot 的 TELEGRAPH）
         arm.x = self.boss_x + arm.dx + (arm.track_dx or 0)
         arm.y = self.boss_y + arm.dy + (arm.swing_dy or 0) + body_dy
+        -- ★★ 2026-09-23：**手臂下緣最低到地面為止**（使用者拍板）。
+        --   呼吸往下 ＋ 砸擊的 follow_through 會把拳頭壓到地面以下，看起來像陷進地裡。
+        --   ★ 夾在這裡（唯一計算點）→ 繪製與命中框一起被夾住，不會「圖停住、判定繼續往下」。
+        local floor_y = (self.boss_ground_y or (self.boss_y + (self.boss_body_h or 0))) - arm.h
+        if arm.y > floor_y then arm.y = floor_y end
         local p = self.arm_proxies[i]
         if p then p.x, p.y = arm.x, arm.y end
     end
@@ -378,15 +383,14 @@ function Enemy:bossAdvanceSlot(dt, mech_x, mech_y, controller)
                 -- ★ aim_mx/aim_my＝玩家中心，由 updateBoss 每幀算一次。
                 --   這裡不要自己用 mech_x 再算一次（那是左緣、不是中線）。
                 local want = (self.aim_mx or self.boss_x) - self.boss_x - arm.dx - arm.w / 2
-                -- ★★ 2026-09-23：**各臂只管自己那一側**（使用者拍板）。
-                --   手臂是掛在肩上的連桿，橫越身體的話上段會被拉成一條長桿橫在胸前，
-                --   下段還會跑到另一隻手那邊去（實際合成出來確認過）。
-                --   往內只留 track_inward 的餘裕，讓它還能稍微收回來一點。
-                --   ★ 涵蓋範圍沒有變小 —— 改由「玩家在哪一側就那隻手出拳」補上（見 bossUpdateParallel）。
+                -- ★★ 往外 track_range/2、往內 track_inward。
+                --   兩者相等＝左右對稱，手臂**可以越過中線**（2026-09-23 使用者拍板，±35）。
+                --   分成兩個數字是因為「越過身體」是畫面上最容易出問題的方向：
+                --   要收回保守設定時，只要把 track_inward 調小就好，不必動涵蓋範圍。
                 local inward = atk.track_inward or 10
                 local lo, hi
-                if arm.mirror then lo, hi = -half, inward    -- 左臂：只往左
-                else               lo, hi = -inward, half    -- 右臂：只往右
+                if arm.mirror then lo, hi = -half, inward    -- 左臂：往左 half、往內 inward
+                else               lo, hi = -inward, half    -- 右臂：往右 half、往內 inward
                 end
                 if want > hi then want = hi elseif want < lo then want = lo end
                 local cur = arm.track_dx or 0
