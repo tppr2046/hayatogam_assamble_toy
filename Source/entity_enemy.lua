@@ -123,6 +123,11 @@ function Enemy:init(x, y, type_id, ground_y)
         move_duration = data.move_duration or 1.5,
         pause_duration = data.pause_duration or 1.5,
         walk_fps = data.walk_fps or 8,
+        -- [[ 2026-09-23 HEAVY ]] 砲彈的外觀與落地爆炸（不設就是以前的 4×4 直擊彈）
+        projectile_size      = data.projectile_size,
+        projectile_max_range = data.projectile_max_range,
+        projectile_blast_radius = data.projectile_blast_radius,
+        projectile_blast_damage = data.projectile_blast_damage,
         is_paused = false,        -- 只有停下時才開火（見 fire_only_when_stopped）
         phase_timer = 0,
         walk_timer = 0,
@@ -860,6 +865,13 @@ function Enemy:fire(target_x, controller)
     local start_x = self.x + off_x
     local start_y = self.y + (self.drone_vertical_offset or 0) + self.bullet_offset_y
     local target_dist = target_x - start_x
+    -- [[ 2026-09-23 ]] 射程上限：超過就**打不到那麼遠**，砲彈落在射程邊緣。
+    -- ★ 不是「射不出來」也不是「飛到一半消失」—— 重砲打不遠是它的取捨，
+    --   玩家站遠一點就安全，這才有「要不要靠近」的選擇。
+    local max_range = self.projectile_max_range
+    if max_range and math.abs(target_dist) > max_range then
+        target_dist = (target_dist < 0) and -max_range or max_range
+    end
     -- 使砲彈水平方向速度接近玩家的移動速度（尊重敵人定義的 multiplier）
     local base_vx = (controller and controller.player_move_speed) or 2.0
     local speed_multiplier = self.projectile_speed_mult or 1.0
@@ -883,6 +895,15 @@ function Enemy:fire(target_x, controller)
     -- 建立砲彈並給予自定重力
     local projectile = Projectile:init(start_x, start_y, vx, vy, self.attack, false, self.ground_y)
     projectile.gravity = projectileGravity
+    -- [[ 2026-09-23 HEAVY ]] 較大的彈體 ＋ 落地／直擊才爆的小範圍爆風
+    if self.projectile_size then
+        projectile.width  = self.projectile_size
+        projectile.height = self.projectile_size
+    end
+    if self.projectile_blast_radius then
+        projectile.blast_radius = self.projectile_blast_radius
+        projectile.blast_damage = self.projectile_blast_damage or self.attack
+    end
     table.insert(controller.projectiles, projectile)
 end
 

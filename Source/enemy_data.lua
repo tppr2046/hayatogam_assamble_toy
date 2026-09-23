@@ -54,8 +54,13 @@ return {
         -- ★ 只在停下時開火（與 WALKER 同一條規則：移動中不攻擊）
         fire_only_when_stopped = true,
         fire_cooldown = 3.0,          -- 重砲節奏，玩家有時間走位
-        projectile_speed_mult = 26,
-        projectile_grav_mult = 16,
+        -- [[ 2026-09-23 重砲彈 ]]（使用者拍板）：大一號、重、飛不遠、落地才炸
+        projectile_speed_mult = 18,   -- ★ 比 WALKER(30) 慢很多
+        projectile_grav_mult  = 26,   -- ★ 重 —— 弧線壓得低、掉得快
+        projectile_size = 5,          -- 比一般砲彈（4×4）大 1 px
+        projectile_max_range = 90,    -- ★ 射程上限：超過就落在 90 px 處，站遠就安全
+        projectile_blast_radius = 18, -- 小範圍（機體寬 48 → 大約擦邊才會中）
+        projectile_blast_damage = 6,  -- 直擊 10 的一半多一點；擦到痛但不致命
         -- ★ 2026-09-23 專屬圖 **enemy08-table-32-32.png（3 格）**，取代與 SWORD 共用的 enemy2。
         --   1＝待機　2~3＝走路循環（換幀由 MOVE_PAUSE 分支自己控制，**不要設 anim_fps**）。
         image = "images/enemy08",

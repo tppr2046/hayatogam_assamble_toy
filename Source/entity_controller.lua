@@ -958,6 +958,25 @@ function EntityController:updatePlayerLasers(dt)
     end
 end
 
+-- [[ 2026-09-23 ]] **敵人**砲彈的落地爆炸：只打玩家，不打敵人。
+-- ★ 為什麼不共用 triggerBlast：那支是打敵人清單的（玩家的 CANON3 用）。
+--   敵人的爆風去掃敵人清單會變成互相炸死，這裡分成兩支比較誠實。
+-- ★ 距離用「爆心到機體矩形最近點」，不是到機體中心 ——
+--   機體是 48×32 的橫長方形，用中心的話貼著腳邊爆會判定成沒中。
+-- 回傳要加到 mech_damage_taken 的傷害（沒中就是 0）。
+function EntityController:triggerEnemyBlast(x, y, radius, damage, mx, my, mw, mh)
+    if not (radius and radius > 0) then return 0 end
+    self:addBlastVisual(x, y)
+    if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+    local nx = math.max(mx, math.min(x, mx + (mw or 0)))
+    local ny = math.max(my, math.min(y, my + (mh or 0)))
+    local dx, dy = x - nx, y - ny
+    if (dx * dx + dy * dy) <= radius * radius then
+        return damage or 0
+    end
+    return 0
+end
+
 -- [[ CANON3 範圍爆炸 ]] 在 (x,y) 引爆：範圍內所有存活敵人受傷 + 一次視覺爆炸。
 -- 以「敵人中心與爆心的距離」判定，不用 AABB —— 圓形範圍比較符合爆炸的直覺。
 -- 直擊的那隻已經吃過直擊傷害，這裡的範圍傷害會再疊加（＝直擊比擦到更痛，合理）。
@@ -1296,7 +1315,14 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             -- （命中敵人的引爆在下方的命中分支處理）
             if not p.active then
                 if p.blast_radius then
-                    self:triggerBlast(p.x, p.y, p.blast_radius, p.blast_damage)
+                    -- ★ 玩家的砲彈炸敵人、敵人的砲彈炸玩家 —— 兩套清單，兩支函式
+                    if p.is_player_bullet then
+                        self:triggerBlast(p.x, p.y, p.blast_radius, p.blast_damage)
+                    else
+                        mech_damage_taken = mech_damage_taken + self:triggerEnemyBlast(
+                            p.x, p.y, p.blast_radius, p.blast_damage,
+                            mech_x, mech_y, mech_width, mech_height)
+                    end
                     p.blast_radius = nil   -- 防止同一發重複引爆
                 else
                     self:addHitSpark(p.x, p.y)   -- [[ 命中特效 ]] 打到地形
@@ -1307,7 +1333,15 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
             if not p.is_player_bullet and self:checkMechCollision(mech_x, mech_y, mech_width, mech_height, p.x, p.y, p.width, p.height) then
                 mech_damage_taken = mech_damage_taken + p.damage
                 p.active = false -- 擊中後銷毀
-                self:addHitSpark(p.x, p.y)   -- [[ 命中特效 ]]
+                -- ★ 直擊時只放爆炸的**畫面**，不再疊範圍傷害 ——
+                --   直擊已經吃過 p.damage 了，再補一次爆風等於同一發打兩次。
+                if p.blast_radius then
+                    self:addBlastVisual(p.x, p.y)
+                    if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+                    p.blast_radius = nil
+                else
+                    self:addHitSpark(p.x, p.y)   -- [[ 命中特效 ]]
+                end
             end
             
             -- [[ §15.2 高位槍 self-block ]] 子彈被自己機體上的其他零件擋住 → 消失。
