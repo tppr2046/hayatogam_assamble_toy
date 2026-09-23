@@ -710,22 +710,13 @@ function Enemy:bossDrawRig(bx, by, camera_x)
     local r = rig.data
     local body_dy = self:bossBodyOffsetY()
 
-    -- 腿（固定不動）
-    for i = 1, 2 do
-        local img = rig.legs[i]
-        if img then pcall(function() img:draw(bx, by) end) end
-    end
-
-    -- 本體（含呼吸與下蹲）
-    if self.boss_sheet and self.boss_data.cell_body then
-        local img = self.boss_sheet:getImage(self.boss_data.cell_body)
-        if img then pcall(function() img:draw(bx, by + body_dy) end) end
-    end
-
+    -- ★★ 疊圖順序（2026-09-23 使用者拍板）：**上段在最下層** →
+    --   上段 → 腿 → 本體 → 肩 → 下段。
+    --   所以要先把每隻手的角度算完，再一層一層畫 ——
+    --   邊算邊畫的話順序就綁死在迴圈裡，改層次得動兩個地方。
+    local poses = {}
     for _, arm in ipairs(self.arms or {}) do
         if arm.alive then
-            local mi = arm.mirror and 2 or 1
-            -- 肩的轉軸（世界座標→螢幕座標）。鏡射的那隻軸心也要鏡射。
             local px = r.shoulder.pivot_x
             if arm.mirror then px = (rig.span - 1) - px end
             local sx = bx + px
@@ -741,42 +732,64 @@ function Enemy:bossDrawRig(bx, by, camera_x)
             local ax = arm.x - camera_x + (self.hit_shake_offset_x or 0) + anchor_local_x
             local ay = arm.y + (r.arm_lower.anchor_y - r.arm_lower.y0)
 
-            -- 上段：從肩的轉軸指向接點。長度超過自然長度就**沿著自己的軸伸長**
-            -- （使用者拍板：可伸縮，這樣才留得住 ±65 的追蹤範圍）。
+            -- 上段：從肩的轉軸指向接點。長度超過自然長度就**沿著自己的軸伸長**。
             local dx, dy = ax - sx, ay - sy
             local len = math.sqrt(dx * dx + dy * dy)
             -- ★ 角度以「垂直向下」為 0。drawRotated 的正角是**順時針**，
             --   而順時針會把向下的軸轉向左邊 → 要往右擺就得給負角，所以這裡取負號。
             local angle = -math.deg(math.atan(dx, dy))
-            local yscale = (len > 0) and (len / rig.upper_len) or 1
-
-            -- 肩：跟著上段轉，但夾在 ±max_angle 之內
             local maxa = r.shoulder.max_angle or 45
-            local sa = math.max(-maxa, math.min(maxa, angle))
-            local simg = rig.shoulder[mi]
-            if simg then pcall(function() simg:drawRotated(sx, sy, sa) end) end
+            table.insert(poses, {
+                arm = arm, mi = arm.mirror and 2 or 1,
+                sx = sx, sy = sy, angle = angle,
+                yscale = (len > 0) and (len / rig.upper_len) or 1,
+                sa = math.max(-maxa, math.min(maxa, angle)),
+            })
+        end
+    end
 
-            local uimg = rig.upper[mi]
-            if uimg then pcall(function() uimg:drawRotated(sx, sy, angle, 1, yscale) end) end
+    -- ① 上段（最下層）
+    for _, p in ipairs(poses) do
+        local img = rig.upper[p.mi]
+        if img then pcall(function() img:drawRotated(p.sx, p.sy, p.angle, 1, p.yscale) end) end
+    end
 
-            -- 下段：不旋轉，保持直立（它只左右移動與往下攻擊）
-            -- ★ 整格圖已經畫在自然位置上，所以只要補「相對自然位置的位移」：
-            --   左右＝track_dx、上下＝swing_dy + 身體位移。兩者都已含在 arm.x/arm.y 裡。
-            local limg = rig.lower[mi]
-            if limg then
-                local ox = arm.x - (self.boss_x + arm.dx)
-                local oy = arm.y - (self.boss_y + arm.dy)
-                pcall(function() limg:draw(bx + ox, by + oy) end)
-            end
+    -- ② 腿（固定不動 —— 待機呼吸只動上半身）
+    for i = 1, 2 do
+        local img = rig.legs[i]
+        if img then pcall(function() img:draw(bx, by) end) end
+    end
 
-            -- 受擊閃爍（只閃下段＝命中框那一塊）
-            if arm.hit_flash and arm.hit_flash > 0 then
-                arm.hit_flash = arm.hit_flash - 1 / 30
-                if (math.floor(playdate.getCurrentTimeMilliseconds() / 50) % 2) == 0 then
-                    local hx = arm.x - camera_x + (self.hit_shake_offset_x or 0)
-                    g.setColor(g.kColorXOR); g.fillRect(hx, arm.y, arm.w, arm.h)
-                    g.setColor(g.kColorBlack)
-                end
+    -- ③ 本體（含呼吸與下蹲）
+    if self.boss_sheet and self.boss_data.cell_body then
+        local img = self.boss_sheet:getImage(self.boss_data.cell_body)
+        if img then pcall(function() img:draw(bx, by + body_dy) end) end
+    end
+
+    -- ④ 肩：跟著上段轉，但夾在 ±max_angle 之內
+    for _, p in ipairs(poses) do
+        local img = rig.shoulder[p.mi]
+        if img then pcall(function() img:drawRotated(p.sx, p.sy, p.sa) end) end
+    end
+
+    -- ⑤ 下段（最上層）：不旋轉，保持直立（它只左右移動與往下攻擊）
+    -- ★ 整格圖已經畫在自然位置上，所以只要補「相對自然位置的位移」：
+    --   左右＝track_dx、上下＝swing_dy + 身體位移。兩者都已含在 arm.x/arm.y 裡。
+    for _, p in ipairs(poses) do
+        local arm = p.arm
+        local img = rig.lower[p.mi]
+        if img then
+            local ox = arm.x - (self.boss_x + arm.dx)
+            local oy = arm.y - (self.boss_y + arm.dy)
+            pcall(function() img:draw(bx + ox, by + oy) end)
+        end
+        -- 受擊閃爍（只閃下段＝命中框那一塊）
+        if arm.hit_flash and arm.hit_flash > 0 then
+            arm.hit_flash = arm.hit_flash - 1 / 30
+            if (math.floor(playdate.getCurrentTimeMilliseconds() / 50) % 2) == 0 then
+                local hx = arm.x - camera_x + (self.hit_shake_offset_x or 0)
+                g.setColor(g.kColorXOR); g.fillRect(hx, arm.y, arm.w, arm.h)
+                g.setColor(g.kColorBlack)
             end
         end
     end
