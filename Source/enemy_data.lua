@@ -58,7 +58,7 @@ return {
         projectile_speed_mult = 18,   -- ★ 比 WALKER(30) 慢很多
         projectile_grav_mult  = 26,   -- ★ 重 —— 弧線壓得低、掉得快
         projectile_size = 5,          -- 比一般砲彈（4×4）大 1 px
-        projectile_max_range = 90,    -- ★ 射程上限：超過就落在 90 px 處，站遠就安全
+        projectile_max_range = 70,    -- ★ 射程上限：超過就落在 70 px 處，站遠就安全
         projectile_blast_radius = 18, -- 小範圍（機體寬 48 → 大約擦邊才會中）
         projectile_blast_damage = 6,  -- 直擊 10 的一半多一點；擦到痛但不致命
         -- ★ 2026-09-23 專屬圖 **enemy08-table-32-32.png（3 格）**，取代與 SWORD 共用的 enemy2。
