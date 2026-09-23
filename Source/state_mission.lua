@@ -813,6 +813,12 @@ function StateMission.update()
         local body_w = (mech_grid and mech_grid.cols or 3) * (mech_grid and mech_grid.cell_size or 16)
         local body_h = (mech_grid and mech_grid.rows or 2) * (mech_grid and mech_grid.cell_size or 16)
         
+        -- [[ 2026-09-23 ]] 玩家是否踩在地上 —— BOSS 砸地的**地面震波**要用
+        --   （站在地上會被震到，跳起來就躲得掉）。
+        -- ★ 每幀交給 controller，而不是讓 BOSS 自己去猜 y 座標：
+        --   著地判定本來就在這裡（斜坡、平台、繩索各有分支），複製一份必定會不同步。
+        entity_controller.player_on_ground = is_on_ground
+
         -- 更新敵人和砲彈，使用本體碰撞框檢查受擊
         local damage = entity_controller:updateAll(dt, mech_x, mech_y, body_w, body_h, (_G.GameState and _G.GameState.mech_stats) or {})
         -- [[ §15.2 防護罩 ]] 傷害套用**之前**先讓防護罩攔一次（擋下就變 0,並起冷卻）。

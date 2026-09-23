@@ -1209,7 +1209,7 @@ function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controlle
 
         self:bossUpdateParallel(dt, mech_x, mech_y, mech_width, mech_height, controller)
         -- 拳擊震波的傷害走既有的 pending_mech_damage 管線（controller 每幀收回累加）
-        local slam = self:bossConsumeSlam(mech_x, mech_y, mech_width, mech_height)
+        local slam = self:bossConsumeSlam(mech_x, mech_y, mech_width, mech_height, controller)
         if slam > 0 then
             self.pending_mech_damage = (self.pending_mech_damage or 0) + slam
         end

@@ -494,7 +494,10 @@ function Enemy:bossStrike(slot, mech_x, mech_y, controller)
         local gx = arm.x + arm.w / 2
         local gy = self.boss_ground_y or (arm.y + arm.h)
         self.pending_slam = { x = gx, y = gy, radius = self:bossSlamRadius(arm, atk),
-                              damage = atk.damage or 10, t = 0 }
+                              damage = atk.damage or 10,
+                              -- ★ 2026-09-23：**地面震波**（使用者拍板）。落點以外也會傳到，
+                              --   條件是「玩家正踩在地上」→ 跳起來就躲得掉。
+                              ground_damage = atk.ground_damage, t = 0 }
         if controller and controller.addBlastVisual then
             controller:addBlastVisual(gx, gy - 8)
         end
@@ -552,7 +555,7 @@ end
 
 -- 拳擊震波：在 STRIKE 之後由 updateBoss 每幀呼叫一次，回傳這一幀要對玩家造成的傷害。
 -- ★ 一次性：命中後（或超時）就清掉，不會持續扣血。
-function Enemy:bossConsumeSlam(mech_x, mech_y, mech_w, mech_h)
+function Enemy:bossConsumeSlam(mech_x, mech_y, mech_w, mech_h, controller)
     local s = self.pending_slam
     if not s then return 0 end
     self.pending_slam = nil
@@ -562,6 +565,17 @@ function Enemy:bossConsumeSlam(mech_x, mech_y, mech_w, mech_h)
     local py = mech_y and (mech_y + (mech_h or 32)) or s.y
     if math.abs(px - s.x) <= s.radius and math.abs(py - s.y) <= 60 then
         return s.damage
+    end
+    -- [[ 2026-09-23 地面震波 ]] 直擊範圍外，但**腳還踩在地上** → 吃少量傷害。
+    -- ★★ 這一招因此有了「不管站哪裡都要反應」的性質：解法是**跳起來**，
+    --   而不是走位（走位是用來閃直擊的）。兩種解法各對應一段傷害，不重疊：
+    --   直擊已經 return 了，不會再疊上震波。
+    -- ★ 不設距離上限 —— 有上限的話「站遠一點就不必跳」，那這一段就只是另一個走位問題。
+    --   （戰場本來就被 scene.arena 鎖住，跑不遠。）
+    -- ★ 讀 controller.player_on_ground（state_mission 每幀給的唯一著地判定），
+    --   不要自己用 y 座標推 —— 斜坡與空中平台上都會推錯。
+    if s.ground_damage and s.ground_damage > 0 and controller and controller.player_on_ground then
+        return s.ground_damage
     end
     return 0
 end
