@@ -498,6 +498,12 @@ function Enemy:bossStrike(slot, mech_x, mech_y, controller)
         if controller and controller.addBlastVisual then
             controller:addBlastVisual(gx, gy - 8)
         end
+        -- ★ 2026-09-23 使用者拍板：砸地要**全畫面震動**。
+        --   比一般爆炸重（預設 3px / 0.2s）——「巨大 BOSS 砸地」如果跟小兵爆炸一樣，
+        --   這一招的份量就沒有傳達出去。
+        if controller and controller.requestScreenShake then
+            controller:requestScreenShake(atk.shake_intensity or 6, atk.shake_duration or 0.4)
+        end
         if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
 
     elseif atk.type == "THROW" then

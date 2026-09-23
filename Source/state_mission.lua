@@ -171,6 +171,10 @@ local mech_explode_frame_duration = 0.05  -- 每幀 0.05 秒
 local camera_shake_timer = 999  -- 初始化為大於 duration 的值，避免開始時震動
 local camera_shake_duration = 0.2  -- 震動時間（秒）
 local camera_shake_intensity = 3  -- 震動幅度（像素）
+-- ★ 2026-09-23：上面兩個變成「目前這一次震動」的值，下面是**預設值**。
+--   每次觸發都會先回到預設，指定了才覆蓋 → 強震動不會殘留到下一次一般爆炸。
+local CAMERA_SHAKE_DURATION_DEF = 0.2
+local CAMERA_SHAKE_INTENSITY_DEF = 3
 
 
 -- ==========================================
@@ -833,8 +837,12 @@ function StateMission.update()
         
         -- 檢查敵人爆炸標志，立即觸發畫面震動（無延遲）
         if entity_controller and entity_controller.enemy_explosion_triggered then
-            camera_shake_timer = 0  -- 立即開始震動
+            -- ★ 強度／長度由 controller 一起傳過來（沒填＝預設），見 requestScreenShake
+            StateMission.triggerScreenShake(entity_controller.shake_intensity,
+                                            entity_controller.shake_duration)
             entity_controller.enemy_explosion_triggered = false  -- 重置標志
+            entity_controller.shake_intensity = nil
+            entity_controller.shake_duration = nil
         end
         
         -- 更新機甲零件系統（GUN 自動發射、計時器、震動效果等）
@@ -1446,9 +1454,13 @@ function StateMission.draw()
     if _G.Tutorial and _G.Tutorial.draw then _G.Tutorial.draw() end
 end
 
--- 立即觸發畫面震動（用於敵人爆炸）
-function StateMission.triggerScreenShake()
+-- 立即觸發畫面震動。
+-- ★ 不給參數＝一般爆炸的預設強度；給了就是這一次比較重（例如 BOSS 砸地）。
+-- ★ 每次都先寫回預設值 —— 否則一次強震動會把強度**永久**留給之後所有爆炸。
+function StateMission.triggerScreenShake(intensity, duration)
     camera_shake_timer = 0
+    camera_shake_intensity = intensity or CAMERA_SHAKE_INTENSITY_DEF
+    camera_shake_duration = duration or CAMERA_SHAKE_DURATION_DEF
 end
 
 return StateMission

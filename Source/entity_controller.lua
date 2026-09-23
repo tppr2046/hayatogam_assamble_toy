@@ -977,6 +977,16 @@ function EntityController:triggerEnemyBlast(x, y, radius, damage, mx, my, mw, mh
     return 0
 end
 
+-- [[ 2026-09-23 ]] 請求一次畫面震動。
+-- ★ 沿用既有的 `enemy_explosion_triggered` 管線（state_mission 每幀消化一次），
+--   不另外開一條路 —— 兩條路就會變成「有時候震、有時候不震」。
+-- ★ 強度／長度可選：不填＝一般爆炸的預設值。
+function EntityController:requestScreenShake(intensity, duration)
+    self.enemy_explosion_triggered = true
+    self.shake_intensity = intensity
+    self.shake_duration = duration
+end
+
 -- [[ CANON3 範圍爆炸 ]] 在 (x,y) 引爆：範圍內所有存活敵人受傷 + 一次視覺爆炸。
 -- 以「敵人中心與爆心的距離」判定，不用 AABB —— 圓形範圍比較符合爆炸的直覺。
 -- 直擊的那隻已經吃過直擊傷害，這裡的範圍傷害會再疊加（＝直擊比擦到更痛，合理）。
