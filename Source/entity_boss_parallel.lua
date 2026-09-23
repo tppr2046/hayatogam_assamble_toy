@@ -714,8 +714,8 @@ function Enemy:bossDrawRig(bx, by, camera_x)
     local r = rig.data
     local body_dy = self:bossBodyOffsetY()
 
-    -- ★★ 疊圖順序（2026-09-23 使用者拍板）：**上段在最下層** →
-    --   上段 → 腿 → 本體 → 肩 → 下段。
+    -- ★★ 疊圖順序（2026-09-23 使用者二修）：由下而上
+    --   **腿 → 本體 → 手臂上段 → 肩 → 手臂下段**。
     --   所以要先把每隻手的角度算完，再一層一層畫 ——
     --   邊算邊畫的話順序就綁死在迴圈裡，改層次得動兩個地方。
     local poses = {}
@@ -752,22 +752,22 @@ function Enemy:bossDrawRig(bx, by, camera_x)
         end
     end
 
-    -- ① 上段（最下層）
-    for _, p in ipairs(poses) do
-        local img = rig.upper[p.mi]
-        if img then pcall(function() img:drawRotated(p.sx, p.sy, p.angle, 1, p.yscale) end) end
-    end
-
-    -- ② 腿（固定不動 —— 待機呼吸只動上半身）
+    -- ① 腿（最下層；固定不動 —— 待機呼吸只動上半身）
     for i = 1, 2 do
         local img = rig.legs[i]
         if img then pcall(function() img:draw(bx, by) end) end
     end
 
-    -- ③ 本體（含呼吸與下蹲）
+    -- ② 本體（含呼吸與下蹲）
     if self.boss_sheet and self.boss_data.cell_body then
         local img = self.boss_sheet:getImage(self.boss_data.cell_body)
         if img then pcall(function() img:draw(bx, by + body_dy) end) end
+    end
+
+    -- ③ 手臂上段（在本體之上、肩之下 → 肩正好遮住它的根部）
+    for _, p in ipairs(poses) do
+        local img = rig.upper[p.mi]
+        if img then pcall(function() img:drawRotated(p.sx, p.sy, p.angle, 1, p.yscale) end) end
     end
 
     -- ④ 肩：跟著上段轉，但夾在 ±max_angle 之內
