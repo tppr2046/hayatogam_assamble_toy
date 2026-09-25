@@ -535,7 +535,15 @@ function Enemy:hoverAdvanceAttack(dt, mech_x, mech_y, mech_width, mech_height, c
 
     elseif a.kind == "SBOMB" then
         -- 小型炸彈：連續丟幾顆，每顆之間隔 gap
-        local n = def.n or 3
+        -- ★ 2026-09-25：顆數改成**每次隨機 n_min~n_max**（使用者拍板 1~2 顆）。
+        --   在這裡抽而不是在挑招時抽 —— 挑招那支不認識各招式的欄位，
+        --   放進去就變成「每加一招就要改挑招」。
+        if not a.n_target then
+            local lo = def.n_min or def.n or 3
+            local hi = def.n_max or def.n or 3
+            a.n_target = math.random(lo, hi)
+        end
+        local n = a.n_target
         local gap = def.gap or 0.25
         local want = math.min(n, math.floor(a.t / gap) + 1)
         while a.n < want do
@@ -576,12 +584,16 @@ function Enemy:hoverFireTurret(t, def, controller)
 end
 
 -- [[ BOSS3 ]] 小型炸彈：往前（機鼻方向）發射，之後純落下。★ 直徑 4 的方形（使用者拍板）
+-- ★ 2026-09-25：往前的力道改成**每顆隨機**（speed_min~speed_max）。
+--   固定力道時每顆的落點都一樣，一整串看起來像複製貼上；隨機才像手動投彈。
 function Enemy:hoverFireSmallBomb(def, controller)
     local m = (self.hover_rig or {}).sbomb or {}
+    local lo = def.speed_min or def.speed or 110
+    local hi = def.speed_max or def.speed or 110
     table.insert(self.sbombs, {
         x = self.boss_x + (m.x or 0),
         y = self.boss_y + (m.y or 0),
-        vx = -(def.speed or 110),
+        vx = -(lo + math.random() * (hi - lo)),
         vy = 0,
         size = def.size or 4,
     })
