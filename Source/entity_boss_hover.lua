@@ -316,15 +316,30 @@ end
 function Enemy:hoverPickAttack(controller)
     local A = (self.boss_data.attacks or {})
     local ratio = (self.hp or 0) / math.max(1, self.hp_max or 1)
+    -- ★★ 2026-09-25：改成**加權**抽選（使用者拍板：crate 多、機槍與炸彈少）。
+    --   權重寫在 boss_data 的 attacks.weights，不在這裡寫死 —— 要調手感只動資料。
+    local W = A.weights or {}
     local pool = {}
-    if self.gun_alive then table.insert(pool, "GUN") end
-    table.insert(pool, "BLOCK")
+    local total = 0
+    local function add(kind, w)
+        w = w or 1
+        if w <= 0 then return end
+        total = total + w
+        table.insert(pool, { kind = kind, acc = total })
+    end
+    if self.gun_alive then add("GUN", W.GUN) end
+    add("BLOCK", W.BLOCK)
     -- ★ 炸彈：第二階段才解禁，而且**不連續投擲**
     if ratio <= (A.phase2_at or 0.5) and self.last_atk ~= "BOMB" then
-        table.insert(pool, "BOMB")
+        add("BOMB", W.BOMB)
     end
-    if #pool == 0 then return end
-    local kind = pool[math.random(1, #pool)]
+    if #pool == 0 or total <= 0 then return end
+    -- 累積權重抽一個（r 落在哪一段就是哪一招）
+    local r = math.random() * total
+    local kind = pool[#pool].kind
+    for _, e in ipairs(pool) do
+        if r <= e.acc then kind = e.kind; break end
+    end
     self.last_atk = kind
     if kind == "GUN" then
         self.atk = { kind = "GUN", t = 0, burst = 1, fired = 0, gap_t = nil }

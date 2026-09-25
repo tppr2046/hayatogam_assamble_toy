@@ -334,6 +334,11 @@ local bosses = {
         attacks = {
             interval_min = 2.0, interval_max = 4.0,
             phase2_at = 0.5,            -- 血量比例低於此 → 炸彈解禁
+            -- ★ 2026-09-25（使用者拍板）：出招機率改成加權 —— crate 多、機槍與炸彈少。
+            --   實際比例會隨「當下有哪些招可用」變動（機槍壞了／炸彈還沒解禁就自動重分配）：
+            --     第一階段（只有機槍＋crate）：crate 71%／機槍 29%
+            --     第二階段（三招都在）：      crate 59%／機槍 24%／炸彈 17%
+            weights = { GUN = 2, BLOCK = 5, BOMB = 1.5 },
             -- 機槍：很快的連射，打 3 輪後停手，回到隨機挑招
             GUN = {
                 bursts = 3, shots = 5, burst_time = 1.0, burst_gap = 0.45,
