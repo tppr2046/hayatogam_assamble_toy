@@ -212,57 +212,110 @@ local bosses = {
     --   ⚠️ 1.0 秒是門檻：GUN 冷卻 1.0 且**現在是手動**，窗口低於它＝手動槍一發都打不到。
     -- ⚠️ 美術未做 → 走既有的程式繪製佔位（白底黑框 + 弱點方塊）。
     -- ======================================================================
+    -- ======================================================================
+    -- [[ §15.5c ]] COMET：懸停制 ＋ 保留「出畫→衝回來」的飛行（2026-09-25 重做）
+    -- ----------------------------------------------------------------------
+    -- ★★ 舊版是「高速飛行＋序列零件制」（ENGINE→PODS→CORE 三階段）。
+    --   使用者拍板改成：**本體一條血**、三種武器、兩座可打壞會自修的砲塔，
+    --   但**保留飛行感** —— 平常是慢慢飄的空中砲台，偶爾橫貫畫面衝一次。
+    -- ★ 機槍的行為與 BOSS4 完全相同（使用者要求）→ 兩隻共用 entity_boss_hover 的砲塔系統，
+    --   不複製程式；差別全部在下面的資料。
+    -- ★ 關卡搭配：跳躍平台關、背景往左捲動（sky_scroll）→ 看起來像在天空往右飛。
+    -- ======================================================================
     ["BOSS3"] = {
         name = "COMET",                 -- ⚠️ 血條標題寬度上限見 BOSS1 的註解
-        move_mode = "FLIGHT",
+        part_mode = "HOVER",
         drop = { steel = {5, 8}, copper = {5, 8}, rubber = {5, 8} },
-        -- ★ 同 BOSS2：路徑先指好，放圖即生效。
-        --   boss3-table-64-40.png，4 格（本體／ENGINE／PODS／CORE），
-        --   ★ 每格都是整張 64×40 的畫布、只畫該部位、其餘透明（與 boss1 同慣例）
+        -- 使用者的圖：boss3-table-100-80.png，5 格
+        --   1 機槍／2 小型炸彈發射器／3 機身／4 火箭底座／5 火箭發射器
+        -- ★ 每格都是整張 100×80 的畫布、只畫該部位、其餘透明，且畫在組裝後的位置。
         sprite = "images/boss3",
-        body_w = 64, body_h = 40,
-        cell_body = 1,
-        move_speed = 0, move_range = 0, -- 不走 bossMove（巡邏），由飛行狀態機接管
-        trans_time = 1.0,
-        flight = {
-            cruise_speed   = 70,        -- ★ 螢幕上的速度：刻意慢到瞄得準
-            bob_amp = 10, bob_speed = 1.6,
-            margin = 30, base_y = 34,
-            exit_speed = 260,
-            offscreen_time = 1.0,       -- 空白期（拍板 0.8~1.2）
-            warn_before = 0.5,          -- 入畫預告箭頭提前多久
-            dash_speed = 300,
-            dash_damage = 8, dash_push = 44,
-            spawn_type = "DRONE",
-            spawn_max = 3,              -- ⚠️ 上限：沒有的話玩家不清就滾雪球
+        body_w = 100, body_h = 80,
+        cell_body = 3,
+        hp = 200,
+        -- 命中框：量自第 3 格（x8~95 / y24~57），不是整張畫布
+        body_box = { dx = 8, dy = 24, w = 88, h = 34 },
+
+        hover = {
+            speed = 16,                 -- 慢慢飄（它是空中砲台，不是靠速度躲子彈）
+            range = 90,
+            bob_amp = 6, bob_speed = 0.45,
+            base_y = 22,                -- ★ 飛得比 GUNSHIP 高：關卡靠跳躍平台接近它
+            screen_margin = 6,
+            -- [[ 飛行 ]] 出畫 → 停一下 → 高速衝回來（保留舊 COMET 的節奏）
+            dash = {
+                interval_min = 9, interval_max = 15,
+                exit_speed = 220, offscreen = 0.9,
+                speed = 300, return_speed = 280,
+                damage = 8, push = 44,
+                aim_bias = 18,          -- 衝刺高度相對玩家的偏移（正＝略低於玩家頭頂）
+            },
         },
-        parts = {
-            -- 階段 1：引擎。只有掠過投彈，窗口最寬 —— 教玩家這場戰鬥的節奏。
-            { id = "ENGINE", label = "ENGINE", hp = 55, cell = 2,
-              dx = 44, dy = 8, w = 20, h = 18, muzzle_x = 30, muzzle_y = 30,
-              reveal = "outer",
-              flight_phase = { attacks = { "BOMB" }, cruise_time = 2.0,
-                               telegraph = 0.6, recover = 1.5 },
-              attack = { damage = 6, speed_mult = 24, bomb_grav_mult = 14, bomb_n = 2 } },
 
-            -- 階段 2：武器莢艙。加入俯衝（出畫 → 衝回來）與定點齊射。
-            { id = "PODS", label = "PODS", hp = 70, cell = 3,
-              dx = 8, dy = 22, w = 34, h = 14, muzzle_x = 20, muzzle_y = 32,
-              reveal = "outer",
-              flight_phase = { attacks = { "DASH", "VOLLEY" }, cruise_time = 1.7,
-                               telegraph = 0.5, recover = 1.1 },
-              attack = { damage = 7, speed_mult = 30, grav_mult = 12, n = 3 } },
+        rig = {
+            mounts = { 2, 4 },          -- 靜態件：小型炸彈發射器、火箭底座
+            sbomb = { x = 56, y = 56 }, -- 小型炸彈的發射口（第 2 格左端）
+            thruster = { x = 95, y = 38 },  -- 推進器噴口（機尾）
+        },
 
-            -- 階段 3：核心。全招式 + 放小兵，窗口最短。
-            { id = "CORE", label = "CORE", hp = 85, cell = 4,
-              dx = 24, dy = 12, w = 22, h = 20, muzzle_x = 28, muzzle_y = 30,
-              reveal = "internal",
-              flight_phase = { attacks = { "BOMB", "DASH", "VOLLEY", "SPAWN" },
-                               cruise_time = 1.4, telegraph = 0.4, recover = 0.8 },
-              attack = { damage = 8, speed_mult = 32, grav_mult = 12, n = 3,
-                         bomb_grav_mult = 16, bomb_n = 3 } },
+        -- 兩座砲塔都會被打壞、也都會自己修好（使用者拍板）
+        turrets = {
+            -- 機槍：在機身下方，由「連結機身處」為轉軸，平行～向下 30 度
+            { id = "GUN", label = "GUN", hp = 55, repair_time = 45,
+              box = { dx = 4, dy = 56, w = 36, h = 10 },     -- 量自第 1 格
+              cell = 1, pivot_x = 37, pivot_y = 58,
+              aim = { min = -30, max = 0 },                  -- ★ 負＝往下；0＝水平
+              muzzle_x = 4, muzzle_y = 61,
+              droop = -30, bar_dy = 10 },
+            -- 火箭發射器：在機身上方，跟著玩家轉，但只在「左上」這個扇形裡
+            { id = "ROCKET", label = "RKT", hp = 45, repair_time = 50,
+              box = { dx = 36, dy = 21, w = 24, h = 12 },    -- 量自第 5 格
+              cell = 5, pivot_x = 52, pivot_y = 31,
+              -- ★ 下限刻意拉到 20 度：玩家幾乎都在下方，瞄準會一路壓到下限，
+              --   下限太小的話火箭就變成貼著水平射出、看不出「往左上發射」（實測 ang 一直是 5）。
+              aim = { min = 20, max = 60 },                  -- ★ 正＝往上（左上角度）
+              muzzle_x = 36, muzzle_y = 26,
+              droop = 20, bar_dy = -26 },
+        },
+
+        attacks = {
+            interval_min = 1.8, interval_max = 3.5,
+            phase2_at = 0.5,            -- 血量低於此 → 火箭解禁（50% 以上只有機槍＋小炸彈）
+            order = { "GUN", "SBOMB", "ROCKET" },
+            weights = { GUN = 3, SBOMB = 3, ROCKET = 2 },
+            -- 機槍：行為與 BOSS4 相同（連射幾輪後停手）
+            GUN = {
+                needs = "GUN",
+                bursts = 3, shots = 5, burst_time = 1.0, burst_gap = 0.45,
+                damage = 3, speed = 340,
+            },
+            -- 小型炸彈：往前發射後往下掉落。★ 直徑 4 的方形（使用者拍板）
+            --   發射器不會被打壞 → 這一招沒有 needs，整場都在。
+            SBOMB = {
+                n = 3, gap = 0.22,
+                speed = 120, gravity_mult = 1.6,
+                size = 4, damage = 6,
+            },
+            -- 追蹤火箭：往左上發射後追玩家。轉向有上限 → 繞開它是有效解法。
+            ROCKET = {
+                needs = "ROCKET", phase2 = true,
+                n = 2, gap = 0.55,
+                speed = 95, turn = 110, home_delay = 0.3, life = 4.0,
+                size = 5, damage = 12,
+            },
+        },
+
+        -- 推進器煙霧（與 GUNSHIP 同一套程式，數值各自調）
+        smoke = {
+            interval = 0.2, max = 24, spawn_jitter = 2,
+            vx_min = 12, vx_max = 22,
+            rise_min = 2, rise_max = 6,
+            drag = 0.6,
+            life_min = 1.3, life_max = 2.0,
+            r0 = 2, r1 = 8,
         },
     },
+
 -- ======================================================================
     -- [[ §15.5c 懸停轟炸機 ]] 2026-09-25　`part_mode = "HOVER"`
     -- ----------------------------------------------------------------------
@@ -312,8 +365,7 @@ local bosses = {
 
         -- 部位座標（畫格內座標）
         rig = {
-            mount     = { cell = 2, pivot_x = 50, pivot_y = 82 },   -- 機槍的旋轉軸＝底座下緣
-            gun       = { cell = 3, muzzle_x = 18, muzzle_y = 86, max_angle = 45 },
+            mounts    = { 2 },      -- 靜態件：機槍底座
             -- ★ x0~y1＝炸彈在畫格裡的範圍：投下去的彈體就是**裁這一塊**來畫（不是黑方塊）
             bomb      = { cell = 1, drop_x = 85, drop_y = 87,
                           x0 = 66, y0 = 65, x1 = 105, y1 = 87 },
@@ -342,32 +394,39 @@ local bosses = {
             r0 = 2, r1 = 10,        -- 由小變大（離線合成比對過：r1=7 太細像廢氣，10 才像煙）
         },
 
-        gun_part = {
-            label = "GUN",
-            hp = 60,
-            repair_time = 60,           -- ★ 打壞後 60 秒自己修好（使用者拍板）
-            -- 命中框：量自第 3 格 x18~59 / y79~93
-            dx = 18, dy = 79, w = 42, h = 15,
+        -- [[ 砲塔 ]] 可打壞、過一段時間自己修好。★ 2026-09-25 改成通用清單（與 BOSS3 共用程式）
+        turrets = {
+            { id = "GUN", label = "GUN", hp = 60, repair_time = 60,
+              box = { dx = 18, dy = 79, w = 42, h = 15 },   -- 命中框：量自第 3 格
+              cell = 3, pivot_x = 50, pivot_y = 82,          -- 旋轉軸＝底座下緣
+              aim = { min = -45, max = 45 },                 -- 相對「水平朝左」，正=往上
+              muzzle_x = 18, muzzle_y = 86,
+              droop = 45, bar_dy = 12 },
         },
 
         -- 攻擊：每次間隔 2~4 秒隨機
         -- ★ 血量 50% 以上＝機槍＋投擲；50% 以下＝三種都來（使用者拍板）
         attacks = {
             interval_min = 2.0, interval_max = 4.0,
-            phase2_at = 0.5,            -- 血量比例低於此 → 炸彈解禁
+            phase2_at = 0.5,            -- 血量比例低於此 → 標了 phase2 的招式解禁
             -- ★ 2026-09-25（使用者拍板）：出招機率改成加權 —— crate 多、機槍與炸彈少。
             --   實際比例會隨「當下有哪些招可用」變動（機槍壞了／炸彈還沒解禁就自動重分配）：
             --     第一階段（只有機槍＋crate）：crate 71%／機槍 29%
             --     第二階段（三招都在）：      crate 59%／機槍 24%／炸彈 17%
+            -- ★ order＝抽選時掃過的順序（也是唯一的「有哪些招」清單）
+            order = { "GUN", "BLOCK", "BOMB" },
             weights = { GUN = 2, BLOCK = 5, BOMB = 1.5 },
             -- 機槍：很快的連射，打 3 輪後停手，回到隨機挑招
             GUN = {
+                needs = "GUN",          -- ★ 這座砲塔壞了就抽不到這一招
                 bursts = 3, shots = 5, burst_time = 1.0, burst_gap = 0.45,
                 damage = 3, speed = 360,
             },
             -- 炸彈：往前一點點推力 → 拋物線落下 → 大範圍爆炸 ＋ 畫面震動
             -- ★ 不會連續投擲（使用者拍板）：挑招時會跳過「上一招也是炸彈」的情況
             BOMB = {
+                phase2 = true,          -- ★ 血量低於 phase2_at 才解禁
+                no_repeat = true,       -- ★ 不會連續投擲（使用者拍板）
                 -- ★ 2026-09-25：投彈前會**先飛到玩家上方**（把落下期間往前飄的距離算進去）。
                 --   approach_max＝追不到就原地丟的逾時，避免玩家一直跑就把這一招卡住。
                 approach_speed = 70, approach_tol = 8, approach_max = 4.5,
