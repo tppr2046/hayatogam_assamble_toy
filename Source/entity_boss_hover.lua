@@ -202,6 +202,16 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
     local want_alt = 0
     if self.atk and self.atk.kind == "BOMB" and not self.atk.done then
         want_alt = -(hv.bomb_climb or 34)          -- 負＝往上
+    elseif #(self.bombs or {}) > 0 then
+        -- ★★ 2026-09-25：炸彈還在空中就**維持高度**，不要跟著它降下去。
+        --   爆炸圖是 50×50 以爆心置中（往上蓋到地面線上方 25px），
+        --   低空的話會整個疊在機腹與機槍上，看起來就像「炸到自己」。
+        --   （實際上爆風只算玩家傷害，BOSS 不會扣血 —— 這是**畫面**問題，不是判定問題。）
+        want_alt = -(hv.bomb_climb or 34)
+    elseif self.atk and self.atk.kind == "BLOCK" and not self.atk.done then
+        -- ★ 2026-09-25：crate 也**先爬高再丟**（使用者拍板）——
+        --   丟得高＝落下時間長＝同樣的水平速度飛得更遠，也比較看得清楚弧線。
+        want_alt = -(hv.crate_climb or 26)
     end
     local cur = self.alt_off or 0
     local step = (hv.climb_speed or 60) * dt
@@ -378,11 +388,19 @@ function Enemy:hoverAdvanceAttack(dt, mech_x, mech_y, mech_width, mech_height, c
         end
 
     elseif a.kind == "BLOCK" then
+        local BK = A.BLOCK or {}
+        local hv2 = self.hover or {}
         if not a.done then
-            a.done = true
-            self:hoverThrowBlock(controller)
+            -- ★ 爬到投擲高度才丟（逾時保險同炸彈：不能因為爬不上去就卡住排程）
+            local high = math.abs((self.alt_off or 0) + (hv2.crate_climb or 26)) <= 2
+            if high or a.t >= (BK.climb_max or 2.5) then
+                a.done = true
+                self:hoverThrowBlock(controller)
+                a.t = 0
+            end
+        elseif a.t >= 0.5 then
+            self.atk = nil
         end
-        if a.t >= 0.5 then self.atk = nil end
     end
 end
 
