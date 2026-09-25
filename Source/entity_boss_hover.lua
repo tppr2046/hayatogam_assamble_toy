@@ -234,6 +234,9 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
         if not (boss_on and mech_on) then
             self.atk = nil
             self.atk_timer = 0          -- 入畫後從完整的間隔重新數（不會一進場就被打）
+            -- ★ 停留中的 crate 也要推進：玩家剛好在這時離開畫面的話，
+            --   不放手就會有一顆永遠黏在機鼻上的 crate。
+            self:hoverUpdateCrate(dt, controller)
             self:hoverUpdateBombs(dt, mech_x, mech_y, mech_width, mech_height, controller)
             self:hoverSyncBoxes()
             return
@@ -306,7 +309,8 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
         end
     end
 
-    -- 飛行中的炸彈
+    -- 停留中的 crate 與飛行中的炸彈
+    self:hoverUpdateCrate(dt, controller)
     self:hoverUpdateBombs(dt, mech_x, mech_y, mech_width, mech_height, controller)
 
     self:hoverSyncBoxes()
@@ -469,52 +473,60 @@ end
 -- ★ 不設 despawn：留在場上當玩家的彈藥（COLOSSUS 的石頭 3 秒消失，那是另一個設計）。
 -- ⚠️ Stone 的物理是**逐幀**的（vy += g 之後 y += vy），所以這裡用離散解算彈道；
 --   用連續版的 ½gT² 會系統性丟短。與 COLOSSUS 的 THROW 同一套公式。
+-- [[ 投擲 crate ]] ★★ 使用者拍板：丟的就是**既有的 crate 物件**（Stone），
+--   不是另做一種方塊 —— 這樣玩家可以用爪抓起來丟回去，BOSS 等於一直在供應彈藥。
+-- ★ owner="BOSS"：飛行中只傷玩家；落地後 Stone 自己把 owner 清成中性（見 entity_stone）。
+--
+-- ★★ 2026-09-25：產生後**先在機鼻停留 hold 秒再掉落**（使用者拍板）。
+--   作法是借用 Stone 既有的 `is_grabbed`：那個狀態本來就會**凍結物理、也不跑消失倒數**
+--   （原本是給爪子抓著用的）—— 不必為了「停一下」在 Stone 裡多開一種狀態。
+--   停留期間每幀把它黏在機鼻上（BOSS 還在飄），時間到才真的算彈道丟出去。
 function Enemy:hoverThrowBlock(controller)
     if not (controller and Stone) then return end
     local BK = (self.boss_data.attacks or {}).BLOCK or {}
-    local rig = self.hover_rig or {}
-    local th = rig.throw or {}
+    local th = (self.hover_rig or {}).throw or {}
+    local stone = Stone:init(self.boss_x + (th.x or 26), self.boss_y + (th.y or 60),
+                             self.boss_ground_y or 156)
+    stone.mech_damage = BK.damage or 10
+    stone.despawn_time = BK.despawn
+    stone.is_grabbed = true              -- ★ 停留：凍結物理（見上面的說明）
+    table.insert(controller.stones, stone)
+    self.pending_crate = { stone = stone, t = 0 }
+end
+
+-- 停留中的 crate：黏在機鼻上，時間到就放手。
+-- ★ 彈道在**放手那一刻**才算 —— 停留期間 BOSS 還在飄，提前算好會偏。
+function Enemy:hoverUpdateCrate(dt, controller)
+    local pc = self.pending_crate
+    if not pc then return end
+    local BK = (self.boss_data.attacks or {}).BLOCK or {}
+    local th = (self.hover_rig or {}).throw or {}
     local sx = self.boss_x + (th.x or 26)
     local sy = self.boss_y + (th.y or 60)
+    pc.stone.x, pc.stone.y = sx, sy
+    pc.t = pc.t + dt
+    if pc.t < (BK.hold or 0.3) then return end
+    self.pending_crate = nil
 
-    local stone = Stone:init(sx, sy, self.boss_ground_y or 156)
-    stone.mech_damage = BK.damage or 10
-    -- ★ 2026-09-25：**落地 despawn_time 秒後消失**（使用者拍板 10 秒）。
-    --   計時只在「站在地上」時走 —— 抓在爪子上不倒數，所以撿起來不會手上爆掉。
-    stone.despawn_time = BK.despawn
-
-    -- ★★ 2026-09-25：落點要有遠有近（使用者拍板）。
-    --   每次把「BOSS 到玩家的水平距離」乘上一個隨機倍率：
-    --   <1＝丟在玩家與 BOSS 之間（近彈）、>1＝越過玩家（遠彈）。
-    --   固定打腳下的話玩家只要保持不動就永遠是同一顆，學不到東西也閃不掉。
+    -- ★★ crate **不帶往上的推力**：只有往前的速度，垂直純自由落下（vy 從 0 開始）。
+    --   → 飛行時間不能自己挑，它由「離地高度」決定；水平速度再回推。
+    -- ⚠️ Stone 的物理是**逐幀**的（vy += g 之後 y += vy），落地幀數要解離散式：
+    --     g·T·(T+1)/2 = h  →  T = (√(1 + 8h/g) − 1) / 2
+    --   用連續版的 √(2h/g) 會算多，crate 就會飛過頭。
     local tx = self.aim_mx or (self.boss_x - 120)
-    local ty = self.aim_my or (self.boss_ground_y or sy)
-    do
+    do  -- 落點的隨機倍率：<1＝丟在半路、>1＝越過玩家
         local lo = BK.dist_scale_min or 0.6
         local hi = BK.dist_scale_max or 1.35
         tx = sx + (tx - sx) * (lo + math.random() * (hi - lo))
     end
-    local dx = tx - sx
-    -- ★★ 2026-09-25：crate **不帶往上的推力**（使用者拍板）——
-    --   只有往前的速度，垂直方向純粹是自由落下（vy 從 0 開始）。
-    --   → 飛行時間不能自己挑，它由「離地高度」決定；
-    --     水平速度再回推：vx = 水平距離 ÷ 落地所需幀數。
-    -- ⚠️ Stone 的物理是**逐幀**的（vy += g 之後 y += vy），所以落地幀數要解離散式：
-    --     g·T·(T+1)/2 = h  →  T = (√(1 + 8h/g) − 1) / 2
-    --   用連續版的 √(2h/g) 會算多，crate 就會飛過頭。
-    local g = (controller.GRAVITY or 0.5)
+    local g = (controller and controller.GRAVITY) or 0.5
     local h = math.max(1, (self.boss_ground_y or 156) - sy)
     local T = (math.sqrt(1 + 8 * h / g) - 1) / 2
-    local vx = dx / math.max(1, T)
-    local vy = 0
-    -- 一點點散布：完全精確＝每一發必中，玩家只能硬吃
+    local vx = (tx - sx) / math.max(1, T)
     vx = vx + (math.random() * 2 - 1) * (BK.spread or 0.5)
-    -- 水平速度上限：距離倍率抽到大值時不要變成一顆平射砲彈
-    local vmax = BK.speed_max or 5.5
+    local vmax = BK.speed_max or 5
     if vx > vmax then vx = vmax elseif vx < -vmax then vx = -vmax end
-
-    stone:launch(vx, vy, "BOSS")
-    table.insert(controller.stones, stone)
+    pc.stone:launch(vx, 0, "BOSS")       -- vy = 0：沒有往上的力
 end
 
 -- ==========================================================================
