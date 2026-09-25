@@ -1,0 +1,117 @@
+{
+  "id": "M016",
+  "name": "GUNSHIP TEST",
+  "description": "Test level: BOSS4 hovering gunship",
+  "prerequisite": 0,
+  "time_limit": -1,
+  "objective": {
+    "type": "BOSS_KILL",
+    "description": "Destroy the boss"
+  },
+  "reward_steel": 0,
+  "reward_copper": 0,
+  "reward_rubber": 0,
+  "scenes": [
+    {
+      "width": 1024,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "objective": {
+        "type": "BOSS_KILL",
+        "description": "Destroy the boss"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "TEST LEVEL: GUNSHIP (hovering bomber).",
+          "Over 50% HP: machine gun + thrown blocks.",
+          "Under 50%: bombs join in. Bombs never come twice in a row.",
+          "The gun can be shot off - it repairs itself after 60s.",
+          "Thrown blocks stay on the ground as breakable cover."
+        ]
+      },
+      "backgrounds": [],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "delivery_targets": [],
+      "arena": {
+        "x1": 420,
+        "x2": 1000
+      },
+      "enemies": [
+        {
+          "type": "BOSS",
+          "boss_id": "BOSS4",
+          "x": 760,
+          "y": 0
+        }
+      ]
+    }
+  ]
+}

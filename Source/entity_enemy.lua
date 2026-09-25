@@ -933,7 +933,9 @@ function Enemy:initBoss(edata, ground_y)
     -- [[ §15.5a ]] 平行制（part_mode=="PARALLEL"）沒有 `parts`，改用 head + arms，
     -- 所以「缺 parts」不能一律當成資料壞掉。
     local is_parallel = (bd and bd.part_mode == "PARALLEL")
-    if not bd or (not is_parallel and (not bd.parts or #bd.parts == 0)) then
+    -- [[ §15.5c ]] 懸停制也沒有 parts（本體一條血），同樣不能被當成資料壞掉
+    local is_hover = (bd and bd.part_mode == "HOVER")
+    if not bd or (not is_parallel and not is_hover and (not bd.parts or #bd.parts == 0)) then
         print("ERROR: BossData missing for " .. tostring(edata.boss_id))
         return Enemy:init(edata.x, edata.y or 0, "BASIC_ENEMY", ground_y)  -- 安全回退
     end
@@ -992,6 +994,9 @@ function Enemy:initBoss(edata, ground_y)
     end
     if is_parallel then
         e:bossInitParallel(bd, ground_y)
+    elseif bd.part_mode == "HOVER" then
+        -- [[ §15.5c ]] 懸停轟炸機：本體一條血 ＋ 可打壞會自修的機槍（entity_boss_hover.lua）
+        e:bossInitHover(bd, ground_y)
     else
         e:bossPositionHitbox()
         -- [[ §15.5b ]] 飛行 BOSS：結構仍是序列制，只多一套移動/出招狀態機
@@ -1190,6 +1195,17 @@ function Enemy:updateBoss(dt, mech_x, mech_y, mech_width, mech_height, controlle
     -- ★ 序列制的每一行都假設「boss_parts[boss_phase] 存在」，平行制沒有那個東西，
     --   所以在這裡整段分流，而不是在下面逐行加 if。
     -- ======================================================================
+    -- [[ §15.5c ]] 懸停制：整段走自己的更新（懸停／機槍／炸彈／方塊）
+    if self.part_mode == "HOVER" then
+        if self.boss_invuln and self.boss_invuln > 0 then
+            self.boss_invuln = self.boss_invuln - dt
+            self:hoverSyncBoxes()
+            return
+        end
+        self:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, controller)
+        return
+    end
+
     if self.part_mode == "PARALLEL" then
         if self.boss_invuln and self.boss_invuln > 0 then
             self.boss_invuln = self.boss_invuln - dt
@@ -1314,6 +1330,13 @@ function Enemy:bossLaser(atk, dt, mech_x, mech_y, mech_width, mech_height)
 end
 
 function Enemy:drawBoss(camera_x)
+    -- [[ §15.5c ]] 懸停制走自己的繪製（本體＋底座＋旋轉機槍＋炸彈＋方塊＋機鼻遮罩）
+    if self.part_mode == "HOVER" then
+        self:bossDrawHover(camera_x)
+        self:drawPartExplosion(camera_x)
+        self:drawBossHpBarHover()
+        return
+    end
     -- [[ §15.5a ]] 平行制走自己的繪製（本體＋雙臂＋頭，缺圖時全部程式繪製佔位）
     if self.part_mode == "PARALLEL" then
         self:bossDrawParallel(camera_x)
