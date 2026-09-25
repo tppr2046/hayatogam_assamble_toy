@@ -335,6 +335,9 @@ local bosses = {
             -- 炸彈：往前一點點推力 → 拋物線落下 → 大範圍爆炸 ＋ 畫面震動
             -- ★ 不會連續投擲（使用者拍板）：挑招時會跳過「上一招也是炸彈」的情況
             BOMB = {
+                -- ★ 2026-09-25：投彈前會**先飛到玩家上方**（把落下期間往前飄的距離算進去）。
+                --   approach_max＝追不到就原地丟的逾時，避免玩家一直跑就把這一招卡住。
+                approach_speed = 70, approach_tol = 8, approach_max = 4.5,
                 damage = 16, push = 26, gravity_mult = 2.2,
                 blast_radius = 44, blast_damage = 12,
                 shake_intensity = 8, shake_duration = 0.5,

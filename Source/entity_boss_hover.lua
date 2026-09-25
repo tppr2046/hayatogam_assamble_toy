@@ -176,11 +176,25 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
 
     -- [[ 懸停 ]] 緩慢左右飄移 ＋ 上下浮動。★ 不套重力（它是飛的）
     self.hover_t = (self.hover_t or 0) + dt
-    local nx = self.boss_x + self.hover_dir * (hv.speed or 14) * dt
-    if math.abs(nx - self.hover_origin_x) > (hv.range or 110) then
-        self.hover_dir = -self.hover_dir
+    -- ★★ 2026-09-25：**投彈時先飛到玩家上方**（使用者拍板）—— 原本原地就丟，幾乎炸不到人。
+    --   這段期間不巡邏，改成朝投彈點靠過去；到位或逾時才真的投下去（見 BOMB 分支）。
+    local seek = nil
+    if self.atk and self.atk.kind == "BOMB" and not self.atk.done then
+        seek = self:hoverBombSeekX(controller)
+    end
+    if seek then
+        local B = (self.boss_data.attacks or {}).BOMB or {}
+        local d = seek - self.boss_x
+        local step = (B.approach_speed or 60) * dt
+        if math.abs(d) <= step then self.boss_x = seek
+        else self.boss_x = self.boss_x + (d > 0 and step or -step) end
     else
-        self.boss_x = nx
+        local nx = self.boss_x + self.hover_dir * (hv.speed or 14) * dt
+        if math.abs(nx - self.hover_origin_x) > (hv.range or 110) then
+            self.hover_dir = -self.hover_dir
+        else
+            self.boss_x = nx
+        end
     end
     self.boss_y = (hv.base_y or 10) + math.sin(self.hover_t * (hv.bob_speed or 0.5) * math.pi * 2) * (hv.bob_amp or 5)
 
@@ -331,12 +345,21 @@ function Enemy:hoverAdvanceAttack(dt, mech_x, mech_y, mech_width, mech_height, c
         end
 
     elseif a.kind == "BOMB" then
-        -- 投彈：一次性
+        -- 投彈：先靠近（移動在 bossUpdateHover 裡做），到位或逾時才投，投完就結束
+        local B = A.BOMB or {}
         if not a.done then
-            a.done = true
-            self:hoverDropBomb(controller)
+            local seek = self:hoverBombSeekX(controller)
+            local near = (not seek) or math.abs(seek - self.boss_x) <= (B.approach_tol or 8)
+            -- ★ 逾時保險：玩家一直往外跑時不能無限追 —— 追不到就在原地丟，
+            --   不然這一招會卡住，其他兩招也跟著不會出（排程一次只跑一招）。
+            if near or a.t >= (B.approach_max or 3.0) then
+                a.done = true
+                self:hoverDropBomb(controller)
+                a.t = 0
+            end
+        elseif a.t >= 0.4 then
+            self.atk = nil
         end
-        if a.t >= 0.4 then self.atk = nil end
 
     elseif a.kind == "BLOCK" then
         if not a.done then
@@ -439,9 +462,33 @@ end
 -- ==========================================================================
 -- 飛行中的炸彈
 -- ==========================================================================
+-- 炸彈的重力（px/秒²）。★ 唯一計算點：落體與「要飛到哪裡才投得中」都讀這支。
+function Enemy:hoverBombGravity(controller)
+    local B = (self.boss_data.attacks or {}).BOMB or {}
+    return (controller and controller.GRAVITY or 0.5) * 60 * (B.gravity_mult or 2.2)
+end
+
+-- [[ 2026-09-25 ]] 投彈前要飛到的 boss_x：讓炸彈**落在玩家身上**。
+-- ★ 不是「飛到玩家正上方」那麼簡單 —— 炸彈離機時帶著往前的推力，
+--   落下期間會往前飄 push × 落下時間，所以投彈點要往後偏那麼多。
+-- 回傳 nil＝沒有目標（玩家位置不明），呼叫端就維持原本的巡邏。
+function Enemy:hoverBombSeekX(controller)
+    if not self.aim_mx then return nil end
+    local B = (self.boss_data.attacks or {}).BOMB or {}
+    local rig = self.hover_rig or {}
+    local bm = rig.bomb or {}
+    local drop_x = bm.drop_x or 85
+    local drop_y = bm.drop_y or 87
+    local h = math.max(1, (self.boss_ground_y or 156) - (self.boss_y + drop_y))
+    local G = self:hoverBombGravity(controller)
+    local tfall = math.sqrt(2 * h / G)
+    local lead = (B.push or 26) * tfall      -- 落下期間往前飄的距離
+    return self.aim_mx + lead - drop_x
+end
+
 function Enemy:hoverUpdateBombs(dt, mech_x, mech_y, mech_w, mech_h, controller)
     local B = (self.boss_data.attacks or {}).BOMB or {}
-    local G = (controller and controller.GRAVITY or 0.5) * 60 * (B.gravity_mult or 2.2)
+    local G = self:hoverBombGravity(controller)
     local ground = self.boss_ground_y or 156
     if self.bomb_reload and self.bomb_reload > 0 then self.bomb_reload = self.bomb_reload - dt end
 
