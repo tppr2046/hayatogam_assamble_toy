@@ -505,6 +505,16 @@ end
 -- ==========================================================================
 -- 飛行中的炸彈
 -- ==========================================================================
+-- 炸彈圖的實際大小（量自 rig 的 x0~y1）。
+-- ★★ 唯一計算點：繪製、落地判定、打到玩家的判定全部讀這支 ——
+--   判定用「一個點」而圖是 40×23 的話，會出現「圖都埋進地裡了才爆」。
+function Enemy:hoverBombSize()
+    local bm = (self.hover_rig or {}).bomb or {}
+    local w = (bm.x1 or 105) - (bm.x0 or 66) + 1
+    local h = (bm.y1 or 87) - (bm.y0 or 65) + 1
+    return w, h
+end
+
 -- 炸彈的重力（px/秒²）。★ 唯一計算點：落體與「要飛到哪裡才投得中」都讀這支。
 function Enemy:hoverBombGravity(controller)
     local B = (self.boss_data.attacks or {}).BOMB or {}
@@ -522,7 +532,10 @@ function Enemy:hoverBombSeekX(controller)
     local bm = rig.bomb or {}
     local drop_x = bm.drop_x or 85
     local drop_y = bm.drop_y or 87
-    local h = math.max(1, (self.boss_ground_y or 156) - (self.boss_y + drop_y))
+    -- ★ 落下高度要扣掉**半個彈身** —— 觸發是「圖的底部碰到地面」，
+    --   用中心算的話會多估落下時間，往前飄的補償就跟著偏（與觸發判定同一組尺寸）。
+    local _, bh = self:hoverBombSize()
+    local h = math.max(1, (self.boss_ground_y or 156) - (self.boss_y + drop_y) - bh / 2)
     local G = self:hoverBombGravity(controller)
     local tfall = math.sqrt(2 * h / G)
     local lead = (B.push or 26) * tfall      -- 落下期間往前飄的距離
@@ -540,10 +553,16 @@ function Enemy:hoverUpdateBombs(dt, mech_x, mech_y, mech_w, mech_h, controller)
         b.vy = b.vy + G * dt
         b.x = b.x + b.vx * dt
         b.y = b.y + b.vy * dt
-        local hit_mech = mech_x and b.x >= mech_x and b.x <= mech_x + (mech_w or 48)
-                         and b.y >= (mech_y or 0) and b.y <= (mech_y or 0) + (mech_h or 32)
-        if b.y >= ground or hit_mech then
-            local bx, by = b.x, math.min(b.y, ground)
+        -- ★★ 2026-09-25（使用者拍板）：**炸彈圖本體碰到地面或玩家才爆**，不是拿中心點判。
+        --   b.x/b.y 是圖的中心（繪製用 drawCentered），所以矩形是中心 ± 半寬高。
+        local bw, bh = self:hoverBombSize()
+        local bl, br = b.x - bw / 2, b.x + bw / 2
+        local bt, bb = b.y - bh / 2, b.y + bh / 2
+        local hit_mech = mech_x and br >= mech_x and bl <= mech_x + (mech_w or 48)
+                         and bb >= (mech_y or 0) and bt <= (mech_y or 0) + (mech_h or 32)
+        if bb >= ground or hit_mech then
+            -- 爆心＝彈體底部中央（貼著地面／貼著機體的那一點），不是圖的中心
+            local bx, by = b.x, math.min(bb, ground)
             table.remove(self.bombs, i)
             -- 直擊：直擊傷害；沒直擊：只有爆風
             if hit_mech then
