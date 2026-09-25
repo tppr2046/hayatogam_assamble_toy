@@ -196,7 +196,20 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
             self.boss_x = nx
         end
     end
-    self.boss_y = (hv.base_y or 10) + math.sin(self.hover_t * (hv.bob_speed or 0.5) * math.pi * 2) * (hv.bob_amp or 5)
+    -- ★★ 2026-09-25：**投彈前先爬高**（使用者拍板）—— 低空投彈幾乎是一放手就命中，
+    --   玩家沒有反應時間。爬高＝炸彈有落下時間＝閃得掉。
+    -- ★ 用漸進位移而不是瞬間換高度：瞬移的話畫面上會看起來像閃現。
+    local want_alt = 0
+    if self.atk and self.atk.kind == "BOMB" and not self.atk.done then
+        want_alt = -(hv.bomb_climb or 34)          -- 負＝往上
+    end
+    local cur = self.alt_off or 0
+    local step = (hv.climb_speed or 60) * dt
+    if math.abs(want_alt - cur) <= step then cur = want_alt
+    else cur = cur + ((want_alt > cur) and step or -step) end
+    self.alt_off = cur
+    self.boss_y = (hv.base_y or 10) + cur
+        + math.sin(self.hover_t * (hv.bob_speed or 0.5) * math.pi * 2) * (hv.bob_amp or 5)
 
     -- ★★ 2026-09-25：**玩家還沒進到 BOSS 場景前不出手**（使用者拍板）。
     --   與序列制／平行制同一條規則：雙方都在畫面上才動作，畫面外不偷打。
@@ -349,7 +362,10 @@ function Enemy:hoverAdvanceAttack(dt, mech_x, mech_y, mech_width, mech_height, c
         local B = A.BOMB or {}
         if not a.done then
             local seek = self:hoverBombSeekX(controller)
-            local near = (not seek) or math.abs(seek - self.boss_x) <= (B.approach_tol or 8)
+            local hv2 = self.hover or {}
+            -- ★ 到位＝水平對準**而且**已經爬到投彈高度（兩個都到才放手）
+            local high = math.abs((self.alt_off or 0) + (hv2.bomb_climb or 34)) <= 2
+            local near = ((not seek) or math.abs(seek - self.boss_x) <= (B.approach_tol or 8)) and high
             -- ★ 逾時保險：玩家一直往外跑時不能無限追 —— 追不到就在原地丟，
             --   不然這一招會卡住，其他兩招也跟著不會出（排程一次只跑一招）。
             if near or a.t >= (B.approach_max or 3.0) then
@@ -445,15 +461,24 @@ function Enemy:hoverThrowBlock(controller)
         local hi = BK.dist_scale_max or 1.35
         tx = sx + (tx - sx) * (lo + math.random() * (hi - lo))
     end
-    local dx, dy = tx - sx, ty - sy
-    local T = math.abs(dx) / math.max(1, BK.speed_max or 7)
-    local tmin, tmax = (BK.min_frames or 20), (BK.max_frames or 50)
-    if T < tmin then T = tmin elseif T > tmax then T = tmax end
+    local dx = tx - sx
+    -- ★★ 2026-09-25：crate **不帶往上的推力**（使用者拍板）——
+    --   只有往前的速度，垂直方向純粹是自由落下（vy 從 0 開始）。
+    --   → 飛行時間不能自己挑，它由「離地高度」決定；
+    --     水平速度再回推：vx = 水平距離 ÷ 落地所需幀數。
+    -- ⚠️ Stone 的物理是**逐幀**的（vy += g 之後 y += vy），所以落地幀數要解離散式：
+    --     g·T·(T+1)/2 = h  →  T = (√(1 + 8h/g) − 1) / 2
+    --   用連續版的 √(2h/g) 會算多，crate 就會飛過頭。
     local g = (controller.GRAVITY or 0.5)
-    local vx = dx / T
-    local vy = (dy - g * T * (T + 1) / 2) / T
+    local h = math.max(1, (self.boss_ground_y or 156) - sy)
+    local T = (math.sqrt(1 + 8 * h / g) - 1) / 2
+    local vx = dx / math.max(1, T)
+    local vy = 0
     -- 一點點散布：完全精確＝每一發必中，玩家只能硬吃
     vx = vx + (math.random() * 2 - 1) * (BK.spread or 0.5)
+    -- 水平速度上限：距離倍率抽到大值時不要變成一顆平射砲彈
+    local vmax = BK.speed_max or 5.5
+    if vx > vmax then vx = vmax elseif vx < -vmax then vx = -vmax end
 
     stone:launch(vx, vy, "BOSS")
     table.insert(controller.stones, stone)
