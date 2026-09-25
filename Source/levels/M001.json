@@ -18,69 +18,39 @@
     "backgrounds": [
       {
         "layer": 1,
-        "x": 205,
-        "y": 48,
-        "image": "images/bg_building1.png"
-      },
-      {
-        "layer": 0,
-        "x": 395,
-        "y": 96,
+        "x": 193,
+        "y": 99,
         "image": "images/bg_building4.png"
       },
       {
         "layer": 0,
-        "x": 132,
-        "y": 134,
-        "image": "images/bg_building7.png"
+        "x": 6,
+        "y": 89,
+        "image": "images/bg_building8.png"
       },
       {
         "layer": 0,
-        "x": 3,
-        "y": 124,
-        "image": "images/bg_building7.png"
+        "x": 236,
+        "y": 109,
+        "image": "images/bg_building9.png"
       },
       {
         "layer": 0,
-        "x": 263,
-        "y": 131,
-        "image": "images/bg_building7.png"
+        "x": 496,
+        "y": 89,
+        "image": "images/bg_building9.png"
       },
       {
         "layer": 0,
-        "x": 636,
-        "y": 137,
-        "image": "images/bg_building7.png"
+        "x": 998,
+        "y": 95,
+        "image": "images/bg_building8.png"
       },
       {
         "layer": 0,
-        "x": 511,
-        "y": 94,
-        "image": "images/bg_building6.png"
-      },
-      {
-        "layer": 0,
-        "x": 855,
-        "y": 130,
-        "image": "images/bg_building7.png"
-      },
-      {
-        "layer": 0,
-        "x": 764,
-        "y": 125,
-        "image": "images/bg_building7.png"
-      },
-      {
-        "layer": 0,
-        "x": 944,
-        "y": 131,
-        "image": "images/bg_building7.png"
-      },
-      {
-        "layer": 0,
-        "x": 1067,
-        "y": 136,
-        "image": "images/bg_building7.png"
+        "x": 734,
+        "y": 108,
+        "image": "images/bg_building9.png"
       }
     ],
     "terrain": [
