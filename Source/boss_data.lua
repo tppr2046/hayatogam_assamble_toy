@@ -233,6 +233,10 @@ local bosses = {
         body_w = 100, body_h = 80,
         cell_body = 3,
         hp = 200,
+        -- ★ 2026-09-25 使用者拍板：**畫在跳躍平台的上層**。
+        --   平台在 controller 的繪製順序裡排在敵人之後，不特別處理的話
+        --   BOSS 會被平台切過去（這一關平台又多又高，很明顯）。
+        draw_above_platforms = true,
         -- 命中框：量自第 3 格（x8~95 / y24~57），不是整張畫布
         body_box = { dx = 8, dy = 24, w = 88, h = 34 },
 
@@ -305,15 +309,8 @@ local bosses = {
             },
         },
 
-        -- 推進器煙霧（與 GUNSHIP 同一套程式，數值各自調）
-        smoke = {
-            interval = 0.2, max = 24, spawn_jitter = 2,
-            vx_min = 12, vx_max = 22,
-            rise_min = 2, rise_max = 6,
-            drag = 0.6,
-            life_min = 1.3, life_max = 2.0,
-            r0 = 2, r1 = 8,
-        },
+        -- ★ 2026-09-25 使用者拍板：**COMET 不要尾部煙霧**。
+        --   沒有 `smoke` 這個表，entity_boss_hover 的煙霧整段就不會跑（第一行就 return）。
     },
 
 -- ======================================================================

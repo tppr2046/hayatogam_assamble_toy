@@ -970,6 +970,14 @@ function Enemy:bossDrawHover(camera_x)
     --   而 crate（石頭管線）是畫在敵人之後的。見 drawAfterStones。
 end
 
+-- [[ §15.5c ]] 要疊在平台之上的 BOSS（COMET）：由 controller 在**畫完平台之後**呼叫。
+-- ★ 這支掛在 Enemy 上，所有敵人都有 → 第一行先擋掉不需要的。
+function Enemy:drawAfterPlatforms(camera_x)
+    if self.part_mode ~= "HOVER" then return end
+    if not self.boss_data.draw_above_platforms then return end
+    self:bossDrawHover(camera_x)
+end
+
 -- [[ §15.5c ]] 機鼻遮罩：由 controller 在**畫完石頭之後**呼叫。
 -- ★★ 它的用途就是「擋住正從機鼻出來的 crate」，所以繪製順序一定要在 crate 之後。
 -- ★ 這支掛在 Enemy 上，所有敵人都有 → 第一行先擋掉非懸停制的。

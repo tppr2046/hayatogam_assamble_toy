@@ -2077,6 +2077,13 @@ function EntityController:draw(camera_x)
         end
     end
 
+    -- [[ §15.5c ]] 要疊在**平台之上**的敵人（COMET）。
+    -- ★★ 與 drawAfterStones 同一種掛鉤，只是時機更晚：平台是畫在敵人之後的，
+    --   所以「BOSS 要蓋住平台」就只能在這裡補畫。沒實作這支的敵人不受影響。
+    for _, e in ipairs(self.enemies or {}) do
+        if e.is_alive and e.drawAfterPlatforms then e:drawAfterPlatforms(camera_x) end
+    end
+
     -- [[ §15.3 吊索 ]] 目前程式繪製：白色粗線 + 黑色細線（黑天空/白天空都看得見 §3-4）。
     -- 放 images/rope.png 之後可改成沿線平鋪。
     for _, r in ipairs(self.ropes or {}) do

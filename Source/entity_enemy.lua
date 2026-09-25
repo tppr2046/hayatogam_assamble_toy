@@ -1332,7 +1332,11 @@ end
 function Enemy:drawBoss(camera_x)
     -- [[ §15.5c ]] 懸停制走自己的繪製（本體＋底座＋旋轉機槍＋炸彈＋方塊＋機鼻遮罩）
     if self.part_mode == "HOVER" then
-        self:bossDrawHover(camera_x)
+        -- ★ 標了 draw_above_platforms 的 BOSS 本體改由 drawAfterPlatforms 畫
+        --   （平台排在敵人之後，不然 BOSS 會被平台切過去）。血條照樣在這裡畫。
+        if not self.boss_data.draw_above_platforms then
+            self:bossDrawHover(camera_x)
+        end
         self:drawPartExplosion(camera_x)
         self:drawBossHpBarHover()
         return
