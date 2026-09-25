@@ -345,7 +345,12 @@ local bosses = {
             --   ⚠️ 不設 despawn：留在場上當彈藥（COLOSSUS 的 3 秒消失是另一個設計）。
             BLOCK = {
                 damage = 10,
-                speed_max = 7, min_frames = 20, max_frames = 50, spread = 0.5,
+                -- ★ 2026-09-25：飛行速度再慢一點（speed_max 7→5.5、飛行幀數下限 20→28），
+                --   看得出弧線、也追得上去接。
+                speed_max = 5.5, min_frames = 28, max_frames = 60, spread = 0.5,
+                -- ★ 落點的隨機倍率：0.6＝丟在半路（近彈）／1.35＝越過玩家（遠彈）
+                dist_scale_min = 0.6, dist_scale_max = 1.35,
+                despawn = 10,          -- ★ 落地 10 秒後消失（計時只在地上走）
             },
         },
     },

@@ -407,9 +407,21 @@ function Enemy:hoverThrowBlock(controller)
 
     local stone = Stone:init(sx, sy, self.boss_ground_y or 156)
     stone.mech_damage = BK.damage or 10
+    -- ★ 2026-09-25：**落地 despawn_time 秒後消失**（使用者拍板 10 秒）。
+    --   計時只在「站在地上」時走 —— 抓在爪子上不倒數，所以撿起來不會手上爆掉。
+    stone.despawn_time = BK.despawn
 
+    -- ★★ 2026-09-25：落點要有遠有近（使用者拍板）。
+    --   每次把「BOSS 到玩家的水平距離」乘上一個隨機倍率：
+    --   <1＝丟在玩家與 BOSS 之間（近彈）、>1＝越過玩家（遠彈）。
+    --   固定打腳下的話玩家只要保持不動就永遠是同一顆，學不到東西也閃不掉。
     local tx = self.aim_mx or (self.boss_x - 120)
     local ty = self.aim_my or (self.boss_ground_y or sy)
+    do
+        local lo = BK.dist_scale_min or 0.6
+        local hi = BK.dist_scale_max or 1.35
+        tx = sx + (tx - sx) * (lo + math.random() * (hi - lo))
+    end
     local dx, dy = tx - sx, ty - sy
     local T = math.abs(dx) / math.max(1, BK.speed_max or 7)
     local tmin, tmax = (BK.min_frames or 20), (BK.max_frames or 50)
