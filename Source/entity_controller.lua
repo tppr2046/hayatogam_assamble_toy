@@ -241,6 +241,10 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             crumble = pd.crumble and true or false,
             crumble_timer = 0,
             collapsed = false,
+            -- [[ 2026-09-25 ]] 塌掉後過這麼久會**重新產生**（BOSS3 的跳躍平台關要用）。
+            -- ★ 0 或不填＝維持舊行為（塌了就永久消失），既有關卡不受影響。
+            respawn = pd.respawn or 0,
+            respawn_t = 0,
             -- [[ §15.3 移動平台 ]] 從起點來回移動的距離與速度（0 = 不動）。
             -- ★ 用「相對起點的位移量」而不是「終點座標」：關卡編輯器只要填兩個數字,
             --   而且平台被拖動時不必重算終點。
@@ -1286,7 +1290,21 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     pf.crumble_timer = pf.crumble_timer + dt
                     if pf.crumble_timer >= CRUMBLE_DELAY then
                         pf.collapsed = true
+                        pf.respawn_t = 0
                         print("LOG: platform collapsed at x=" .. pf.x)
+                    end
+                end
+            elseif pf.collapsed and (pf.respawn or 0) > 0 then
+                -- [[ 2026-09-25 ]] 重新產生。★ 玩家站在原位時**不要**復活 ——
+                --   會把玩家從板子中間頂出來（單向平台只擋下墜，不會把人推開）。
+                pf.respawn_t = (pf.respawn_t or 0) + dt
+                if pf.respawn_t >= pf.respawn then
+                    local overlap = (mech_x + mech_width > pf.x) and (mech_x < pf.x + pf.width)
+                                    and ((mech_y + mech_height) > pf.y) and (mech_y < pf.y + pf.height)
+                    if not overlap then
+                        pf.collapsed = false
+                        pf.crumble_timer = 0
+                        pf.respawn_t = 0
                     end
                 end
             end
@@ -2031,8 +2049,8 @@ function EntityController:draw(camera_x)
 
     -- [[ §15.3 空中平台 ]] 白底 + 黑框（§3-4）。crumble 已被踩過還沒塌 → 閃爍預警。
     for _, pf in ipairs(self.platforms or {}) do
+        local sx = pf.x - camera_x
         if not pf.collapsed then
-            local sx = pf.x - camera_x
             if sx < 400 and sx + pf.width > 0 then
                 local warn = pf.crumble and pf.crumble_timer > 0
                         and (math.floor(playdate.getCurrentTimeMilliseconds() / 90) % 2 == 0)
@@ -2040,6 +2058,21 @@ function EntityController:draw(camera_x)
                 gfx.fillRect(sx, pf.y, pf.width, pf.height)
                 gfx.setColor(warn and gfx.kColorWhite or gfx.kColorBlack)
                 gfx.drawRect(sx, pf.y, pf.width, pf.height)
+            end
+        elseif (pf.respawn or 0) > 0 and sx < 400 and sx + pf.width > 0 then
+            -- [[ 2026-09-25 ]] 等待重生：畫**虛線輪廓**。
+            -- ★ 不畫的話玩家會以為那塊板子永遠沒了，就不會在那裡等它回來；
+            --   快回來時閃得更快，當作「可以踩了」的預告。
+            local left = (pf.respawn or 0) - (pf.respawn_t or 0)
+            local fast = left <= 0.8
+            local period = fast and 90 or 220
+            if (math.floor(playdate.getCurrentTimeMilliseconds() / period) % 2) == 0 then
+                gfx.setColor(gfx.kColorBlack)
+                local step = 4
+                for dx = 0, pf.width - 1, step * 2 do
+                    gfx.drawLine(sx + dx, pf.y, math.min(sx + dx + step, sx + pf.width), pf.y)
+                    gfx.drawLine(sx + dx, pf.y + pf.height, math.min(sx + dx + step, sx + pf.width), pf.y + pf.height)
+                end
             end
         end
     end

@@ -1,127 +1,164 @@
 {
- "id": "M014",
- "name": "14 COMET TEST",
- "description": "S15.5b test: high-speed flying boss, auto-scrolling sky, moving platform over a pit.",
- "prerequisite": 0,
- "time_limit": -1,
- "objective": {
-  "type": "BOSS_KILL",
-  "description": "Shoot down the COMET"
- },
- "reward_steel": 12,
- "reward_copper": 12,
- "reward_rubber": 12,
- "scenes": [
-  {
-   "width": 1024,
-   "ground_y": 220,
-   "sky": "images/bg_sky",
-   "sky_scroll": 140,
-   "objective": {
+  "id": "M014",
+  "name": "COMET",
+  "description": "Sky duel with the COMET",
+  "prerequisite": 0,
+  "time_limit": -1,
+  "objective": {
     "type": "BOSS_KILL",
     "description": "Shoot down the COMET"
-   },
-   "dialog": {
-    "image": "images/dialog_bg",
-    "lines": [
-     "TEST LEVEL: COMET (high-speed flying boss).",
-     "The sky scrolls - that is where the speed comes from.",
-     "It stays aimable on purpose. Hit it during the RECOVER window.",
-     "Phase 1 window 1.5s, phase 2 1.1s, phase 3 0.8s.",
-     "The arena floor is a pit: ride the moving platform."
-    ]
-   },
-   "backgrounds": [],
-   "terrain": [
+  },
+  "reward_steel": 12,
+  "reward_copper": 12,
+  "reward_rubber": 12,
+  "scenes": [
     {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
-    },
-    {
-     "type": "pit",
-     "height_offset": 0
-    },
-    {
-     "type": "pit",
-     "height_offset": 0
-    },
-    {
-     "type": "pit",
-     "height_offset": 0
-    },
-    {
-     "type": "pit",
-     "height_offset": 0
-    },
-    {
-     "type": "pit",
-     "height_offset": 0
-    },
-    {
-     "type": "pit",
-     "height_offset": 0
-    },
-    {
-     "type": "flat",
-     "height_offset": 0
+      "width": 1024,
+      "ground_y": 220,
+      "sky": "images/bg_sky",
+      "sky_scroll": 180,
+      "objective": {
+        "type": "BOSS_KILL",
+        "description": "Shoot down the COMET"
+      },
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "COMET - sky gunship.",
+          "The sky scrolls: you are both moving fast.",
+          "Jump the platforms to reach its altitude.",
+          "Dashed platforms fell - they come back.",
+          "Gun and rocket pod can be shot off; both self-repair."
+        ]
+      },
+      "backgrounds": [],
+      "terrain": [
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        },
+        {
+          "type": "flat",
+          "height_offset": 0
+        }
+      ],
+      "obstacles": [],
+      "stones": [],
+      "delivery_targets": [],
+      "arena": {
+        "x1": 560,
+        "x2": 960
+      },
+      "platforms": [
+        {
+          "x": 470,
+          "y": 124,
+          "width": 72
+        },
+        {
+          "x": 592,
+          "y": 120,
+          "width": 80
+        },
+        {
+          "x": 700,
+          "y": 96,
+          "width": 64,
+          "crumble": true,
+          "respawn": 4.0
+        },
+        {
+          "x": 608,
+          "y": 72,
+          "width": 64,
+          "crumble": true,
+          "respawn": 5.0
+        },
+        {
+          "x": 812,
+          "y": 104,
+          "width": 72,
+          "move_x": 76,
+          "move_speed": 34
+        },
+        {
+          "x": 884,
+          "y": 68,
+          "width": 64,
+          "crumble": true,
+          "respawn": 4.0
+        },
+        {
+          "x": 736,
+          "y": 52,
+          "width": 56
+        }
+      ],
+      "enemies": [
+        {
+          "type": "BOSS",
+          "boss_id": "BOSS3",
+          "x": 800,
+          "y": 0
+        }
+      ],
+      "ropes": []
     }
-   ],
-   "obstacles": [],
-   "stones": [],
-   "delivery_targets": [],
-   "arena": {
-    "x1": 576,
-    "x2": 976
-   },
-   "platforms": [
-    {
-     "x": 576,
-     "y": 140,
-     "width": 160,
-     "move_x": 220,
-     "move_speed": 38
-    }
-   ],
-   "enemies": [
-    {
-     "type": "BOSS",
-     "boss_id": "BOSS3",
-     "x": 800,
-     "y": 0
-    }
-   ]
-  }
- ]
+  ]
 }
