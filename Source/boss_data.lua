@@ -308,7 +308,10 @@ local bosses = {
             ROCKET = {
                 needs = "ROCKET", phase2 = true,
                 n = 2, gap = 0.55,
-                speed = 95, turn = 110, home_delay = 0.3, life = 4.0,
+                -- ★ 2026-09-25 turn 110→55（使用者：轉向再慢一點）。
+                --   turn＝每秒最多轉幾度。愈小＝轉彎半徑愈大＝愈容易繞開它，
+                --   但也愈容易「錯過後在畫面上繞很久」→ life 一起從 4.0 收到 3.2 秒。
+                speed = 95, turn = 55, home_delay = 0.3, life = 3.2,
                 size = 5, damage = 12,
             },
         },
