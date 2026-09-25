@@ -374,7 +374,7 @@ local bosses = {
                 speed_max = 5, spread = 0.5, climb_max = 2.5,
                 -- ★ 2026-09-25：產生後先在機鼻**停留**這麼久再掉落（使用者拍板）。
                 --   停留期間走 Stone 的 is_grabbed（凍結物理、也不跑消失倒數）。
-                hold = 0.3,
+                hold = 0.8,
                 -- ★ 落點的隨機倍率：0.6＝丟在半路（近彈）／1.35＝越過玩家（遠彈）
                 dist_scale_min = 0.6, dist_scale_max = 1.35,
                 despawn = 10,          -- ★ 落地 10 秒後消失（計時只在地上走）

@@ -928,7 +928,10 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                     local stone = self.claw_grabbed_stone
                     local arm_length = 30  -- 臂長約 30 像素
                     local arm_angular_velocity_rad = math.rad(arm_angular_velocity)
-                    local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 4.0
+                    -- ★ 數值的來源是 parts_data 的 CLAW.throw_speed_mult；這裡的後備值只在
+                    --   「讀不到零件資料」時才會用到，**要與資料同值**，否則調了資料卻
+                    --   在某些路徑上維持舊手感（同一個值有兩個計算點）。
+                    local throw_speed_mult = (pdata and pdata.throw_speed_mult) or 3.2
                     local vx = -arm_angular_velocity_rad * arm_length * throw_speed_mult
                     local vy = 0  -- 初始 y 速度為 0，僅受重力影響
                     -- [[ §15.5a-6 ]] 標記為玩家甩投：只傷敵人、不會回頭砸到自己。
