@@ -102,14 +102,19 @@ function Enemy:bossInitHover(bd, ground_y)
     self.atk = nil              -- 進行中的招式
     self.last_atk = nil         -- 上一招（炸彈不連續要看它）
 
-    -- 飛行中的炸彈與方塊（本檔自己更新與繪製）
+    -- 飛行中的炸彈（本檔自己更新與繪製；crate 走 controller 的 stones 管線）
     self.bombs = {}
-    self.blocks = {}
 
     -- 旋轉件的緩衝圖（軸心置中）
     local m = rig.mount or {}
     self.gun_img = pivotCell(self.boss_sheet, (rig.gun or {}).cell or 3,
                              m.pivot_x or 50, m.pivot_y or 82, 120)
+    -- ★★ 2026-09-25：投下去的炸彈要用**第 1 格那張炸彈圖**（使用者拍板），不是黑方塊。
+    --   作法與旋轉件相同：裁成「炸彈中心置中」的小圖，之後畫在彈體座標上。
+    local bmb = rig.bomb or {}
+    local bcx = ((bmb.x0 or 66) + (bmb.x1 or 105)) / 2
+    local bcy = ((bmb.y0 or 65) + (bmb.y1 or 87)) / 2
+    self.bomb_img = pivotCell(self.boss_sheet, bmb.cell or 1, bcx, bcy, 64)
 
     self:hoverSyncBoxes()
 end
@@ -179,6 +184,40 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
     end
     self.boss_y = (hv.base_y or 10) + math.sin(self.hover_t * (hv.bob_speed or 0.5) * math.pi * 2) * (hv.bob_amp or 5)
 
+    -- ★★ 2026-09-25：**玩家還沒進到 BOSS 場景前不出手**（使用者拍板）。
+    --   與序列制／平行制同一條規則：雙方都在畫面上才動作，畫面外不偷打。
+    --   ★ 只擋「出招與夾畫面」，飄移照常 —— 玩家一入畫就看得到它已經在飄，不是憑空啟動。
+    -- ⚠️ 夾畫面**一定要放在這道閘之後**：放前面的話，還沒交戰就會被夾進相機視野，
+    --   等於 BOSS 一開場就自己飛到玩家面前（2026-09-25 實測踩到）。
+    do
+        local cam = (controller and controller.camera_x) or 0
+        local bb = self.body_box
+        local boss_on = (self.boss_x + bb.dx + bb.w > cam) and (self.boss_x + bb.dx < cam + 400)
+        local mech_on = mech_x and (mech_x + (mech_width or 48) > cam) and (mech_x < cam + 400)
+        if not (boss_on and mech_on) then
+            self.atk = nil
+            self.atk_timer = 0          -- 入畫後從完整的間隔重新數（不會一進場就被打）
+            self:hoverUpdateBombs(dt, mech_x, mech_y, mech_width, mech_height, controller)
+            self:hoverSyncBoxes()
+            return
+        end
+    end
+
+    -- ★★ 2026-09-25：**不可以飄出畫面**（使用者拍板）。
+    --   戰場鎖定後相機是停住的，飄出去就變成「看不見的東西在打你」，
+    --   而且玩家的 crate 也丟不到它。
+    -- ★ 夾的是機身實際範圍（body_box），不是整張 120 寬的畫布 ——
+    --   用畫布夾的話兩側的透明區會先頂到邊，機身永遠貼不到畫面邊緣。
+    do
+        local cam = (controller and controller.camera_x) or 0
+        local b = self.body_box
+        local margin = hv.screen_margin or 8
+        local lo = cam + margin - b.dx
+        local hi = cam + 400 - margin - b.dx - b.w
+        if self.boss_x < lo then self.boss_x = lo; self.hover_dir = 1 end
+        if self.boss_x > hi then self.boss_x = hi; self.hover_dir = -1 end
+    end
+
     -- [[ 機槍 ]] 以底座為軸瞄準玩家，夾在 ±max_angle 內
     local rig = self.hover_rig or {}
     local m = rig.mount or {}
@@ -230,9 +269,8 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
         end
     end
 
-    -- 飛行中的炸彈與方塊
+    -- 飛行中的炸彈
     self:hoverUpdateBombs(dt, mech_x, mech_y, mech_width, mech_height, controller)
-    self:hoverUpdateBlocks(dt, mech_x, mech_y, mech_width, mech_height, controller)
 
     self:hoverSyncBoxes()
 end
@@ -353,21 +391,41 @@ function Enemy:hoverDropBomb(controller)
     self.bomb_reload = 1.2      -- 機腹的炸彈圖先消失，之後再出現（看得出來「丟出去了」）
 end
 
+-- [[ 投擲 crate ]] ★★ 2026-09-25 使用者拍板：丟的就是**既有的 crate 物件**（Stone），
+--   不是另做一種方塊 —— 這樣玩家可以用爪抓起來丟回去，BOSS 等於一直在供應彈藥。
+-- ★ owner="BOSS"：飛行中只傷玩家；落地後 Stone 自己把 owner 清成中性（見 entity_stone）。
+-- ★ 不設 despawn：留在場上當玩家的彈藥（COLOSSUS 的石頭 3 秒消失，那是另一個設計）。
+-- ⚠️ Stone 的物理是**逐幀**的（vy += g 之後 y += vy），所以這裡用離散解算彈道；
+--   用連續版的 ½gT² 會系統性丟短。與 COLOSSUS 的 THROW 同一套公式。
 function Enemy:hoverThrowBlock(controller)
+    if not (controller and Stone) then return end
     local BK = (self.boss_data.attacks or {}).BLOCK or {}
     local rig = self.hover_rig or {}
     local th = rig.throw or {}
-    table.insert(self.blocks, {
-        x = self.boss_x + (th.x or 26),
-        y = self.boss_y + (th.y or 60),
-        vx = -(BK.speed or 90), vy = 0,
-        w = BK.width or 26, h = BK.height or 26,
-        t = 0,
-    })
+    local sx = self.boss_x + (th.x or 26)
+    local sy = self.boss_y + (th.y or 60)
+
+    local stone = Stone:init(sx, sy, self.boss_ground_y or 156)
+    stone.mech_damage = BK.damage or 10
+
+    local tx = self.aim_mx or (self.boss_x - 120)
+    local ty = self.aim_my or (self.boss_ground_y or sy)
+    local dx, dy = tx - sx, ty - sy
+    local T = math.abs(dx) / math.max(1, BK.speed_max or 7)
+    local tmin, tmax = (BK.min_frames or 20), (BK.max_frames or 50)
+    if T < tmin then T = tmin elseif T > tmax then T = tmax end
+    local g = (controller.GRAVITY or 0.5)
+    local vx = dx / T
+    local vy = (dy - g * T * (T + 1) / 2) / T
+    -- 一點點散布：完全精確＝每一發必中，玩家只能硬吃
+    vx = vx + (math.random() * 2 - 1) * (BK.spread or 0.5)
+
+    stone:launch(vx, vy, "BOSS")
+    table.insert(controller.stones, stone)
 end
 
 -- ==========================================================================
--- 飛行中的炸彈 / 方塊
+-- 飛行中的炸彈
 -- ==========================================================================
 function Enemy:hoverUpdateBombs(dt, mech_x, mech_y, mech_w, mech_h, controller)
     local B = (self.boss_data.attacks or {}).BOMB or {}
@@ -402,38 +460,6 @@ function Enemy:hoverUpdateBombs(dt, mech_x, mech_y, mech_w, mech_h, controller)
     end
 end
 
-function Enemy:hoverUpdateBlocks(dt, mech_x, mech_y, mech_w, mech_h, controller)
-    local BK = (self.boss_data.attacks or {}).BLOCK or {}
-    local G = (controller and controller.GRAVITY or 0.5) * 60 * (BK.gravity_mult or 1.6)
-    local ground = self.boss_ground_y or 156
-
-    for i = #self.blocks, 1, -1 do
-        local k = self.blocks[i]
-        k.t = k.t + dt
-        k.vy = k.vy + G * dt
-        k.x = k.x + k.vx * dt
-        k.y = k.y + k.vy * dt
-        local hit_mech = mech_x and (k.x + k.w) >= mech_x and k.x <= mech_x + (mech_w or 48)
-                         and (k.y + k.h) >= (mech_y or 0) and k.y <= (mech_y or 0) + (mech_h or 32)
-        if hit_mech then
-            self.pending_mech_damage = (self.pending_mech_damage or 0) + (BK.damage or 10)
-            table.remove(self.blocks, i)
-        elseif k.y + k.h >= ground then
-            table.remove(self.blocks, i)
-            -- ★★ 落地後**留在場上**：直接塞進 controller.obstacles（使用者拍板）。
-            --   那一套本來就每幀重讀清單 → 會擋路、打得破、破了自動消失，
-            --   完全不必為了「BOSS 丟出來的方塊」另做一種實體。
-            if controller and controller.obstacles then
-                table.insert(controller.obstacles, {
-                    x = math.floor(k.x), y = 0,
-                    width = k.w, height = k.h,
-                    hp = BK.hp or 20, max_hp = BK.hp or 20,
-                })
-            end
-        end
-    end
-end
-
 -- ==========================================================================
 -- 繪製
 -- ==========================================================================
@@ -449,10 +475,16 @@ function Enemy:bossDrawHover(camera_x)
     local sheet = self.boss_sheet
 
     -- 飛行中的炸彈（畫在機體之前：它已經離開機腹）
-    g.setColor(g.kColorBlack)
     for _, b in ipairs(self.bombs or {}) do
-        g.fillRect(b.x - camera_x - 4, b.y - 4, 8, 8)
+        if self.bomb_img then
+            local sx, sy = b.x - camera_x, b.y
+            pcall(function() self.bomb_img:drawCentered(sx, sy) end)
+        else
+            g.setColor(g.kColorBlack)
+            g.fillRect(b.x - camera_x - 4, b.y - 4, 8, 8)
+        end
     end
+    g.setColor(g.kColorBlack)
 
     if sheet then
         -- 本體
@@ -521,16 +553,8 @@ function Enemy:bossDrawHover(camera_x)
         if bi then pcall(function() bi:draw(bx, by) end) end
     end
 
-    -- 投擲中的方塊（畫在遮罩之前）
-    g.setColor(g.kColorWhite)
-    for _, k in ipairs(self.blocks or {}) do
-        g.fillRect(k.x - camera_x, k.y, k.w, k.h)
-        g.setColor(g.kColorBlack)
-        g.drawRect(k.x - camera_x, k.y, k.w, k.h)
-        g.drawRect(k.x - camera_x + 3, k.y + 3, k.w - 6, k.h - 6)
-        g.setColor(g.kColorWhite)
-    end
-    g.setColor(g.kColorBlack)
+    -- ★ 投擲出去的 crate 由 controller 的 stones 管線自己畫（它本來就在畫石頭），
+    --   這裡不重複畫 —— 同一個東西畫兩次就是兩個計算點。
 
     -- 機鼻遮罩（最上層：把還在機鼻裡的方塊擋住）
     if sheet then

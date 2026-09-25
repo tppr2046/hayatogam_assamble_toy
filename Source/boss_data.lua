@@ -296,14 +296,20 @@ local bosses = {
             speed = 14,                 -- ★ 刻意慢：它是移動砲台，不是靠速度躲子彈
             range = 110,                -- 以出生點為中心的左右飄移範圍
             bob_amp = 5, bob_speed = 0.5,
-            base_y = 10,                -- 機體頂端距畫面上緣（愈小＝飛得愈高）
+            -- ★★ 2026-09-25 10→46（使用者拍板）：**多數時間待在較低的位置**，
+            --   玩家丟得到 crate 才有「撿起來丟回去」這條解法。
+            --   （機身量到的範圍是 y20~75 → 機腹實際落在畫面 y66~121。）
+            base_y = 46,                -- 機體頂端距畫面上緣（愈小＝飛得愈高）
+            screen_margin = 8,          -- 左右各留這麼多，不讓它飄出畫面
         },
 
         -- 部位座標（畫格內座標）
         rig = {
             mount     = { cell = 2, pivot_x = 50, pivot_y = 82 },   -- 機槍的旋轉軸＝底座下緣
             gun       = { cell = 3, muzzle_x = 18, muzzle_y = 86, max_angle = 45 },
-            bomb      = { cell = 1, drop_x = 85, drop_y = 87 },
+            -- ★ x0~y1＝炸彈在畫格裡的範圍：投下去的彈體就是**裁這一塊**來畫（不是黑方塊）
+            bomb      = { cell = 1, drop_x = 85, drop_y = 87,
+                          x0 = 66, y0 = 65, x1 = 105, y1 = 87 },
             nose_mask = { cell = 5 },
             throw     = { x = 26, y = 60 },                         -- 機鼻黑色處
         },
@@ -334,9 +340,12 @@ local bosses = {
                 shake_intensity = 8, shake_duration = 0.5,
             },
             -- 投擲方塊：從機鼻丟出，**落地後留在場上變成可破壞的障礙**（使用者拍板）
+            -- ★★ 投擲 crate（2026-09-25 使用者拍板）：丟的就是既有的 crate 物件（Stone），
+            --   落地後轉中性 → **玩家可以用爪抓起來丟回去**，BOSS 等於一直在供彈。
+            --   ⚠️ 不設 despawn：留在場上當彈藥（COLOSSUS 的 3 秒消失是另一個設計）。
             BLOCK = {
-                damage = 10, speed = 90, gravity_mult = 1.6,
-                width = 26, height = 26, hp = 20,
+                damage = 10,
+                speed_max = 7, min_frames = 20, max_frames = 50, spread = 0.5,
             },
         },
     },
