@@ -692,12 +692,25 @@ function Enemy:bossDrawHover(camera_x)
     -- ★ 投擲出去的 crate 由 controller 的 stones 管線自己畫（它本來就在畫石頭），
     --   這裡不重複畫 —— 同一個東西畫兩次就是兩個計算點。
 
-    -- 機鼻遮罩（最上層：把還在機鼻裡的方塊擋住）
-    if sheet then
-        local nm = (rig.nose_mask or {}).cell or 5
-        local ni = sheet:getImage(nm)
-        if ni then pcall(function() ni:draw(bx, by) end) end
-    end
+    -- ★ 機鼻遮罩**不在這裡畫** —— 它必須疊在剛丟出來的 crate 之上，
+    --   而 crate（石頭管線）是畫在敵人之後的。見下面的 drawAfterStones。
+end
+
+-- [[ §15.5c ]] 機鼻遮罩（第 5 格）：由 controller 在**畫完石頭之後**呼叫。
+-- ★★ 它的用途就是「擋住正從機鼻出來的 crate」（使用者拍板），
+--   所以繪製順序一定要在 crate 之後，跟著本體一起畫會被 crate 蓋掉。
+-- ★ 這支掛在 Enemy 上，所有敵人都有 → 第一行先擋掉非懸停制的。
+function Enemy:drawAfterStones(camera_x)
+    if self.part_mode ~= "HOVER" then return end
+    local sheet = self.boss_sheet
+    if not sheet then return end
+    local rig = self.hover_rig or {}
+    local nm = (rig.nose_mask or {}).cell or 5
+    local ni = sheet:getImage(nm)
+    if not ni then return end
+    local bx = self.boss_x - camera_x + (self.hit_shake_offset_x or 0)
+    local by = self.boss_y
+    pcall(function() ni:draw(bx, by) end)
 end
 
 -- 血條：本體一條血；標題後面附機槍狀態（壞掉時顯示剩餘修復秒數）

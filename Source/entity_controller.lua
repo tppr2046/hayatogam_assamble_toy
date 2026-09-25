@@ -1972,6 +1972,14 @@ function EntityController:draw(camera_x)
     for _, stone in ipairs(self.stones) do
         if not stone.is_placed then stone:draw(camera_x) end
     end
+
+    -- [[ §15.5c ]] BOSS 的「要疊在石頭之上」的部件（GUNSHIP 的機鼻遮罩）。
+    -- ★★ 為什麼要另開這一趟：石頭（crate）是畫在**敵人之後**的，
+    --   遮罩若跟著 BOSS 本體一起畫，就會被剛丟出來的 crate 蓋過去 —— 遮罩等於沒作用。
+    -- ★ 是通用掛鉤：任何敵人只要實作 drawAfterStones 就會被呼叫（沒有的就不畫）。
+    for _, e in ipairs(self.enemies or {}) do
+        if e.is_alive and e.drawAfterStones then e:drawAfterStones(camera_x) end
+    end
     
     -- 繪製目標物件
     for _, target in ipairs(self.delivery_targets) do
