@@ -104,6 +104,9 @@ function Enemy:bossInitHover(bd, ground_y)
 
     -- 飛行中的炸彈（本檔自己更新與繪製；crate 走 controller 的 stones 管線）
     self.bombs = {}
+    -- [[ §15.5c 推進器煙霧 ]] 2026-09-25：純程式特效，不需要圖
+    self.smoke = {}
+    self.smoke_t = 0
 
     -- 旋轉件的緩衝圖（軸心置中）
     local m = rig.mount or {}
@@ -234,6 +237,7 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
         if not (boss_on and mech_on) then
             self.atk = nil
             self.atk_timer = 0          -- 入畫後從完整的間隔重新數（不會一進場就被打）
+            self:hoverUpdateSmoke(dt)   -- ★ 還沒交戰也要冒煙（引擎不會因為玩家沒來就熄火）
             -- ★ 停留中的 crate 也要推進：玩家剛好在這時離開畫面的話，
             --   不放手就會有一顆永遠黏在機鼻上的 crate。
             self:hoverUpdateCrate(dt, controller)
@@ -308,6 +312,8 @@ function Enemy:bossUpdateHover(dt, mech_x, mech_y, mech_width, mech_height, cont
             self:hoverPickAttack(controller)
         end
     end
+
+    self:hoverUpdateSmoke(dt)
 
     -- 停留中的 crate 與飛行中的炸彈
     self:hoverUpdateCrate(dt, controller)
@@ -530,6 +536,82 @@ function Enemy:hoverUpdateCrate(dt, controller)
 end
 
 -- ==========================================================================
+-- 推進器煙霧（純程式特效，不需要圖）
+-- ==========================================================================
+--
+-- ★★ 做法：從機體右側的噴口**定時吐出一顆**，往右後方慢慢飄、邊飄邊變大，
+--   接近壽命尾聲就只剩外框（1-bit 沒有半透明，「變淡」只能靠**變空心 → 變虛線**）。
+-- ★ 粒子存的是**世界座標**：吐出來之後就與機體脫鉤，機體飄走時煙留在原地，
+--   這樣才像廢氣；跟著機體移動的話會變成黏在屁股上的一坨。
+-- ★ 數量上限（max）是保險：低頻率吐煙在正常情況下遠達不到，但關卡若長時間停在
+--   BOSS 場景，沒有上限就會一路累積。
+function Enemy:hoverUpdateSmoke(dt)
+    local sm = (self.boss_data.smoke) or {}
+    local rig = self.hover_rig or {}
+    local th = rig.thruster or {}
+    self.smoke = self.smoke or {}
+    self.smoke_t = (self.smoke_t or 0) + dt
+
+    local interval = sm.interval or 0.22
+    while self.smoke_t >= interval do
+        self.smoke_t = self.smoke_t - interval
+        if #self.smoke < (sm.max or 24) then
+            local jx = (math.random() * 2 - 1) * (sm.spawn_jitter or 2)
+            local jy = (math.random() * 2 - 1) * (sm.spawn_jitter or 2)
+            table.insert(self.smoke, {
+                x = self.boss_x + (th.x or 115) + jx,
+                y = self.boss_y + (th.y or 42) + jy,
+                -- 往右後方飄（正 x＝機尾方向），微微上升
+                vx = (sm.vx_min or 10) + math.random() * ((sm.vx_max or 18) - (sm.vx_min or 10)),
+                vy = -((sm.rise_min or 2) + math.random() * ((sm.rise_max or 7) - (sm.rise_min or 2))),
+                t = 0,
+                life = (sm.life_min or 1.2) + math.random() * ((sm.life_max or 1.9) - (sm.life_min or 1.2)),
+            })
+        end
+    end
+
+    for i = #self.smoke, 1, -1 do
+        local s = self.smoke[i]
+        s.t = s.t + dt
+        if s.t >= s.life then
+            table.remove(self.smoke, i)
+        else
+            s.x = s.x + s.vx * dt
+            s.y = s.y + s.vy * dt
+            s.vx = s.vx * (1 - (sm.drag or 0.6) * dt)   -- 愈飄愈慢（廢氣擴散開就沒動能了）
+        end
+    end
+end
+
+-- 煙霧繪製。★ 畫在**本體之前**（機體壓在煙上＝煙是從機身後方冒出來的）。
+function Enemy:hoverDrawSmoke(camera_x)
+    local g = gfx
+    local sm = (self.boss_data.smoke) or {}
+    local r0, r1 = sm.r0 or 2, sm.r1 or 7
+    for _, s in ipairs(self.smoke or {}) do
+        local k = s.t / s.life                 -- 0＝剛吐出來、1＝快消失
+        local r = r0 + (r1 - r0) * k
+        local sx, sy = s.x - camera_x, s.y
+        -- 1-bit 的「變淡」：實心 → 空心 → 破碎的空心
+        if k < 0.45 then
+            g.setColor(g.kColorWhite); g.fillCircleAtPoint(sx, sy, r)
+            g.setColor(g.kColorBlack); g.drawCircleAtPoint(sx, sy, r)
+        elseif k < 0.75 then
+            g.setColor(g.kColorBlack); g.drawCircleAtPoint(sx, sy, r)
+        else
+            -- 最後一段只點幾個點，看起來像散掉了
+            g.setColor(g.kColorBlack)
+            local n = 6
+            for i = 0, n - 1 do
+                local a = (i / n) * math.pi * 2 + s.t * 2
+                g.drawPixel(sx + math.cos(a) * r, sy + math.sin(a) * r)
+            end
+        end
+    end
+    g.setColor(g.kColorBlack)
+end
+
+-- ==========================================================================
 -- 飛行中的炸彈
 -- ==========================================================================
 -- 炸彈圖的實際大小（量自 rig 的 x0~y1）。
@@ -633,6 +715,9 @@ function Enemy:bossDrawHover(camera_x)
         end
     end
     g.setColor(g.kColorBlack)
+
+    -- 推進器煙霧：畫在本體**之前**（機體會壓在煙上＝煙從機身後方冒出）
+    self:hoverDrawSmoke(camera_x)
 
     if sheet then
         -- 本體
