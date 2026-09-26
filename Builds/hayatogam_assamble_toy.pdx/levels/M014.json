@@ -21,16 +21,6 @@
         "type": "BOSS_KILL",
         "description": "Shoot down the COMET"
       },
-      "dialog": {
-        "image": "images/dialog_bg",
-        "lines": [
-          "COMET - sky gunship.",
-          "The sky scrolls: you are both moving fast.",
-          "Jump the platforms to reach its altitude.",
-          "Dashed platforms fell - they come back.",
-          "Gun and rocket pod can be shot off; both self-repair."
-        ]
-      },
       "backgrounds": [],
       "terrain": [
         {
@@ -108,24 +98,24 @@
       "platforms": [
         {
           "x": 470,
-          "y": 124,
+          "y": 136,
           "width": 72
         },
         {
           "x": 592,
-          "y": 120,
+          "y": 132,
           "width": 80
         },
         {
           "x": 700,
-          "y": 96,
+          "y": 112,
           "width": 64,
           "crumble": true,
           "respawn": 4.0
         },
         {
           "x": 608,
-          "y": 72,
+          "y": 92,
           "width": 64,
           "crumble": true,
           "respawn": 5.0
@@ -139,7 +129,7 @@
         },
         {
           "x": 884,
-          "y": 68,
+          "y": 72,
           "width": 64,
           "crumble": true,
           "respawn": 4.0

@@ -1281,6 +1281,7 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
     -- [[ §15.3 空中平台 ]] 崩塌計時（玩家站在上面才算）
     do
         local CRUMBLE_DELAY = 1.2
+        local CRUMBLE_RECOVER = 0.6     -- 離開平台後計時倒回的速度（×dt）
         for i = #self.platforms, 1, -1 do
             local pf = self.platforms[i]
             if pf.crumble and not pf.collapsed then
@@ -1292,6 +1293,16 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                         pf.collapsed = true
                         pf.respawn_t = 0
                         print("LOG: platform collapsed at x=" .. pf.x)
+                    end
+                else
+                    -- ★★ 2026-09-26：離開之後計時**倒回去**（以前只累加、不回復）。
+                    --   舊行為有兩個問題：
+                    --   ① 踩 0.6 秒離開、隔很久再踩 0.6 秒也會塌 —— 玩家無從預期。
+                    --   ② 閃爍預警會一直留著（timer > 0 就閃），等於在說謊。
+                    --   回復比累積慢（recover_mult < 1）＝「踩踏會累積疲勞」，
+                    --   但站著不動仍然是最危險的，設計意圖沒有被削弱。
+                    if pf.crumble_timer > 0 then
+                        pf.crumble_timer = math.max(0, pf.crumble_timer - dt * CRUMBLE_RECOVER)
                     end
                 end
             elseif pf.collapsed and (pf.respawn or 0) > 0 then
