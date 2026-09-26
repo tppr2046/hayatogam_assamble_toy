@@ -330,6 +330,16 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     -- 特殊處理 CLAW（繪製底座 + 臂 + 爪子）
     elseif part_type == "CLAW" then
         self:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
+    -- [[ §15.2 高位槍 ]] 底座不轉、槍繞軸心轉（自動瞄準最近的敵人）
+    elseif part_type == "HIGH_GUN" and pdata._hg_base and pdata._hg_gun then
+        pcall(function() pdata._hg_base:draw(px, part_y) end)
+        -- ★ 角度由 updateParts 每幀算好（自動瞄準），繪製端只負責畫 ——
+        --   兩邊各算一次就會出現「圖指著這裡、子彈飛去那裡」。
+        local ang = -(self.high_gun_angle or 0) + (rotation_angle or 0)
+        pcall(function()
+            pdata._hg_gun:drawRotated(px + (pdata.gun_pivot_x or 0),
+                                      part_y + (pdata.gun_pivot_y or 0), ang)
+        end)
     -- 特殊處理 CANON（繪製底座 + 砲管）
     elseif part_type == "CANON" then
         -- 繪製底座（不旋轉）

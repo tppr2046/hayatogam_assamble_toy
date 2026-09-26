@@ -149,19 +149,30 @@ local parts_data = {
         cost_copper = 8,
         cost_rubber = 2,
         color = gfx.kColorBlack,
+        -- ★★ 2026-09-26 換上使用者的圖：**high_gun-table-24-32.png（2 格）**
+        --   1＝底座　2＝槍。兩格都是整張 24×32 的畫布、只畫該部位（與 BOSS 的慣例相同）。
+        --   ★ 底座 16 寬 24 高（比格子高 8）→ 畫布底邊對齊格子底邊時，
+        --     底座的底緣剛好切齊安裝格的左下角（使用者要求），槍則露在格子上方。
+        --   ★ `image` 保留當後備：表載不到時還有一張靜態圖可畫（也是 HQ/商店的預設預覽）。
         image = "images/gun_high.png",
+        table_image = "images/high_gun",
+        -- 槍的旋轉軸與槍口（畫布內座標）。★ 發射與繪製**讀同一組**，不會圖轉了子彈沒轉。
+        gun_pivot_x = 6, gun_pivot_y = 4,
+        gun_muzzle_x = 23, gun_muzzle_y = 4,
+        -- ★ 角度範圍：水平朝右(0) ~ 向上 30 度（2026-09-26 使用者拍板）
+        aim_min = 0, aim_max = 30,
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",
         operation_hint = "A: Lob Shot",
         operable = true,                     -- ★ 手動：進焦點循環,按 A 發射
-        -- 槍口相對**零件圖左上角**（與 GUN2 同一套慣例）。圖畫多高,槍口就自動多高。
+        -- ⚠️ 舊的固定槍口（換成會轉的槍之後只剩後備路徑在用 —— 見 gun_pivot/gun_muzzle）
         muzzle_x = 20,
         muzzle_y = 8,
         -- ★ **不設 requires_clear_right** —— 可以和 GUN/CANON 並排。
         --   代價是子彈可能被自己的武器擋掉（那是刻意的取捨,不是 bug）。
         fire_direction = "RIGHT",
-        fire_cooldown = 1.4,
+        fire_cooldown = 1.0,                 -- ★ 2026-09-26 使用者拍板：1 秒
         projectile_damage = 3,               -- 「攻擊力較弱」（GUN 是 5）
         projectile_speed_mult = 26,          -- 比 GUN(40) 慢 → 弧線更明顯
         -- ★★ 這一項就是這次改版的核心：**受重力影響**。

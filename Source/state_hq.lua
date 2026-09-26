@@ -689,6 +689,47 @@ function StateHQ.setup()
                 end
             end
             
+            -- [[ §15.2 高位槍 ]] 2026-09-26：2 格的表 → 底座 ＋「軸心置中」的槍。
+            -- ★ 軸心置中是為了 drawRotated（它繞圖片中心轉）—— 與 BOSS 的旋轉件同一招。
+            -- ★ 同時合成一張「底座＋槍」當 `_img`：HQ／商店的預覽、以及旋轉圖載不到時的後備。
+            if pdata.table_image then
+                local ok_tbl, tbl = pcall(function() return gfx.imagetable.new(pdata.table_image) end)
+                if ok_tbl and tbl then
+                    local base = tbl:getImage(1)
+                    local gun  = tbl:getImage(2)
+                    if base then pdata._hg_base = base end
+                    if gun then
+                        local okc, iw, ih = pcall(function() return gun:getSize() end)
+                        local size = 64
+                        local okb, buf = pcall(function() return gfx.image.new(size, size) end)
+                        if okb and buf then
+                            gfx.pushContext(buf)
+                            gfx.clear(gfx.kColorClear)
+                            gun:draw(-((pdata.gun_pivot_x or 0) - size / 2),
+                                     -((pdata.gun_pivot_y or 0) - size / 2))
+                            gfx.popContext()
+                            pdata._hg_gun = buf
+                        end
+                    end
+                    if base and gun then
+                        local oks, cw, ch = pcall(function() return base:getSize() end)
+                        if oks and cw and ch then
+                            local okc2, comp = pcall(function() return gfx.image.new(cw, ch) end)
+                            if okc2 and comp then
+                                gfx.pushContext(comp)
+                                gfx.clear(gfx.kColorClear)
+                                base:draw(0, 0)
+                                gun:draw(0, 0)
+                                gfx.popContext()
+                                pdata._img = comp
+                            end
+                        end
+                    end
+                else
+                    print("WARN: failed to load table_image for part", pid, pdata.table_image)
+                end
+            end
+
             -- 載入 CANON 的底座圖片
             if pdata.base_image then
                 local base_img = gfx.image.new(pdata.base_image)

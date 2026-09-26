@@ -717,8 +717,25 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                             end
                         end
                         local base_speed = entity_controller.player_move_speed or 2.0
-                        local vx = base_speed * (pdata.projectile_speed_mult or 26)
-                        local vy = 0
+                        local speed = base_speed * (pdata.projectile_speed_mult or 26)
+                        -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 gun_pivot/gun_muzzle）
+                        local ang = math.rad(self.high_gun_angle or 0)
+                        if pdata.gun_pivot_x and pdata._hg_gun then
+                            local ih = 32
+                            local okh, _, hh = pcall(function() return pdata._hg_base:getSize() end)
+                            if okh and hh then ih = hh end
+                            local img_y = py_top + (cell_size - ih) + (pdata.image_offset_y or 0)
+                            local pvx = px + pdata.gun_pivot_x
+                            local pvy = img_y + pdata.gun_pivot_y
+                            local ox = (pdata.gun_muzzle_x or 0) - pdata.gun_pivot_x
+                            local oy = (pdata.gun_muzzle_y or 0) - pdata.gun_pivot_y
+                            local c, s = math.cos(ang), math.sin(ang)
+                            -- 螢幕座標 y 向下 → 仰角為正時往上，所以 sin 取負
+                            gx = pvx + ox * c + oy * s
+                            gy = pvy - ox * s + oy * c
+                        end
+                        local vx = speed * math.cos(ang)
+                        local vy = -speed * math.sin(ang)
                         gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
                         entity_controller:addPlayerProjectile(gx, gy, vx, vy,
                             pdata.projectile_damage or 3, pdata.projectile_grav_mult or 18,
@@ -1033,11 +1050,82 @@ function MechController:applyMechTilt(x, y, vx, vy, mech_x, mech_y, mech_grid, e
 end
 
 -- 更新零件計時器和自動功能
+-- [[ §15.2 高位槍 ]] 自動瞄準最近的敵人（2026-09-26 使用者拍板）
+-- ★★ 仰角用**解彈道**求，不是指向敵人：它是拋射武器（重力 grav_mult），
+--   直接指過去的話遠一點就落在腳前，自動瞄準等於沒瞄。
+--   低角解（兩個解取小的那個）＝比較平、比較快到，也比較符合「速射砲」的感覺。
+-- ★ 角度夾在資料給的 aim_min~aim_max（水平朝右 0 ~ 向上 30 度）。
+--   沒有目標就回到 0（水平）—— 讓玩家看得出「現在沒鎖定」。
+-- ★ 只找**右側**的敵人：這把槍的射界就是右邊（左邊是 BACK_GUN 的工作）。
+function MechController:updateHighGunAim(part_id, mech_x, mech_y, mech_grid, entity_controller)
+    local pdata = _G.PartsData and _G.PartsData[part_id]
+    if not (pdata and entity_controller) then return end
+    local lo = pdata.aim_min or 0
+    local hi = pdata.aim_max or 30
+    local want = lo
+
+    -- 槍口大致位置（瞄準只需要概略值，真正的發射點在開火時才算）
+    local cell = (mech_grid and mech_grid.cell_size) or 16
+    local gx = mech_x + cell
+    local gy = mech_y
+
+    -- 最近的敵人（只看右邊、還活著、打得到的）
+    local best, bestd = nil, nil
+    for _, e in ipairs(entity_controller.enemies or {}) do
+        if e.is_alive and not e.is_exploding and (e.x or 0) > gx then
+            if (not entity_controller.canHitEnemy) or entity_controller:canHitEnemy(e) then
+                local ex = (e.x or 0) + (e.width or 0) / 2
+                local d = ex - gx
+                if (not bestd) or d < bestd then best, bestd = e, d end
+            end
+        end
+    end
+
+    if best then
+        local v = (entity_controller.player_move_speed or 2.0) * (pdata.projectile_speed_mult or 26)
+        local g = (entity_controller.GRAVITY or 0.5) * (pdata.projectile_grav_mult or 18)
+        local dx = ((best.x or 0) + (best.width or 0) / 2) - gx
+        local dy = ((best.y or 0) + (best.height or 0) / 2) - gy   -- 螢幕座標：正＝在下方
+        local Y = -dy                                              -- 換成「往上為正」
+        if dx > 1 and v > 0 and g > 0 then
+            local disc = v * v * v * v - g * (g * dx * dx + 2 * Y * v * v)
+            if disc >= 0 then
+                local root = math.sqrt(disc)
+                want = math.deg(math.atan((v * v - root) / (g * dx)))   -- 低角解
+            else
+                want = hi                                              -- 打不到那麼遠 → 拉到最大仰角
+            end
+        end
+    end
+
+    if want < lo then want = lo elseif want > hi then want = hi end
+    -- 轉動有速度上限：瞬間貼齊看起來像瞬移，也讓玩家讀不到「它正在追誰」
+    local cur = self.high_gun_angle or lo
+    local step = (pdata.aim_speed or 180) * (1 / 30)
+    local d = want - cur
+    if d > step then d = step elseif d < -step then d = -step end
+    self.high_gun_angle = cur + d
+end
+
 function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_controller)
     -- [[ §15.2 自動裝填 ]] 每幀重算一次「有沒有裝自動裝填」。
     -- ★ 刻意每幀重算而不是做快取失效 —— 裝備只有 6 格,掃一次幾乎免費,
     --   而「改裝備時忘了清快取」是必然會發生的 bug。
     self._auto_loader_cache = nil
+
+    -- [[ §15.2 高位槍 ]] 自動瞄準**每幀都跑**，與焦點無關。
+    -- ★ 焦點只決定「能不能按 A 發射」；砲塔本來就該一直追著敵人轉，
+    --   只在被選取時才轉的話，切到它的那一瞬間會看到槍瞬移（2026-09-26 實測）。
+    do
+        local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
+        for _, item in ipairs(eq) do
+            local pd = _G.PartsData and _G.PartsData[item.id]
+            if pd and pd.part_type == "HIGH_GUN" then
+                self:updateHighGunAim(item.id, mech_x, mech_y, mech_grid, entity_controller)
+                break        -- 裝兩把也只算一次（共用同一個角度，看起來一致）
+            end
+        end
+    end
 
     -- 更新 CANON 冷卻
     self.canon_fire_timer = self.canon_fire_timer + dt
