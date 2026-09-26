@@ -1285,8 +1285,11 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
         for i = #self.platforms, 1, -1 do
             local pf = self.platforms[i]
             if pf.crumble and not pf.collapsed then
+                -- ★ 腳底讀 state_mission 每幀給的 player_foot_y（含 FEET 的高度）。
+                --   用 mech_y + mech_height 自己推的話，FEET 配裝會短一截 → 永遠踩不塌。
+                local foot = self.player_foot_y or (mech_y + mech_height)
                 local on_top = (mech_x + mech_width > pf.x) and (mech_x < pf.x + pf.width)
-                                and math.abs((mech_y + mech_height) - pf.y) <= 3
+                                and math.abs(foot - pf.y) <= 3
                 if on_top then
                     pf.crumble_timer = pf.crumble_timer + dt
                     if pf.crumble_timer >= CRUMBLE_DELAY then
@@ -1310,8 +1313,9 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                 --   會把玩家從板子中間頂出來（單向平台只擋下墜，不會把人推開）。
                 pf.respawn_t = (pf.respawn_t or 0) + dt
                 if pf.respawn_t >= pf.respawn then
+                    local foot = self.player_foot_y or (mech_y + mech_height)
                     local overlap = (mech_x + mech_width > pf.x) and (mech_x < pf.x + pf.width)
-                                    and ((mech_y + mech_height) > pf.y) and (mech_y < pf.y + pf.height)
+                                    and (foot > pf.y) and (mech_y < pf.y + pf.height)
                     if not overlap then
                         pf.collapsed = false
                         pf.crumble_timer = 0

@@ -114,18 +114,17 @@
           "respawn": 4.0
         },
         {
-          "x": 608,
-          "y": 92,
-          "width": 64,
-          "crumble": true,
-          "respawn": 5.0
-        },
-        {
           "x": 812,
           "y": 104,
           "width": 72,
           "move_x": 76,
           "move_speed": 34
+        },
+        {
+          "x": 608,
+          "y": 92,
+          "width": 64,
+          "crumble": true
         },
         {
           "x": 884,
@@ -148,7 +147,17 @@
           "y": 0
         }
       ],
-      "ropes": []
+      "ropes": [],
+      "dialog": {
+        "image": "images/dialog_bg",
+        "lines": [
+          "COMET - sky gunship.",
+          "The sky scrolls: you are both moving fast.",
+          "Jump the platforms to reach its altitude.",
+          "Dashed outline = it will come back. Solid gone = gone for good.",
+          "Gun and rocket pod can be shot off; both self-repair."
+        ]
+      }
     }
   ]
 }

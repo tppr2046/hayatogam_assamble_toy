@@ -818,6 +818,11 @@ function StateMission.update()
         -- ★ 每幀交給 controller，而不是讓 BOSS 自己去猜 y 座標：
         --   著地判定本來就在這裡（斜坡、平台、繩索各有分支），複製一份必定會不同步。
         entity_controller.player_on_ground = is_on_ground
+        -- [[ 2026-09-26 ]] 腳底的世界 y。★★ 一定要用 **total_h**（含 FEET 的實際高度），
+        --   不能讓 controller 自己用 body_h 去推 —— 踩平台時這裡是
+        --   `mech_y = plat_y - total_h`，裝了 FEET 之後 body_h 推出來的腳底會**短一截**，
+        --   會塌的平台就永遠判不到「站在上面」（2026-09-26 實際發生：FEET 配裝踩不塌）。
+        entity_controller.player_foot_y = mech_y + total_h
 
         -- 更新敵人和砲彈，使用本體碰撞框檢查受擊
         local damage = entity_controller:updateAll(dt, mech_x, mech_y, body_w, body_h, (_G.GameState and _G.GameState.mech_stats) or {})
