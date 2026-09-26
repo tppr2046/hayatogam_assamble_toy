@@ -195,7 +195,7 @@ local parts_data = {
     --   反而是**減少**切換壓力的那一個（把槍從循環裡拿掉）。
     -- ★★ 自動/手動的判定全部集中在 `MechController:gunIsAuto()`，
     --   焦點循環、自動開火迴圈、手動按 A 三邊都問它。
-    -- ⚠️ 待美術：`auto_loader.png`（16×16）。現在沿用 gun_panel 當面板圖。
+    -- ✅ 零件圖已完成（2026-09-26）。面板仍沿用 gun_panel（被動零件，只需要顯示狀態）。
     -- ================================================================
     ["AUTO_LOADER"] = {
         name = "AUTOLOADER",
@@ -209,7 +209,7 @@ local parts_data = {
         cost_copper = 25,
         cost_rubber = 5,
         color = gfx.kColorBlack,
-        image = "images/auto_loader.png",   -- ⚠️ 尚無此圖 → 載圖失敗會走既有的方塊佔位
+        image = "images/auto_loader.png",   -- ✅ 2026-09-26 圖已完成（16×16）
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",
