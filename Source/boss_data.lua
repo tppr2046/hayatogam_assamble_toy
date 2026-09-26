@@ -119,7 +119,27 @@ local bosses = {
             -- 待機時身體**微幅上下緩慢移動**，腿不動（使用者拍板）
             idle_bob = { amp = 2.5, speed = 0.8 },
         },
-        move_speed = 0,                 -- ★ 固定不動（§15.5a-4 拍板）；戰場鎖定靠 scene.arena
+        move_speed = 0,                 -- ★ 不走 bossMove 的巡邏；位移改由下面的 jump 負責
+
+        -- [[ 跳躍移動 ]] 2026-09-26（使用者拍板）：跳到玩家附近，落地震地板。
+        -- ★ 它原本完全不動，玩家找到兩拳都打不到的位置就能站著磨 —— 跳躍讓走位變成
+        --   要持續維持的事，而不是一次解決。
+        -- ★ 落地傷害**不在這裡填**：預設直接讀 SLAM 那一招的 damage / ground_damage，
+        --   砸地調了落地才不會各走各的（要各自調再填 damage / ground_damage）。
+        jump = {
+            interval_min = 6.5, interval_max = 11,  -- 兩次跳躍之間
+            min_move = 40,          -- 落點與現在位置差不到這麼多就不跳（原地彈跳沒意義）
+            crouch = 0.35,          -- 蹲（＝預告，玩家的反應窗口）
+            air_time = 0.75,        -- 騰空時間
+            height = 46,            -- 跳躍高度
+            land_recover = 0.4,     -- 落地緩衝
+            crouch_dip = 5,         -- 蹲下時上半身往下
+            body_lead = 6,          -- 騰空時上半身相對腿的位移（上升往上、下降往下）
+            land_squash = 7,        -- 落地瞬間上半身往下壓
+            radius_pad = 10,        -- 落地傷害半徑 = 機體寬/2 + 這個值
+            edge_pad = 6,           -- 落點離戰場邊界至少留這麼多
+            shake_intensity = 9, shake_duration = 0.5,
+        },
         move_range = 0,
         trans_time = 0,
 

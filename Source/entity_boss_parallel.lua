@@ -186,6 +186,12 @@ function Enemy:bossInitParallel(bd, ground_y)
     self.body_bob_t = 0
     self.body_bob = 0
 
+    -- [[ §15.5a 跳躍 ]] 2026-09-26：boss_y 在跳躍時會被改寫，站立高度要另外記著
+    self.boss_y_base = self.boss_y
+    self.jump_state = nil
+    self.jump_wait = self:bossNextJumpWait()
+    self.jump_timer = 0
+
     self:bossSyncParallelBoxes()
 end
 
@@ -193,7 +199,10 @@ end
 -- ★ 新圖沒有獨立的頭格 → 「頭下探」改成整個上半身往下蹲，腿不動。
 --   舊圖（有 cell/cell_fire 的 BOSS）不受影響：它們的 head_drop 一樣走這裡。
 function Enemy:bossBodyOffsetY()
-    return (self.body_bob or 0) + (self.head_drop or 0)
+    -- body_lead＝跳躍時上半身相對腿的位移（起跳往上、落地往下）。
+    -- ★ 併進這支而不是另外加一個位移點：身體／肩／雙臂的命中框與繪製都讀這裡，
+    --   分開加的話一定會漏掉其中一個（HANDOFF §3-5）。
+    return (self.body_bob or 0) + (self.head_drop or 0) + (self.body_lead or 0)
 end
 
 -- 把頭與手臂的世界座標／命中框對齊本體。**每幀都要叫**（頭會下探、手臂會動）。
@@ -277,6 +286,143 @@ function Enemy:bossIsRaging()
 end
 
 -- ==========================================================================
+-- [[ §15.5a 跳躍移動 ]] 2026-09-26（使用者拍板）
+-- ==========================================================================
+--
+-- ★★ 為什麼要有這一招：COLOSSUS 是**固定不動**的（move_speed = 0），
+--   玩家找到一個兩拳都打不到的位置就可以站著磨。跳躍讓它能換位置，
+--   「走位」因此不再是一次性的解答，而是要持續維持的事。
+-- ★ 三段：蹲（預告）→ 騰空（拋物線移到玩家附近）→ 落地（震動＋與砸地相同的傷害）。
+--   蹲下那一段就是玩家的反應窗口，與拳擊的 telegraph 是同一個語彙。
+-- ★ 上半身與腿的「時間差」：起跳時上身比腿再往上一點、落地時往下壓一點。
+--   這是最便宜的重量感 —— 不必多畫一張圖。
+
+function Enemy:bossNextJumpWait()
+    local j = (self.boss_data.jump)
+    if not j then return math.huge end
+    local lo, hi = j.interval_min or 6, j.interval_max or 10
+    return lo + math.random() * (hi - lo)
+end
+
+-- 落地要打在哪裡：玩家附近，但夾在戰場（或畫面）之內。
+function Enemy:bossJumpTargetX(controller)
+    local j = (self.boss_data.jump) or {}
+    local w = self.boss_body_w or 110
+    local want = (self.aim_mx or self.boss_x) - w / 2 + (j.land_offset or 0)
+    local lo, hi
+    local ar = controller and controller.arena
+    if ar and ar.x1 then
+        lo, hi = ar.x1 + (j.edge_pad or 6), (ar.x2 or ar.x1) - w - (j.edge_pad or 6)
+    else
+        local cam = (controller and controller.camera_x) or 0
+        lo, hi = cam + (j.edge_pad or 6), cam + 400 - w - (j.edge_pad or 6)
+    end
+    if hi < lo then hi = lo end
+    if want < lo then want = lo elseif want > hi then want = hi end
+    return want
+end
+
+-- 回傳 true＝這一幀由跳躍接管（出招要讓路）
+function Enemy:bossUpdateJump(dt, mech_x, mech_y, controller)
+    local j = (self.boss_data.jump)
+    if not j then return false end
+
+    if not self.jump_state then
+        -- 出招中不跳（一次只做一件事，玩家才讀得懂）
+        if self.attack_slot then return false end
+        self.jump_timer = (self.jump_timer or 0) + dt
+        if self.jump_timer < (self.jump_wait or math.huge) then return false end
+        -- 已經站在玩家附近就不必跳（原地彈跳只是在浪費玩家的注意力）
+        local target = self:bossJumpTargetX(controller)
+        if math.abs(target - self.boss_x) < (j.min_move or 40) then
+            self.jump_timer = (self.jump_wait or 8) * 0.5   -- 晚點再看一次
+            return false
+        end
+        self.jump_state = "CROUCH"
+        self.jump_t = 0
+        self.jump_from = self.boss_x
+        self.jump_to = target
+        return true
+    end
+
+    self.jump_t = (self.jump_t or 0) + dt
+
+    if self.jump_state == "CROUCH" then
+        local dur = j.crouch or 0.35
+        -- 上半身壓低＝蓄力（同時也是預告）
+        self.body_lead = (j.crouch_dip or 5) * math.min(1, self.jump_t / dur)
+        if self.jump_t >= dur then
+            self.jump_state = "AIR"
+            self.jump_t = 0
+            -- 起跳的瞬間重新取一次落點：蹲的這段時間玩家會移動
+            self.jump_to = self:bossJumpTargetX(controller)
+            self.jump_from = self.boss_x
+        end
+        return true
+
+    elseif self.jump_state == "AIR" then
+        local dur = j.air_time or 0.75
+        local k = math.min(1, self.jump_t / dur)
+        -- 拋物線：兩端為 0、中間最高
+        local h = (j.height or 46) * 4 * k * (1 - k)
+        self.boss_y = (self.boss_y_base or self.boss_y) - h
+        self.boss_x = self.jump_from + (self.jump_to - self.jump_from) * k
+        -- 上半身：上升段比腿再往上一點，下降段往下一點（重量感）
+        self.body_lead = -(j.body_lead or 6) * math.cos(k * math.pi)
+        if k >= 1 then
+            self.boss_y = self.boss_y_base or self.boss_y
+            self.boss_x = self.jump_to
+            self.jump_state = "LAND"
+            self.jump_t = 0
+            self:bossJumpImpact(controller)
+        end
+        return true
+
+    else -- LAND：落地緩衝（上半身往下壓一下再回來）
+        local dur = j.land_recover or 0.4
+        local k = math.min(1, self.jump_t / dur)
+        self.body_lead = (j.land_squash or 7) * (1 - k)
+        if self.jump_t >= dur then
+            self.body_lead = 0
+            self.jump_state = nil
+            self.jump_timer = 0
+            self.jump_wait = self:bossNextJumpWait()
+        end
+        return true
+    end
+end
+
+-- 落地的那一下：震動 ＋ **與砸地完全相同的傷害**（使用者拍板）
+-- ★ 傷害數值直接讀 SLAM 那一招的資料，不另外寫一份 ——
+--   砸地調了、落地沒跟著調的話，玩家會覺得「同樣是被砸卻不一樣痛」。
+function Enemy:bossJumpImpact(controller)
+    local j = (self.boss_data.jump) or {}
+    local slam = nil
+    for _, atk in ipairs((self.boss_data.arms and self.boss_data.arms.attacks) or {}) do
+        if atk.type == "SLAM" then slam = atk; break end
+    end
+    local w = self.boss_body_w or 110
+    local gx = self.boss_x + w / 2
+    local gy = self.boss_ground_y or (self.boss_y + (self.boss_body_h or 0))
+    self.pending_slam = {
+        x = gx, y = gy,
+        -- ★ 範圍比拳頭大：整台機體落地，不是一隻拳頭
+        radius = j.radius or (w / 2 + (j.radius_pad or 10)),
+        damage = j.damage or (slam and slam.damage) or 10,
+        ground_damage = j.ground_damage or (slam and slam.ground_damage),
+        t = 0,
+    }
+    if controller and controller.addBlastVisual then
+        controller:addBlastVisual(gx, gy - 8)
+    end
+    if controller and controller.requestScreenShake then
+        controller:requestScreenShake(j.shake_intensity or (slam and slam.shake_intensity) or 8,
+                                      j.shake_duration or (slam and slam.shake_duration) or 0.45)
+    end
+    if _G.SoundManager and _G.SoundManager.playExplode then _G.SoundManager.playExplode() end
+end
+
+-- ==========================================================================
 -- 攻擊排程器
 -- ==========================================================================
 
@@ -297,6 +443,12 @@ function Enemy:bossUpdateParallel(dt, mech_x, mech_y, mech_width, mech_height, c
     if bob then
         self.body_bob_t = (self.body_bob_t or 0) + dt * (bob.speed or 0.8)
         self.body_bob = math.sin(self.body_bob_t * math.pi * 2) * (bob.amp or 2.5)
+    end
+
+    -- [[ 跳躍 ]] 由它接管的那幾幀不出招（一次只做一件事）
+    if self:bossUpdateJump(dt, mech_x, mech_y, controller) then
+        self:bossSyncParallelBoxes()
+        return
     end
 
     -- 進行中的動作：推進它的階段
