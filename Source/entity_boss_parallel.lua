@@ -349,8 +349,14 @@ function Enemy:bossUpdateJump(dt, mech_x, mech_y, controller)
 
     if self.jump_state == "CROUCH" then
         local dur = j.crouch or 0.35
-        -- 上半身壓低＝蓄力（同時也是預告）
-        self.body_lead = (j.crouch_dip or 5) * math.min(1, self.jump_t / dur)
+        local k = math.min(1, self.jump_t / dur)
+        -- ★★ 2026-09-26 修正：蹲的時候**整台機體一起壓低**（腿在屈膝），
+        --   不能只壓上半身 —— 只壓上半身的話，起跳瞬間上半身彈回原位，
+        --   看起來就是「蹲完站直、然後才跳」（使用者回報）。
+        --   整台壓低之後，起跳是從壓低的位置直接往上衝，中間沒有站直那一下。
+        self.boss_y = (self.boss_y_base or self.boss_y) + (j.crouch_drop or 5) * k
+        -- 上半身再多壓一點＝蓄力的重量感
+        self.body_lead = (j.crouch_dip or 5) * k
         if self.jump_t >= dur then
             self.jump_state = "AIR"
             self.jump_t = 0
@@ -368,6 +374,9 @@ function Enemy:bossUpdateJump(dt, mech_x, mech_y, controller)
         self.boss_y = (self.boss_y_base or self.boss_y) - h
         self.boss_x = self.jump_from + (self.jump_to - self.jump_from) * k
         -- 上半身：上升段比腿再往上一點，下降段往下一點（重量感）
+        -- ★ 起跳的頭幾幀要**接著蹲的姿勢繼續往上**，不要瞬間跳回中立：
+        --   cos 在 k=0 就是 -1（最上面），與蹲的 +dip 之間是一個乾淨的爆發，
+        --   加上整台機體已經壓低，看起來就是「蹲 → 蹬地 → 離地」。
         self.body_lead = -(j.body_lead or 6) * math.cos(k * math.pi)
         if k >= 1 then
             self.boss_y = self.boss_y_base or self.boss_y

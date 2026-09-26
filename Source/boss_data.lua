@@ -133,7 +133,8 @@ local bosses = {
             air_time = 0.75,        -- 騰空時間
             height = 46,            -- 跳躍高度
             land_recover = 0.4,     -- 落地緩衝
-            crouch_dip = 5,         -- 蹲下時上半身往下
+            crouch_drop = 6,        -- ★ 蹲下時**整台機體**往下（腿屈膝；只壓上半身會變成「站直再跳」）
+            crouch_dip = 6,         -- 蹲下時上半身**再多**往下一點
             body_lead = 6,          -- 騰空時上半身相對腿的位移（上升往上、下降往下）
             land_squash = 7,        -- 落地瞬間上半身往下壓
             radius_pad = 10,        -- 落地傷害半徑 = 機體寬/2 + 這個值
