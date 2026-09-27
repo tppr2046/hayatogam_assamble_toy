@@ -183,6 +183,10 @@ end
 -- ★★ 唯一計算點：機體上的板手與面板上的旋鈕讀同一支，
 --   兩邊各算一次的話，轉起來會不同步（玩家一眼就看得出來）。
 function MechController:hookReelAngle()
+    -- ★★ 2026-09-27 使用者拍板：**crank 轉 2 圈 → 板手轉 1 圈**。
+    --   角度直接跟著累積的 crank 轉動量走（crank_turns_per_wrench_turn 倍數）。
+    -- ⚠️ 舊版是把繩長正規化成 0~360：繩長被夾在 lmin~lmax，到底之後玩家還在轉、
+    --   板手卻不動，看起來像壞掉。
     local pdata
     local eq = _G.GameState and _G.GameState.mech_stats
                and _G.GameState.mech_stats.equipped_parts or {}
@@ -190,11 +194,8 @@ function MechController:hookReelAngle()
         local pd = _G.PartsData and _G.PartsData[it.id]
         if pd and pd.part_type == "HOOK" then pdata = pd; break end
     end
-    if not pdata then return 0 end
-    local lmin = pdata.hook_len_min or 16
-    local lmax = pdata.hook_len_max or 110
-    local t = ((self.hook_len or lmin) - lmin) / math.max(1, lmax - lmin)
-    return t * 360
+    local ratio = (pdata and pdata.crank_turns_per_wrench_turn) or 2
+    return ((self.hook_crank_deg or 0) / math.max(0.01, ratio)) % 360
 end
 
 -- [[ §15.2 防護罩 ]] 以機體中心畫一圈**虛線圓**表示護罩。
@@ -811,7 +812,9 @@ function MechController:drawPartUI(part_id, x, y, size)
                     local rotated = control_img:rotatedImage(self:hookReelAngle())
                     if rotated then
                         local rw, rh = rotated:getSize()
-                        pcall(function() rotated:draw(x, y + (size - rh) / 2) end)
+                        -- ★ 2026-09-27：旋轉後的圖會**變大**，左上角對齊就會偏心 →
+                        --   以「左邊那一格的中心」為準置中（使用者回報旋轉沒在中心）。
+                        pcall(function() rotated:draw(x + (size - rw) / 2, y + (size - rh) / 2) end)
                     end
                 end
             end

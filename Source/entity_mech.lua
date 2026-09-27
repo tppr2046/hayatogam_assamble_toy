@@ -680,6 +680,11 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
             if dc and dc ~= 0 then
                 self.hook_len = (self.hook_len or lmin) + (dc / 360) * per_rot
                 self.hook_len = math.max(lmin, math.min(lmax, self.hook_len))
+                -- ★★ 2026-09-27：板手／面板旋鈕的角度改成**累積 crank 的實際轉動量**
+                --   （使用者拍板：crank 轉 2 圈 → 板手轉 1 圈，見 hookReelAngle）。
+                -- ⚠️ 不能綁繩長：繩長會被夾在 lmin~lmax，到底之後玩家還在轉、
+                --   板手卻不動 —— 看起來像壞掉。
+                self.hook_crank_deg = (self.hook_crank_deg or 0) + dc
             end
             -- 沿索前後移動。★ **不在這裡夾住兩端** —— 走到邊緣要「脫鉤掉下去」，
             --   那個判定放在 state_mission（因為焦點切走後 dx 來自別的零件，
