@@ -142,7 +142,10 @@ function MechController:drawHookLine(draw_x, body_draw_y, mech_grid)
         local canvas_h = (ok and ih) or 32
         local part_y = py_top + (cell - canvas_h) + (pdata.image_offset_y or 0)
         local rx = px + (pdata.rope_x or 0)
-        local rope_top = ry
+        -- ★ 鉤子：畫布 y=hook_grip_y 的那一列對齊吊索（使用者拍板：由上往下第 5 個像素）
+        local hook_dy = ry - (pdata.hook_grip_y or 4)
+        -- ★ 繩子接在鉤子下方（畫布 y=rope_y），不是接在吊索上 —— 接在吊索上的話繩子會穿過鉤身
+        local rope_top = hook_dy + (pdata.rope_y or 16)
         local rope_bottom = part_y + (pdata.rope_y or 0) + (pdata.rope_h or 3)
         local seg = pdata.rope_h or 3
         -- 由下往上一段一段鋪；最後一段可能超出吊點，夾住即可（差幾 px 看不出來）
@@ -152,8 +155,6 @@ function MechController:drawHookLine(draw_x, body_draw_y, mech_grid)
             pcall(function() pdata._rope_img:draw(rx, dy) end)
             y = y - seg
         end
-        -- 鉤子：畫布上的鉤底對齊吊點
-        local hook_dy = ry - (pdata.hook_bottom_y or 16)
         pcall(function() pdata._hook_img:draw(px, hook_dy) end)
         return
     end

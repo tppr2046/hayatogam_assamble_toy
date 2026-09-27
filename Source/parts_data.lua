@@ -348,8 +348,10 @@ local parts_data = {
         rot_pivot_x = 8.5, rot_pivot_y = 21,
         -- 繩子那一小段在畫布裡的位置（往上平鋪時用）
         rope_x = 22, rope_y = 16, rope_w = 3, rope_h = 3,
-        -- 鉤子在畫布裡的底邊（畫布原點 + 這個值 = 鉤子底部）→ 吊起來時用它對齊吊點
-        hook_bottom_y = 16,
+        -- ★ 2026-09-27 使用者拍板：吊起來時，**吊索要落在鉤子由上往下第 5 個像素**
+        --   → 畫布 y=4 對齊吊索（第 1 個像素是 y=0）。
+        --   繩子的頂端跟著走：接在畫布 y=rope_y（鉤子下方），不然繩子會穿過鉤身。
+        hook_grip_y = 4,
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/canon_panel.png", -- 2 格寬的面板（右格放 A 鈕）
