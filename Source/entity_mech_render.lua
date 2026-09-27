@@ -148,12 +148,20 @@ function MechController:drawHookLine(draw_x, body_draw_y, mech_grid)
         local rope_top = hook_dy + (pdata.rope_y or 16)
         local rope_bottom = part_y + (pdata.rope_y or 0) + (pdata.rope_h or 3)
         local seg = pdata.rope_h or 3
-        -- 由下往上一段一段鋪；最後一段可能超出吊點，夾住即可（差幾 px 看不出來）
-        local y = rope_bottom - seg
-        while y > rope_top do
+        -- ★★ 2026-09-27：**兩端都要接死**（使用者回報繩子與鉤子之間有 1~2px 空隙）。
+        --   原本從底部往上鋪，最後一段落在 (rope_top, rope_top+seg] 之間 →
+        --   鉤子那一端最多會差 seg-1 px。
+        --   改成：從**鉤子那一端**往下鋪（頂端必定對齊），最後再補一段貼齊底座那一端。
+        --   中間可能重疊不到一段 —— 重複紋理重疊看不出來，留縫看得出來。
+        local y = rope_top
+        while y + seg <= rope_bottom do
             local dy = y
             pcall(function() pdata._rope_img:draw(rx, dy) end)
-            y = y - seg
+            y = y + seg
+        end
+        if y < rope_bottom then
+            local dy = rope_bottom - seg
+            pcall(function() pdata._rope_img:draw(rx, dy) end)
         end
         pcall(function() pdata._hook_img:draw(px, hook_dy) end)
         return
@@ -402,9 +410,10 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
             pcall(function() pdata._hook_img:draw(px, part_y) end)
         end
         local ang = self:hookReelAngle() + (rotation_angle or 0)
+        local ddy = pdata.rot_draw_dy or 0
         pcall(function()
             pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
-                                       part_y + (pdata.rot_pivot_y or 0), ang)
+                                       part_y + (pdata.rot_pivot_y or 0) + ddy, ang)
         end)
     -- [[ §15.2 自動裝填 ]] 2026-09-27：底座不動、**發條旋柄一直轉**（裝上去就在轉）
     -- ★ 純演出：轉速與裝填快慢無關 —— 它是被動零件，玩家看到「它在動」就夠了。
