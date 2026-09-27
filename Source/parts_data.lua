@@ -338,7 +338,18 @@ local parts_data = {
         cost_copper = 25,
         cost_rubber = 30,
         color = gfx.kColorBlack,
-        image = "images/hook_part.png",
+        -- ★★ 2026-09-27 換上使用者的圖：**hook-table-32-32.png（4 格）**
+        --   1＝底座　2＝板手（跟著 crank 轉）　3＝繩子（往上平鋪、隨高度伸縮）　4＝鉤子
+        --   ★ 每格都是整張 32×32 的畫布、只畫該部位，且畫在**組裝後的位置**：
+        --     底座在下半（y16~31，正好是 2×1 格），鉤子收起時在上半（y0~15）。
+        --   ★ 沒有 `image`：舊的 hook_part.png 已刪除，預覽圖由載入端用「底座＋板手」合成。
+        table_image = "images/hook-table-32-32",
+        -- 板手的旋轉軸（畫布內**連續座標**：像素索引 x5~11 / y15~26 → 中心 (8.5, 21)）
+        rot_pivot_x = 8.5, rot_pivot_y = 21,
+        -- 繩子那一小段在畫布裡的位置（往上平鋪時用）
+        rope_x = 22, rope_y = 16, rope_w = 3, rope_h = 3,
+        -- 鉤子在畫布裡的底邊（畫布原點 + 這個值 = 鉤子底部）→ 吊起來時用它對齊吊點
+        hook_bottom_y = 16,
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/canon_panel.png", -- 2 格寬的面板（右格放 A 鈕）

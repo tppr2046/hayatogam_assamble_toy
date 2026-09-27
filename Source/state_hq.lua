@@ -712,6 +712,21 @@ function StateHQ.setup()
                             pdata._tbl_rot = buf
                         end
                     end
+                    -- [[ §15.3 吊索鉤 ]] 4 格的表再多切兩件：繩子（一小段，之後往上平鋪）與鉤子
+                    if tbl:getLength() and tbl:getLength() >= 4 then
+                        local rope_src = tbl:getImage(3)
+                        if rope_src and pdata.rope_w and pdata.rope_h then
+                            local okr, rimg = pcall(function() return gfx.image.new(pdata.rope_w, pdata.rope_h) end)
+                            if okr and rimg then
+                                gfx.pushContext(rimg)
+                                gfx.clear(gfx.kColorClear)
+                                rope_src:draw(-(pdata.rope_x or 0), -(pdata.rope_y or 0))
+                                gfx.popContext()
+                                pdata._rope_img = rimg
+                            end
+                        end
+                        pdata._hook_img = tbl:getImage(4)
+                    end
                     if base and gun then
                         local oks, cw, ch = pcall(function() return base:getSize() end)
                         if oks and cw and ch then

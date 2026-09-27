@@ -123,18 +123,69 @@ function MechController:drawHookLine(draw_x, body_draw_y, mech_grid)
     if not self.hook_rope then return end
     local gfx = playdate.graphics
     local cell = (mech_grid and mech_grid.cell_size) or 16
+    local ry = self.hook_rope.y
+
+    -- [[ 2026-09-27 ]] 有圖就用圖：繩子往上**平鋪**、鉤子接在繩頭。
+    -- ★ 繩子用平鋪而不是拉伸：1-bit 的點陣圖拉伸會糊掉，平鋪才保持銳利。
+    -- ★ 繩索的 x 取**零件實際安裝的位置**（不是機體中線）—— 圖上繩子就是從底座那一點出來的。
+    local pdata, item
+    local eq = _G.GameState and _G.GameState.mech_stats
+               and _G.GameState.mech_stats.equipped_parts or {}
+    for _, it in ipairs(eq) do
+        local pd = _G.PartsData and _G.PartsData[it.id]
+        if pd and pd.part_type == "HOOK" then pdata, item = pd, it; break end
+    end
+    if pdata and item and pdata._rope_img and pdata._hook_img then
+        local px = draw_x + (item.col - 1) * cell + (pdata.image_offset_x or 0)
+        local py_top = body_draw_y + ((mech_grid and mech_grid.rows or 2) - item.row) * cell
+        local ok, _, ih = pcall(function() return pdata._tbl_base:getSize() end)
+        local canvas_h = (ok and ih) or 32
+        local part_y = py_top + (cell - canvas_h) + (pdata.image_offset_y or 0)
+        local rx = px + (pdata.rope_x or 0)
+        local rope_top = ry
+        local rope_bottom = part_y + (pdata.rope_y or 0) + (pdata.rope_h or 3)
+        local seg = pdata.rope_h or 3
+        -- 由下往上一段一段鋪；最後一段可能超出吊點，夾住即可（差幾 px 看不出來）
+        local y = rope_bottom - seg
+        while y > rope_top do
+            local dy = y
+            pcall(function() pdata._rope_img:draw(rx, dy) end)
+            y = y - seg
+        end
+        -- 鉤子：畫布上的鉤底對齊吊點
+        local hook_dy = ry - (pdata.hook_bottom_y or 16)
+        pcall(function() pdata._hook_img:draw(px, hook_dy) end)
+        return
+    end
+
+    -- 後備：沒有圖時維持原本的程式繪製（白粗線打底 + 黑細線，§3-4）
     local cx = draw_x + cell * 1.5
     local top = body_draw_y
-    local ry = self.hook_rope.y
-    -- 白粗線打底 + 黑細線（黑天空/白天空都看得見 §3-4）
     gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(3)
     gfx.drawLine(cx, ry, cx, top)
     gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(1)
     gfx.drawLine(cx, ry, cx, top)
-    -- 鉤頭
     gfx.setColor(gfx.kColorBlack)
     gfx.drawRect(cx - 3, ry - 2, 6, 4)
     gfx.setLineWidth(1)
+end
+
+-- [[ §15.3 吊索鉤 ]] crank 收放索長 → 板手（與面板旋鈕）要轉的角度。
+-- ★★ 唯一計算點：機體上的板手與面板上的旋鈕讀同一支，
+--   兩邊各算一次的話，轉起來會不同步（玩家一眼就看得出來）。
+function MechController:hookReelAngle()
+    local pdata
+    local eq = _G.GameState and _G.GameState.mech_stats
+               and _G.GameState.mech_stats.equipped_parts or {}
+    for _, it in ipairs(eq) do
+        local pd = _G.PartsData and _G.PartsData[it.id]
+        if pd and pd.part_type == "HOOK" then pdata = pd; break end
+    end
+    if not pdata then return 0 end
+    local lmin = pdata.hook_len_min or 16
+    local lmax = pdata.hook_len_max or 110
+    local t = ((self.hook_len or lmin) - lmin) / math.max(1, lmax - lmin)
+    return t * 360
 end
 
 -- [[ §15.2 防護罩 ]] 以機體中心畫一圈**虛線圓**表示護罩。
@@ -336,6 +387,20 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
         -- ★ 角度由 updateParts 每幀算好（自動瞄準），繪製端只負責畫 ——
         --   兩邊各算一次就會出現「圖指著這裡、子彈飛去那裡」。
         local ang = -(self.high_gun_angle or 0) + (rotation_angle or 0)
+        pcall(function()
+            pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
+                                       part_y + (pdata.rot_pivot_y or 0), ang)
+        end)
+    -- [[ §15.3 吊索鉤 ]] 2026-09-27：底座不動、**板手跟著 crank 轉**。
+    -- ★ 繩子與鉤子不在這裡畫 —— 它們要從底座一路畫到吊點（可能遠在機體上方），
+    --   與其他零件的疊圖順序無關，交給 drawHookLine。
+    elseif part_type == "HOOK" and pdata._tbl_base and pdata._tbl_rot then
+        pcall(function() pdata._tbl_base:draw(px, part_y) end)
+        -- 收起來的鉤子：沒吊著的時候畫在原位（畫布上半），吊著時由 drawHookLine 畫在吊點
+        if pdata._hook_img and not self.hook_rope then
+            pcall(function() pdata._hook_img:draw(px, part_y) end)
+        end
+        local ang = self:hookReelAngle() + (rotation_angle or 0)
         pcall(function()
             pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
                                        part_y + (pdata.rot_pivot_y or 0), ang)
@@ -732,11 +797,8 @@ function MechController:drawPartUI(part_id, x, y, size)
             if part_type == "HOOK" then
                 local control_img = ui.canon_control
                 if control_img then
-                    local pd = _G.PartsData and _G.PartsData[part_id]
-                    local lmin = (pd and pd.hook_len_min) or 16
-                    local lmax = (pd and pd.hook_len_max) or 110
-                    local t = ((self.hook_len or lmin) - lmin) / math.max(1, lmax - lmin)
-                    local rotated = control_img:rotatedImage(t * 360)
+                    -- ★ 角度跟機體上的板手讀**同一支**（hookReelAngle），不要各算一次
+                    local rotated = control_img:rotatedImage(self:hookReelAngle())
                     if rotated then
                         local rw, rh = rotated:getSize()
                         pcall(function() rotated:draw(x, y + (size - rh) / 2) end)
