@@ -689,26 +689,27 @@ function StateHQ.setup()
                 end
             end
             
-            -- [[ §15.2 高位槍 ]] 2026-09-26：2 格的表 → 底座 ＋「軸心置中」的槍。
+            -- [[ 零件的旋轉件 ]] 2026-09-26：2 格的表 → **底座 ＋「軸心置中」的旋轉件**。
             -- ★ 軸心置中是為了 drawRotated（它繞圖片中心轉）—— 與 BOSS 的旋轉件同一招。
-            -- ★ 同時合成一張「底座＋槍」當 `_img`：HQ／商店的預覽、以及旋轉圖載不到時的後備。
+            -- ★ 同時合成一張「底座＋旋轉件」當 `_img`：HQ／商店的預覽，也是旋轉圖載不到時的後備。
+            -- ★★ 這一段是**通用**的（2026-09-27 由高位槍專用改成通用）：
+            --   高位槍＝槍繞軸瞄準、自動裝填＝發條旋柄一直轉，兩者共用同一組欄位。
             if pdata.table_image then
                 local ok_tbl, tbl = pcall(function() return gfx.imagetable.new(pdata.table_image) end)
                 if ok_tbl and tbl then
                     local base = tbl:getImage(1)
                     local gun  = tbl:getImage(2)
-                    if base then pdata._hg_base = base end
+                    if base then pdata._tbl_base = base end
                     if gun then
-                        local okc, iw, ih = pcall(function() return gun:getSize() end)
                         local size = 64
                         local okb, buf = pcall(function() return gfx.image.new(size, size) end)
                         if okb and buf then
                             gfx.pushContext(buf)
                             gfx.clear(gfx.kColorClear)
-                            gun:draw(-((pdata.gun_pivot_x or 0) - size / 2),
-                                     -((pdata.gun_pivot_y or 0) - size / 2))
+                            gun:draw(-((pdata.rot_pivot_x or 0) - size / 2),
+                                     -((pdata.rot_pivot_y or 0) - size / 2))
                             gfx.popContext()
-                            pdata._hg_gun = buf
+                            pdata._tbl_rot = buf
                         end
                     end
                     if base and gun then

@@ -157,7 +157,7 @@ local parts_data = {
         image = "images/gun_high.png",
         table_image = "images/high_gun",
         -- 槍的旋轉軸與槍口（畫布內座標）。★ 發射與繪製**讀同一組**，不會圖轉了子彈沒轉。
-        gun_pivot_x = 6, gun_pivot_y = 4,
+        rot_pivot_x = 6, rot_pivot_y = 4,
         gun_muzzle_x = 23, gun_muzzle_y = 4,
         -- ★ 角度範圍：水平朝右(0) ~ 向上 30 度（2026-09-26 使用者拍板）
         aim_min = 0, aim_max = 30,
@@ -166,7 +166,7 @@ local parts_data = {
         ui_panel = "images/gun_panel.png",
         operation_hint = "A: Lob Shot",
         operable = true,                     -- ★ 手動：進焦點循環,按 A 發射
-        -- ⚠️ 舊的固定槍口（換成會轉的槍之後只剩後備路徑在用 —— 見 gun_pivot/gun_muzzle）
+        -- ⚠️ 舊的固定槍口（換成會轉的槍之後只剩後備路徑在用 —— 見 rot_pivot/gun_muzzle）
         muzzle_x = 20,
         muzzle_y = 8,
         -- ★ **不設 requires_clear_right** —— 可以和 GUN/CANON 並排。
@@ -209,7 +209,13 @@ local parts_data = {
         cost_copper = 25,
         cost_rubber = 5,
         color = gfx.kColorBlack,
-        image = "images/auto_loader.png",   -- ✅ 2026-09-26 圖已完成（16×16）
+        -- ★★ 2026-09-27 換上 2 格的表：**1＝底圖　2＝發條旋柄**（裝上機體後旋柄會轉）。
+        --   旋柄繞自己的中心 (7.5, 7) 轉；轉速純演出，與裝填快慢無關。
+        -- ★ `image` 留空：這個零件只有表，沒有單張圖 —— 載入端會用「底圖＋旋柄」合成 `_img`
+        --   當 HQ／商店的預覽。
+        table_image = "images/auto_loader-table-16-16",
+        rot_pivot_x = 7.5, rot_pivot_y = 7,
+        spin_speed = 110,                  -- 度/秒
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",

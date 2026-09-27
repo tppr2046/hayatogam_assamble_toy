@@ -718,17 +718,17 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                         end
                         local base_speed = entity_controller.player_move_speed or 2.0
                         local speed = base_speed * (pdata.projectile_speed_mult or 26)
-                        -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 gun_pivot/gun_muzzle）
+                        -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 rot_pivot/gun_muzzle）
                         local ang = math.rad(self.high_gun_angle or 0)
-                        if pdata.gun_pivot_x and pdata._hg_gun then
+                        if pdata.rot_pivot_x and pdata._tbl_rot then
                             local ih = 32
-                            local okh, _, hh = pcall(function() return pdata._hg_base:getSize() end)
+                            local okh, _, hh = pcall(function() return pdata._tbl_base:getSize() end)
                             if okh and hh then ih = hh end
                             local img_y = py_top + (cell_size - ih) + (pdata.image_offset_y or 0)
-                            local pvx = px + pdata.gun_pivot_x
-                            local pvy = img_y + pdata.gun_pivot_y
-                            local ox = (pdata.gun_muzzle_x or 0) - pdata.gun_pivot_x
-                            local oy = (pdata.gun_muzzle_y or 0) - pdata.gun_pivot_y
+                            local pvx = px + pdata.rot_pivot_x
+                            local pvy = img_y + pdata.rot_pivot_y
+                            local ox = (pdata.gun_muzzle_x or 0) - pdata.rot_pivot_x
+                            local oy = (pdata.gun_muzzle_y or 0) - pdata.rot_pivot_y
                             local c, s = math.cos(ang), math.sin(ang)
                             -- 螢幕座標 y 向下 → 仰角為正時往上，所以 sin 取負
                             gx = pvx + ox * c + oy * s
@@ -1112,6 +1112,20 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
     -- ★ 刻意每幀重算而不是做快取失效 —— 裝備只有 6 格,掃一次幾乎免費,
     --   而「改裝備時忘了清快取」是必然會發生的 bug。
     self._auto_loader_cache = nil
+
+    -- [[ 零件演出 ]] 會自轉的零件（自動裝填的發條旋柄）用同一個角度，看起來一致。
+    -- ★ 只有一個角度變數：裝兩個也同步轉，不必每個零件各存一份。
+    do
+        local eq = (_G.GameState and _G.GameState.mech_stats and _G.GameState.mech_stats.equipped_parts) or {}
+        local spin = nil
+        for _, item in ipairs(eq) do
+            local pd = _G.PartsData and _G.PartsData[item.id]
+            if pd and pd.spin_speed then spin = pd.spin_speed; break end
+        end
+        if spin then
+            self.part_spin_angle = ((self.part_spin_angle or 0) + spin * dt) % 360
+        end
+    end
 
     -- [[ §15.2 高位槍 ]] 自動瞄準**每幀都跑**，與焦點無關。
     -- ★ 焦點只決定「能不能按 A 發射」；砲塔本來就該一直追著敵人轉，

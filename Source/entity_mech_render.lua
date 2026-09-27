@@ -331,14 +331,23 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     elseif part_type == "CLAW" then
         self:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
     -- [[ §15.2 高位槍 ]] 底座不轉、槍繞軸心轉（自動瞄準最近的敵人）
-    elseif part_type == "HIGH_GUN" and pdata._hg_base and pdata._hg_gun then
-        pcall(function() pdata._hg_base:draw(px, part_y) end)
+    elseif part_type == "HIGH_GUN" and pdata._tbl_base and pdata._tbl_rot then
+        pcall(function() pdata._tbl_base:draw(px, part_y) end)
         -- ★ 角度由 updateParts 每幀算好（自動瞄準），繪製端只負責畫 ——
         --   兩邊各算一次就會出現「圖指著這裡、子彈飛去那裡」。
         local ang = -(self.high_gun_angle or 0) + (rotation_angle or 0)
         pcall(function()
-            pdata._hg_gun:drawRotated(px + (pdata.gun_pivot_x or 0),
-                                      part_y + (pdata.gun_pivot_y or 0), ang)
+            pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
+                                       part_y + (pdata.rot_pivot_y or 0), ang)
+        end)
+    -- [[ §15.2 自動裝填 ]] 2026-09-27：底座不動、**發條旋柄一直轉**（裝上去就在轉）
+    -- ★ 純演出：轉速與裝填快慢無關 —— 它是被動零件，玩家看到「它在動」就夠了。
+    elseif pdata._tbl_base and pdata._tbl_rot and pdata.spin_speed then
+        pcall(function() pdata._tbl_base:draw(px, part_y) end)
+        local ang = (self.part_spin_angle or 0) + (rotation_angle or 0)
+        pcall(function()
+            pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
+                                       part_y + (pdata.rot_pivot_y or 0), ang)
         end)
     -- 特殊處理 CANON（繪製底座 + 砲管）
     elseif part_type == "CANON" then
