@@ -353,8 +353,10 @@ local parts_data = {
         --     畫在 pivot 的位置時**角度 0 的外觀完全不變**，改 pivot 只會換旋轉軸。
         --     要移動外觀就得另外給繪製偏移。
         rot_draw_dy = 1,
-        -- ★ crank 轉幾圈 = 板手轉 1 圈（2026-09-27 使用者拍板：2 圈）
-        crank_turns_per_wrench_turn = 2,
+        -- ★ crank 轉幾圈 = 板手轉 1 圈（2026-09-27 使用者拍板：**1:1**）
+        --   ⚠️ 想讓「繩子伸縮變慢」的話要調的是 hook_reel_per_rotation，不是這個 ——
+        --     這個只改板手的視覺轉速，改了會變成「手轉一圈、板手轉半圈」的違和感。
+        crank_turns_per_wrench_turn = 1,
         -- 繩子那一小段在畫布裡的位置（往上平鋪時用）
         rope_x = 22, rope_y = 16, rope_w = 3, rope_h = 3,
         -- ★ 2026-09-27 使用者拍板：吊起來時，**吊索要落在鉤子由上往下第 5 個像素**
@@ -374,7 +376,12 @@ local parts_data = {
         hook_len_min = 16,
         hook_len_max = 110,
         -- crank 轉一整圈 → 收放這麼多 px
-        hook_reel_per_rotation = 120,
+        -- ★ 2026-09-27 使用者拍板：120 → **60**（繩子伸縮慢一點）。
+        --   可用範圍是 hook_len_min~max ＝ 94px：
+        --     120 → 轉 0.78 圈就跑完全程（太快，一轉就到底）
+        --      60 → 轉 1.57 圈（現在）
+        --      40 → 轉 2.35 圈（更慢、更好微調高度）
+        hook_reel_per_rotation = 60,
     },
 
     ["WHEEL1"] = {
