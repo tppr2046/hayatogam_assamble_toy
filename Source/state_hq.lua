@@ -712,6 +712,10 @@ function StateHQ.setup()
                             pdata._tbl_rot = buf
                         end
                     end
+                    -- [[ §15.2 防護罩 ]] 狀態格：可以擋／冷卻中各一張
+                    if pdata.state_cell_on then pdata._state_on = tbl:getImage(pdata.state_cell_on) end
+                    if pdata.state_cell_off then pdata._state_off = tbl:getImage(pdata.state_cell_off) end
+
                     -- [[ §15.3 吊索鉤 ]] 4 格的表再多切兩件：繩子（一小段，之後往上平鋪）與鉤子
                     if tbl:getLength() and tbl:getLength() >= 4 then
                         local rope_src = tbl:getImage(3)

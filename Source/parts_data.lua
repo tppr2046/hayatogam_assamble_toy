@@ -252,7 +252,12 @@ local parts_data = {
         cost_copper = 20,
         cost_rubber = 15,
         color = gfx.kColorBlack,
-        image = "images/shield_part.png",
+        -- ★★ 2026-09-27 換上使用者的圖：**shield-table-16-16.png（3 格）**
+        --   1＝底座　2＝啟動中（可以擋）　3＝未啟動（冷卻中）
+        --   ★ 沒有 `image`：舊的 shield_part.png 已刪除，預覽圖由載入端合成（底座＋啟動中）。
+        table_image = "images/shield-table-16-16",
+        -- 狀態格：可以擋時畫第 2 格、冷卻中畫第 3 格（見 entity_mech_render 的 SHIELD 分支）
+        state_cell_on = 2, state_cell_off = 3,
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",   -- 暫時沿用,之後有專屬面板再換

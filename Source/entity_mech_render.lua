@@ -401,6 +401,14 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
             pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
                                        part_y + (pdata.rot_pivot_y or 0), ang)
         end)
+    -- [[ §15.2 防護罩 ]] 2026-09-27：底座 ＋ **依狀態換格**（可以擋／冷卻中）。
+    -- ★ 讀 shieldState()（唯一判定點）—— 機體周圍那圈虛線圓也讀同一個值，
+    --   兩邊不會出現「零件圖說能擋、圓圈說在冷卻」。
+    elseif part_type == "SHIELD" and pdata._tbl_base and pdata._state_on then
+        pcall(function() pdata._tbl_base:draw(px, part_y) end)
+        local ready = self:shieldState()
+        local img = (ready and pdata._state_on) or pdata._state_off or pdata._state_on
+        if img then pcall(function() img:draw(px, part_y) end) end
     -- [[ §15.3 吊索鉤 ]] 2026-09-27：底座不動、**板手跟著 crank 轉**。
     -- ★ 繩子與鉤子不在這裡畫 —— 它們要從底座一路畫到吊點（可能遠在機體上方），
     --   與其他零件的疊圖順序無關，交給 drawHookLine。
