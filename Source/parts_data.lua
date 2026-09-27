@@ -157,8 +157,9 @@ local parts_data = {
         image = "images/gun_high.png",
         table_image = "images/high_gun",
         -- 槍的旋轉軸與槍口（畫布內座標）。★ 發射與繪製**讀同一組**，不會圖轉了子彈沒轉。
-        rot_pivot_x = 6, rot_pivot_y = 4,
-        gun_muzzle_x = 23, gun_muzzle_y = 4,
+        -- ★ 同上：這是**連續座標**（像素索引 +0.5 才是那一格的中心）
+        rot_pivot_x = 6.5, rot_pivot_y = 4.5,
+        gun_muzzle_x = 23.5, gun_muzzle_y = 4.5,
         -- ★ 角度範圍：水平朝右(0) ~ 向上 30 度（2026-09-26 使用者拍板）
         aim_min = 0, aim_max = 30,
         placement_row = "TOP",
@@ -210,11 +211,15 @@ local parts_data = {
         cost_rubber = 5,
         color = gfx.kColorBlack,
         -- ★★ 2026-09-27 換上 2 格的表：**1＝底圖　2＝發條旋柄**（裝上機體後旋柄會轉）。
-        --   旋柄繞自己的中心 (7.5, 7) 轉；轉速純演出，與裝填快慢無關。
+        --   旋柄繞自己的中心 (8, 7.5) 轉；轉速純演出，與裝填快慢無關。
+        -- ⚠️⚠️ **軸心要用連續座標，不是像素索引**：旋柄的像素索引是 x1~14 / y3~11，
+        --   但索引 i 的像素涵蓋 [i, i+1)，所以連續範圍是 x[1,15) / y[3,12)，中心是 (8, 7.5)。
+        --   直接拿索引算中心會得到 (7.5, 7)，**兩軸各少半格 → 看起來軸心偏左上**
+        --   （2026-09-27 使用者回報後修正）。之後做會轉的零件都要注意這一條。
         -- ★ `image` 留空：這個零件只有表，沒有單張圖 —— 載入端會用「底圖＋旋柄」合成 `_img`
         --   當 HQ／商店的預覽。
         table_image = "images/auto_loader-table-16-16",
-        rot_pivot_x = 7.5, rot_pivot_y = 7,
+        rot_pivot_x = 8, rot_pivot_y = 7.5,
         spin_speed = 110,                  -- 度/秒
         placement_row = "TOP",
         align_image_top = false,
