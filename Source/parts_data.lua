@@ -4,6 +4,7 @@ local gfx = playdate.graphics
 
 local parts_data = {
     ["GUN"] = {
+        auto_loadable = true,   -- ★ 裝了 AUTO_LOADER 就變自動連發（判定見 MechController:gunIsAuto）
         name = "GUN",
         part_type = "GUN",  -- 功能類別
         -- [[ §8.08 死鎖安全閥 ]] 初始零件不吃耐久、永不損壞。
@@ -49,6 +50,7 @@ local parts_data = {
     -- ★ 因為 operable=true，它**不走** updateParts 的自動發射迴圈，
     --   而是走 updateActivePart 的 `part_type == "GUN"` 分支（焦點在它身上時按 A）。
     ["GUN2"] = {
+        auto_loadable = true,   -- ★ 裝了 AUTO_LOADER 就變自動連發（判定見 MechController:gunIsAuto）
         name = "LASER",
         part_type = "GUN",
         hp = 12,
@@ -96,6 +98,7 @@ local parts_data = {
     -- 反向槍：往**左**射，掩護背後。
     -- ★ 存在理由見 GDD §8.08：敵人掉落物落在身後，折返撿資源時背後才是威脅。
     ["BACK_GUN"] = {
+        auto_loadable = true,   -- ★ 裝了 AUTO_LOADER 就變自動連發（判定見 MechController:gunIsAuto）
         name = "BACK GUN",
         part_type = "GUN",
         hp = 10,
@@ -138,6 +141,7 @@ local parts_data = {
     --   3) **可與其他向前發射的武器並存**（拿掉槍口淨空）——
     --      但子彈若被自己的武器擋住就會消失（見 entity_controller 的 self-block）
     ["HIGH_GUN"] = {
+        auto_loadable = true,   -- ★ 裝了 AUTO_LOADER 就變自動連發（判定見 MechController:gunIsAuto）
         name = "HIGH GUN",
         part_type = "HIGH_GUN",              -- ★ 自己的型別：它不再走 GUN 的自動開火迴圈
         hp = 8,

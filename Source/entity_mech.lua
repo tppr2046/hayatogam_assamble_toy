@@ -437,11 +437,14 @@ end
 --   之類自相矛盾的狀態。
 -- 規則：
 --   1) 零件自己宣告 operable == false → 永遠自動（沒有這種槍了，但規則留著）
---   2) 裝了 AUTO_LOADER → 所有 part_type=="GUN" 的槍變回自動
+--   2) 裝了 AUTO_LOADER → **所有宣告 `auto_loadable` 的武器**變回自動
 --   3) 其餘 → 手動（2026-08-19 拍板：GUN 預設改成手動）
+-- ★★ 2026-09-27：條件由寫死的 `part_type == "GUN"` 改成**資料上的 `auto_loadable`**。
+--   高位槍要納入自動連發（使用者拍板），而它有自己的 part_type；
+--   寫成型別清單的話，之後每加一種武器都要回來改這裡。
 function MechController:gunIsAuto(pdata)
     if not pdata then return false end
-    if pdata.part_type ~= "GUN" then return false end
+    if not pdata.auto_loadable then return false end
     if pdata.operable == false then return true end
     return self:hasAutoLoader()
 end
@@ -700,49 +703,8 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                 local eq = _G.GameState.mech_stats.equipped_parts or {}
                 for _, item in ipairs(eq) do
                     if item.id == self.active_part_id then
-                        local cell_size = mech_grid.cell_size
-                        -- 槍口與繪製端共用同一組欄位（圖畫多高,槍口就多高）
-                        local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
-                        local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
-                        local gx = px + cell_size / 2
-                        local gy = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
-                        if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
-                            local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
-                            if oki and iw and ih then
-                                local img_y = pdata.align_image_top
-                                    and (py_top + (pdata.image_offset_y or 0))
-                                    or  (py_top + (cell_size - ih) + (pdata.image_offset_y or 0))
-                                gx = px + pdata.muzzle_x
-                                gy = img_y + pdata.muzzle_y
-                            end
-                        end
-                        local base_speed = entity_controller.player_move_speed or 2.0
-                        local speed = base_speed * (pdata.projectile_speed_mult or 26)
-                        -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 rot_pivot/gun_muzzle）
-                        local ang = math.rad(self.high_gun_angle or 0)
-                        if pdata.rot_pivot_x and pdata._tbl_rot then
-                            local ih = 32
-                            local okh, _, hh = pcall(function() return pdata._tbl_base:getSize() end)
-                            if okh and hh then ih = hh end
-                            local img_y = py_top + (cell_size - ih) + (pdata.image_offset_y or 0)
-                            local pvx = px + pdata.rot_pivot_x
-                            local pvy = img_y + pdata.rot_pivot_y
-                            local ox = (pdata.gun_muzzle_x or 0) - pdata.rot_pivot_x
-                            local oy = (pdata.gun_muzzle_y or 0) - pdata.rot_pivot_y
-                            local c, s = math.cos(ang), math.sin(ang)
-                            -- 螢幕座標 y 向下 → 仰角為正時往上，所以 sin 取負
-                            gx = pvx + ox * c + oy * s
-                            gy = pvy - ox * s + oy * c
-                        end
-                        local vx = speed * math.cos(ang)
-                        local vy = -speed * math.sin(ang)
-                        gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
-                        entity_controller:addPlayerProjectile(gx, gy, vx, vy,
-                            pdata.projectile_damage or 3, pdata.projectile_grav_mult or 18,
-                            nil, nil, nil, pdata.self_block and self.active_part_id or nil)
-                        self.high_gun_timer = 0
-                        if _G.SoundManager and _G.SoundManager.playCanonFire then
-                            _G.SoundManager.playCanonFire()
+                        if self:fireHighGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller) then
+                            self.high_gun_timer = 0
                         end
                         break
                     end
@@ -1050,6 +1012,59 @@ function MechController:applyMechTilt(x, y, vx, vy, mech_x, mech_y, mech_grid, e
 end
 
 -- 更新零件計時器和自動功能
+-- [[ §15.2 高位槍 ]] 發射一發。★★ **手動按 A 與自動裝填走同一支** ——
+--   彈道（槍口位置、仰角、速度）只算一次；抄成兩份的話調了一邊就會不一致。
+-- 回傳 true＝真的打出去了（呼叫端才歸零冷卻）。
+function MechController:fireHighGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller)
+    if not (item and pdata and entity_controller) then return false end
+    local cell_size = mech_grid.cell_size
+    local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
+    local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
+    local gx = px + cell_size / 2
+    local gy = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
+
+    -- 後備路徑：沒有旋轉件的圖時，用舊的固定槍口
+    if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
+        local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
+        if oki and iw and ih then
+            local img_y = pdata.align_image_top
+                and (py_top + (pdata.image_offset_y or 0))
+                or  (py_top + (cell_size - ih) + (pdata.image_offset_y or 0))
+            gx = px + pdata.muzzle_x
+            gy = img_y + pdata.muzzle_y
+        end
+    end
+
+    local base_speed = entity_controller.player_move_speed or 2.0
+    local speed = base_speed * (pdata.projectile_speed_mult or 26)
+    local ang = math.rad(self.high_gun_angle or 0)
+    -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 rot_pivot/gun_muzzle）
+    if pdata.rot_pivot_x and pdata._tbl_rot then
+        local ih = 32
+        local okh, _, hh = pcall(function() return pdata._tbl_base:getSize() end)
+        if okh and hh then ih = hh end
+        local img_y = py_top + (cell_size - ih) + (pdata.image_offset_y or 0)
+        local pvx = px + pdata.rot_pivot_x
+        local pvy = img_y + pdata.rot_pivot_y
+        local ox = (pdata.gun_muzzle_x or 0) - pdata.rot_pivot_x
+        local oy = (pdata.gun_muzzle_y or 0) - pdata.rot_pivot_y
+        local c, s = math.cos(ang), math.sin(ang)
+        -- 螢幕座標 y 向下 → 仰角為正時往上，所以 sin 取負
+        gx = pvx + ox * c + oy * s
+        gy = pvy - ox * s + oy * c
+    end
+    local vx = speed * math.cos(ang)
+    local vy = -speed * math.sin(ang)
+    gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+    entity_controller:addPlayerProjectile(gx, gy, vx, vy,
+        pdata.projectile_damage or 3, pdata.projectile_grav_mult or 18,
+        nil, nil, nil, pdata.self_block and item.id or nil)
+    if _G.SoundManager and _G.SoundManager.playCanonFire then
+        _G.SoundManager.playCanonFire()
+    end
+    return true
+end
+
 -- [[ §15.2 高位槍 ]] 自動瞄準最近的敵人（2026-09-26 使用者拍板）
 -- ★★ 仰角用**解彈道**求，不是指向敵人：它是拋射武器（重力 grav_mult），
 --   直接指過去的話遠一點就落在腳前，自動瞄準等於沒瞄。
@@ -1162,7 +1177,9 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
     local eq = _G.GameState.mech_stats.equipped_parts or {}
     for _, item in ipairs(eq) do
         local pdata = _G.PartsData and _G.PartsData[item.id]
-        if pdata and pdata.part_type == "GUN" and pdata.fire_cooldown then
+        -- ★ 2026-09-27：條件由 part_type=="GUN" 放寬成 `auto_loadable`，
+        --   高位槍才進得來（它的發射走自己的 fireHighGunOnce）。
+        if pdata and pdata.auto_loadable and pdata.fire_cooldown then
             -- 每個零件各自累計冷卻（多把槍併裝時不會互搶）
             -- ★ 首次見到這個零件時的初值：**手動槍給滿**（一進關卡按 A 就能打），
             --   自動槍給 0（維持原本「等一個 CD 才開第一槍」的節奏，不改既有手感）。
@@ -1177,9 +1194,15 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
             -- [[ §15.9 反向槍 ]] 發射方向由 parts_data 的 `fire_direction` 決定（沒設＝RIGHT）。
             -- ★ 槍口與彈道全部交給 fireGunOnce —— 與手動按 A 走同一段程式。
             if self:gunIsAuto(pdata) and tmr >= pdata.fire_cooldown then
-                if self:fireGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller) then
-                    self.gun_fire_timers[item.id] = 0
+                -- ★ 高位槍的彈道與一般槍不同（自動瞄準＋拋物線）→ 走它自己那一支，
+                --   但**與手動按 A 是同一支**，不會出現「自動的和手動的彈道不一樣」。
+                local fired
+                if pdata.part_type == "HIGH_GUN" then
+                    fired = self:fireHighGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller)
+                else
+                    fired = self:fireGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller)
                 end
+                if fired then self.gun_fire_timers[item.id] = 0 end
             end
         end
     end
