@@ -310,7 +310,20 @@ local parts_data = {
         cost_copper = 70,
         cost_rubber = 20,
         color = gfx.kColorBlack,
-        image = "images/missile_part.png",
+        -- ★★ 2026-09-28 換上使用者的圖：**missile_part-table-32-32.png（2 格）**
+        --   1＝底座　2＝發射器。兩格都是整張 32×32 的畫布、只畫該部位（與高位槍同一套慣例）。
+        --   ★ 沒有 `image`：舊的 missile_part.png 已刪除，預覽圖由載入端合成（底座＋發射器）。
+        table_image = "images/missile_part-table-32-32",
+        -- 發射器繞**底座上方的端點**轉（畫布內連續座標：頂端那排像素 x4~10 → 中心 7.5、y13）
+        rot_pivot_x = 7.5, rot_pivot_y = 13.5,
+        -- 發射口＝發射器**前端**（右緣像素 x27、縱向 y4~14 → 中心 9.5；取右邊界 x28）
+        -- ★ 與繪製端讀同一組 rot_pivot / gun_muzzle → 飛彈一定從圖上那個口飛出去。
+        gun_muzzle_x = 28, gun_muzzle_y = 9.5,
+        -- ★ 角度：水平朝右(0) ~ 向上 45 度，**依目標距離**內插（越遠抬越高，2026-09-28 拍板）。
+        --   近到 aim_dist_near 以內＝水平，遠到 aim_dist_far 以外＝滿仰角。
+        aim_min = 0, aim_max = 45,
+        aim_dist_near = 70, aim_dist_far = 240,
+        aim_speed = 150,                     -- 每秒最多轉幾度（瞬間貼齊會看起來像瞬移）
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/canon_panel.png", -- 暫時沿用
@@ -319,7 +332,7 @@ local parts_data = {
         fire_cooldown = 3.0,                 -- ★ 比任何槍都長
         projectile_damage = 20,
         -- 飛彈參數（★ 這三個就是「刻意不要太強」的閥門）
-        missile_launch_speed = 90,           -- 發射初速（先往上）
+        missile_launch_speed = 90,           -- 發射初速（沿發射器方向）
         missile_turn_rate = 120,             -- 每秒最多轉幾度 —— **越小越笨、越容易閃掉**
         missile_speed = 110,                 -- 巡航速度
         missile_life = 4.0,                  -- 存活秒數（找不到目標就自滅）

@@ -426,12 +426,16 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
     -- 特殊處理 CLAW（繪製底座 + 臂 + 爪子）
     elseif part_type == "CLAW" then
         self:drawClaw(px, part_y, iw, ih, pdata, rotation_angle)
-    -- [[ §15.2 高位槍 ]] 底座不轉、槍繞軸心轉（自動瞄準最近的敵人）
-    elseif part_type == "HIGH_GUN" and pdata._tbl_base and pdata._tbl_rot then
+    -- [[ §15.2 高位槍／追蹤飛彈 ]] 底座不轉、上面那件繞軸心轉（自動瞄準最近的敵人）
+    -- ★ 兩者共用同一條繪製路徑：差別只在讀哪一個角度（發射點的算法也共用 partMuzzlePoint）。
+    elseif (part_type == "HIGH_GUN" or part_type == "MISSILE")
+           and pdata._tbl_base and pdata._tbl_rot then
         pcall(function() pdata._tbl_base:draw(px, part_y) end)
         -- ★ 角度由 updateParts 每幀算好（自動瞄準），繪製端只負責畫 ——
         --   兩邊各算一次就會出現「圖指著這裡、子彈飛去那裡」。
-        local ang = -(self.high_gun_angle or 0) + (rotation_angle or 0)
+        local aim = (part_type == "MISSILE") and (self.missile_angle or 0)
+                     or (self.high_gun_angle or 0)
+        local ang = -aim + (rotation_angle or 0)
         pcall(function()
             pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
                                        part_y + (pdata.rot_pivot_y or 0), ang)

@@ -781,12 +781,18 @@ end
 -- ============================================================
 local MISSILE_W, MISSILE_H = 6, 6
 
-function EntityController:addPlayerMissile(x, y, pdata)
+-- angle＝發射方向（螢幕角度：0＝右、負＝上）。沒給就沿用舊行為（往正上）。
+-- ★ 2026-09-28：改成由發射器的角度決定 —— 圖上的發射口指哪裡，飛彈就從那裡往那個方向出去。
+function EntityController:addPlayerMissile(x, y, pdata, angle)
     self.missiles = self.missiles or {}
+    if not self.missile_img_tried then
+        self.missile_img_tried = true
+        local ok, img = pcall(function() return playdate.graphics.image.new("images/missile.png") end)
+        if ok and img then self.missile_img = img end
+    end
     table.insert(self.missiles, {
         x = x, y = y,
-        -- 先往**上**發射（GDD 的行為描述）：角度 -90 度
-        angle = -90,
+        angle = angle or -90,
         speed = pdata.missile_launch_speed or 90,
         cruise = pdata.missile_speed or 110,
         turn = pdata.missile_turn_rate or 120,
@@ -2112,12 +2118,16 @@ function EntityController:draw(camera_x)
         end
     end
 
-    -- [[ §15.2 追蹤飛彈 ]] 目前程式繪製（白底黑框的小方塊,黑地面上也看得見 §3-4）。
-    -- 放 images/missile.png 之後可改成讀圖並依 m.angle 旋轉。
+    -- [[ §15.2 追蹤飛彈 ]] 有 images/missile.png 就畫圖並**依飛行方向旋轉**（圖是朝右畫的）；
+    -- 沒有圖時退回程式繪製的小方塊（白底黑框,黑地面上也看得見 §3-4）。
     for _, m in ipairs(self.missiles or {}) do
         local sx = m.x - camera_x
-        gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - 3, m.y - 3, MISSILE_W, MISSILE_H)
-        gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - 3, m.y - 3, MISSILE_W, MISSILE_H)
+        if self.missile_img then
+            pcall(function() self.missile_img:drawRotated(sx, m.y, m.angle) end)
+        else
+            gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx - 3, m.y - 3, MISSILE_W, MISSILE_H)
+            gfx.setColor(gfx.kColorBlack); gfx.drawRect(sx - 3, m.y - 3, MISSILE_W, MISSILE_H)
+        end
     end
 
     -- [[ CANON3 ]] 範圍爆炸的視覺（沿用 mine_explode 圖表，以爆心置中）

@@ -757,10 +757,16 @@ function MechController:handlePartOperation(mech_x, mech_y, mech_grid, entity_co
                 local eq = _G.GameState.mech_stats.equipped_parts or {}
                 for _, item in ipairs(eq) do
                     if item.id == self.active_part_id then
-                        local cell_size = mech_grid.cell_size
-                        local mx = mech_x + (item.col - 1) * cell_size + cell_size / 2
-                        local my = mech_y + (mech_grid.rows - item.row) * cell_size
-                        entity_controller:addPlayerMissile(mx, my, pdata)
+                        -- ★ 發射點與方向都讀**發射器現在的角度**：圖指哪裡就飛哪裡
+                        local aim = self.missile_angle or 0
+                        local mx, my = self:partMuzzlePoint(item, pdata, aim,
+                                                            mech_x, mech_y, mech_grid)
+                        -- 斜坡上整台機體是傾斜畫的 → 發射方向也要跟著轉（與高位槍同一支）
+                        local rad = math.rad(aim)
+                        local vx, vy = math.cos(rad), -math.sin(rad)
+                        mx, my, vx, vy = self:applyMechTilt(mx, my, vx, vy,
+                                                            mech_x, mech_y, mech_grid, entity_controller)
+                        entity_controller:addPlayerMissile(mx, my, pdata, math.deg(math.atan(vy, vx)))
                         self.missile_timer = 0
                         if _G.SoundManager and _G.SoundManager.playCanonFire then
                             _G.SoundManager.playCanonFire()
@@ -1048,13 +1054,55 @@ end
 -- 回傳 true＝真的打出去了（呼叫端才歸零冷卻）。
 function MechController:fireHighGunOnce(item, pdata, mech_x, mech_y, mech_grid, entity_controller)
     if not (item and pdata and entity_controller) then return false end
-    local cell_size = mech_grid.cell_size
+    local ang = math.rad(self.high_gun_angle or 0)
+    -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 rot_pivot/gun_muzzle）
+    local gx, gy = self:partMuzzlePoint(item, pdata, self.high_gun_angle or 0,
+                                        mech_x, mech_y, mech_grid)
+
+    local base_speed = entity_controller.player_move_speed or 2.0
+    local speed = base_speed * (pdata.projectile_speed_mult or 26)
+    local vx = speed * math.cos(ang)
+    local vy = -speed * math.sin(ang)
+    gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
+    entity_controller:addPlayerProjectile(gx, gy, vx, vy,
+        pdata.projectile_damage or 3, pdata.projectile_grav_mult or 18,
+        nil, nil, nil, pdata.self_block and item.id or nil)
+    if _G.SoundManager and _G.SoundManager.playCanonFire then
+        _G.SoundManager.playCanonFire()
+    end
+    return true
+end
+
+-- [[ 自動瞄準 ]] 機體右側最近的敵人（回傳 敵人, 水平距離）。
+-- ★★ 唯一計算點：高位槍與追蹤飛彈都讀這一支 —— 兩邊各寫一份的話，
+--   「打得到／看得見」的條件遲早會分岔（HANDOFF §5-1 的交戰範圍）。
+-- ★ 只找**右側**：這兩把的射界都是右邊（左邊是 BACK_GUN 的工作）。
+function MechController:nearestEnemyRight(entity_controller, gx)
+    if not entity_controller then return nil end
+    local best, bestd = nil, nil
+    for _, e in ipairs(entity_controller.enemies or {}) do
+        if e.is_alive and not e.is_exploding and (e.x or 0) > gx then
+            if (not entity_controller.canHitEnemy) or entity_controller:canHitEnemy(e) then
+                local ex = (e.x or 0) + (e.width or 0) / 2
+                local d = ex - gx
+                if (not bestd) or d < bestd then best, bestd = e, d end
+            end
+        end
+    end
+    return best, bestd
+end
+
+-- [[ 旋轉零件 ]] 某個零件的**發射點**（畫布上的 gun_muzzle 繞 rot_pivot 轉 aim_deg 之後的位置）。
+-- ★★ 唯一計算點：高位槍與追蹤飛彈共用 —— 這段公式抄第二份的話，
+--   調了圖上的軸心就會有一邊忘了跟上（本專案最常出事的模式，HANDOFF §3-5）。
+-- ★ 沒有旋轉件的零件走後備：有 muzzle_x/y 就用圖算，否則用格子中心。
+function MechController:partMuzzlePoint(item, pdata, aim_deg, mech_x, mech_y, mech_grid)
+    local cell_size = (mech_grid and mech_grid.cell_size) or 16
     local px = mech_x + (item.col - 1) * cell_size + (pdata.image_offset_x or 0)
-    local py_top = mech_y + (mech_grid.rows - item.row) * cell_size
+    local py_top = mech_y + ((mech_grid and mech_grid.rows or 2) - item.row) * cell_size
     local gx = px + cell_size / 2
     local gy = py_top + cell_size / 2 + (pdata.image_offset_y or 0)
 
-    -- 後備路徑：沒有旋轉件的圖時，用舊的固定槍口
     if pdata.muzzle_x and pdata.muzzle_y and pdata._img then
         local oki, iw, ih = pcall(function() return pdata._img:getSize() end)
         if oki and iw and ih then
@@ -1066,10 +1114,6 @@ function MechController:fireHighGunOnce(item, pdata, mech_x, mech_y, mech_grid, 
         end
     end
 
-    local base_speed = entity_controller.player_move_speed or 2.0
-    local speed = base_speed * (pdata.projectile_speed_mult or 26)
-    local ang = math.rad(self.high_gun_angle or 0)
-    -- ★ 槍口＝軸心 + 旋轉後的槍管向量（與繪製端同一組 rot_pivot/gun_muzzle）
     if pdata.rot_pivot_x and pdata._tbl_rot then
         local ih = 32
         local okh, _, hh = pcall(function() return pdata._tbl_base:getSize() end)
@@ -1079,21 +1123,42 @@ function MechController:fireHighGunOnce(item, pdata, mech_x, mech_y, mech_grid, 
         local pvy = img_y + pdata.rot_pivot_y
         local ox = (pdata.gun_muzzle_x or 0) - pdata.rot_pivot_x
         local oy = (pdata.gun_muzzle_y or 0) - pdata.rot_pivot_y
+        local ang = math.rad(aim_deg or 0)
         local c, s = math.cos(ang), math.sin(ang)
         -- 螢幕座標 y 向下 → 仰角為正時往上，所以 sin 取負
         gx = pvx + ox * c + oy * s
         gy = pvy - ox * s + oy * c
     end
-    local vx = speed * math.cos(ang)
-    local vy = -speed * math.sin(ang)
-    gx, gy, vx, vy = self:applyMechTilt(gx, gy, vx, vy, mech_x, mech_y, mech_grid, entity_controller)
-    entity_controller:addPlayerProjectile(gx, gy, vx, vy,
-        pdata.projectile_damage or 3, pdata.projectile_grav_mult or 18,
-        nil, nil, nil, pdata.self_block and item.id or nil)
-    if _G.SoundManager and _G.SoundManager.playCanonFire then
-        _G.SoundManager.playCanonFire()
+    return gx, gy
+end
+
+-- [[ §15.2 追蹤飛彈 ]] 發射器的仰角：**依目標距離**內插（越遠抬越高，2026-09-28 使用者拍板）。
+-- ★ 它不是拋射武器（飛出去之後靠追蹤修正），所以不像高位槍那樣解彈道 ——
+--   抬角純粹是「遠程要拋高一點才不會撞到前面的東西」的表現。
+-- ★ 沒有目標就回到水平：玩家看得出「現在沒鎖定」。
+function MechController:updateMissileAim(part_id, mech_x, mech_y, mech_grid, entity_controller)
+    local pdata = _G.PartsData and _G.PartsData[part_id]
+    if not (pdata and entity_controller) then return end
+    local lo = pdata.aim_min or 0
+    local hi = pdata.aim_max or 45
+    local cell = (mech_grid and mech_grid.cell_size) or 16
+    local gx = mech_x + cell
+    local want = lo
+
+    local best, bestd = self:nearestEnemyRight(entity_controller, gx)
+    if best and bestd then
+        local near = pdata.aim_dist_near or 70
+        local far  = pdata.aim_dist_far or 240
+        local t = (bestd - near) / math.max(1, far - near)
+        if t < 0 then t = 0 elseif t > 1 then t = 1 end
+        want = lo + (hi - lo) * t
     end
-    return true
+
+    local cur = self.missile_angle or lo
+    local step = (pdata.aim_speed or 150) * (1 / 30)
+    local d = want - cur
+    if d > step then d = step elseif d < -step then d = -step end
+    self.missile_angle = cur + d
 end
 
 -- [[ §15.2 高位槍 ]] 自動瞄準最近的敵人（2026-09-26 使用者拍板）
@@ -1115,17 +1180,8 @@ function MechController:updateHighGunAim(part_id, mech_x, mech_y, mech_grid, ent
     local gx = mech_x + cell
     local gy = mech_y
 
-    -- 最近的敵人（只看右邊、還活著、打得到的）
-    local best, bestd = nil, nil
-    for _, e in ipairs(entity_controller.enemies or {}) do
-        if e.is_alive and not e.is_exploding and (e.x or 0) > gx then
-            if (not entity_controller.canHitEnemy) or entity_controller:canHitEnemy(e) then
-                local ex = (e.x or 0) + (e.width or 0) / 2
-                local d = ex - gx
-                if (not bestd) or d < bestd then best, bestd = e, d end
-            end
-        end
-    end
+    -- 最近的敵人（只看右邊、還活著、打得到的）—— 與追蹤飛彈共用同一支
+    local best = self:nearestEnemyRight(entity_controller, gx)
 
     if best then
         local v = (entity_controller.player_move_speed or 2.0) * (pdata.projectile_speed_mult or 26)
@@ -1183,6 +1239,14 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
             if pd and pd.part_type == "HIGH_GUN" then
                 self:updateHighGunAim(item.id, mech_x, mech_y, mech_grid, entity_controller)
                 break        -- 裝兩把也只算一次（共用同一個角度，看起來一致）
+            end
+        end
+        -- [[ §15.2 追蹤飛彈 ]] 發射器也是一直對著目標抬角，與焦點無關
+        for _, item in ipairs(eq) do
+            local pd = _G.PartsData and _G.PartsData[item.id]
+            if pd and pd.part_type == "MISSILE" then
+                self:updateMissileAim(item.id, mech_x, mech_y, mech_grid, entity_controller)
+                break
             end
         end
     end
