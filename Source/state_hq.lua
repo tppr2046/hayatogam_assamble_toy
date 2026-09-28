@@ -1559,32 +1559,65 @@ function StateHQ.draw()
     -- ★ 獨立成**一個 pass**，不塞進上面那兩個階段（下排/上排）——
     --   塞進去要寫兩次，日後改一邊忘另一邊就會「上排有標記、下排沒有」（HANDOFF §3-5）。
     -- ★ 畫在零件圖之**後**，否則會被零件蓋掉。
-    -- ★ 顯示規則（GDD §8.05b）：滿~30% 不顯示（版面乾淨）／29~1% 預警／0% 損壞。
-    -- ⚠️ 目前是**程式繪製的佔位**：損壞＝實心方塊、預警＝空心方塊，都有白底
-    --   （零件圖本身有黑有白，沒白底會糊在線條裡 —— §3-4）。
-    --   美術到位後改成讀圖即可，位置與尺寸都在下面這一區。
+    -- ★ 顯示規則：**以 1/8 為一階**（2026-09-28 使用者拍板）——
+    --   滿~7/8 不顯示、7/8~6/8 第 1 格、以此類推，完全損壞畫最後一格。
+    --   判定在 `Durability.markIndex`（唯一判定點），這裡只負責畫。
     -- ============================================================
     do
         local D = _G.Durability
-        if D and D.isBroken then
-            local MARK = 8      -- 標記邊長（組裝格 16px，畫在右上角）
+        if D and D.markIndex then
+            -- 圖表只載一次（載不到就走下面程式繪製的後備）
+            if not StateHQ._broken_tbl_tried then
+                StateHQ._broken_tbl_tried = true
+                local okb, tblb = pcall(function()
+                    return gfx.imagetable.new("images/broken_mark-table-10-10")
+                end)
+                if okb and tblb then
+                    StateHQ._broken_tbl = tblb
+                else
+                    print("WARN: failed to load images/broken_mark-table-10-10")
+                end
+            end
+            local btbl = StateHQ._broken_tbl
+            -- ★ 格數由圖決定：日後改畫 10 格的圖，程式與門檻都不用動
+            local ncell = 8
+            if btbl then
+                local okl, len = pcall(function() return btbl:getLength() end)
+                if okl and len and len > 1 then ncell = len end
+            end
+
+            -- ★ 標記邊長也由圖決定（目前 10×10，圖自帶白底）：換圖時程式不用跟著改
+            local MARK = 10
+            if btbl then
+                local okm, mw = pcall(function()
+                    local i1 = btbl:getImage(1)
+                    local w = i1 and i1:getSize()
+                    return w
+                end)
+                if okm and mw and mw > 0 then MARK = mw end
+            end
             local eqd = _G.GameState and _G.GameState.mech_stats
                         and _G.GameState.mech_stats.equipped_parts or {}
             for _, item in ipairs(eqd) do
-                local broken = D.isBroken(item.id)
-                local low    = D.isLow and D.isLow(item.id)
-                if broken or low then
+                local idx = D.markIndex(item.id, ncell)
+                if idx > 0 then
                     -- 對齊零件**佔用格子**的右上角（不吃 image_offset —— 標記屬於格子，不屬於圖）
                     local cw = (item.w or 1) * GRID_CELL_SIZE
                     local mx = GRID_START_X + (item.col - 1) * GRID_CELL_SIZE + cw - MARK
                     local my = GRID_START_Y + (GRID_ROWS - item.row) * GRID_CELL_SIZE
-                    gfx.setColor(gfx.kColorWhite)
-                    gfx.fillRect(mx, my, MARK, MARK)
-                    gfx.setColor(gfx.kColorBlack)
-                    if broken then
-                        gfx.fillRect(mx + 1, my + 1, MARK - 2, MARK - 2)   -- 實心＝已損壞
+                    local mimg = btbl and btbl:getImage(idx)
+                    if mimg then
+                        pcall(function() mimg:draw(mx, my) end)
                     else
-                        gfx.drawRect(mx, my, MARK, MARK)                   -- 空心＝快壞了
+                        -- 後備：沒有圖時畫方塊（白底＋黑框，零件圖黑白都有，沒白底會糊掉 §3-4）
+                        gfx.setColor(gfx.kColorWhite)
+                        gfx.fillRect(mx, my, MARK, MARK)
+                        gfx.setColor(gfx.kColorBlack)
+                        if idx >= ncell then
+                            gfx.fillRect(mx + 1, my + 1, MARK - 2, MARK - 2)   -- 實心＝已損壞
+                        else
+                            gfx.drawRect(mx, my, MARK, MARK)                   -- 空心＝磨損中
+                        end
                     end
                 end
             end
