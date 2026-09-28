@@ -208,13 +208,13 @@ WHEEL1・2・3／CLAW（含 `claw_arm`・`claw_upper`・`claw_lower`）／CANON1
 
 | 零件 | 現在用的面板 | 說明 |
 |---|---|---|
-| SHIELD | `empty` | 被動零件：沒有操作就不放鈕 |
-| MISSILE | `empty`（左格）＋ `canon_button`（右格） | 手動零件：面板圖只有 1 格寬，**第 2 格自然就是 A 鈕的位置** |
-| DETECTOR | `empty` | 被動零件 |
+| SHIELD | `gun_panel` | 2026-09-28 修正：這一格保留面板底圖 |
+| MISSILE | `gun_panel`（左格）＋ `canon_button`（右格） | 手動零件：面板圖只有 1 格寬，**第 2 格自然就是 A 鈕的位置** |
+| DETECTOR | `empty` | 被動零件：沒有操作就不放鈕 |
 | AUTO_LOADER | `empty` | 被動零件 |
 
 > ★ 設計理由：面板上的每一格都是「這裡可以按什麼」的承諾，被動零件放一塊看起來可按的面板
-> 會讓玩家一直去試。空格才是正確的訊息。
+> 會讓玩家一直去試 —— 所以 DETECTOR／AUTO_LOADER 用空格。
 > ★ A 鈕的位置是**唯一計算點** `MechController:drawPanelButton`（2026-09-28 由三份合併）：
 > 接在面板右邊，超出零件自己的格數（`slot_x × 32`）就往回夾。所以面板換成 1 格寬的 `empty`
 > 之後，鈕會自動落到第 2 格，不必另外寫飛彈專用的位置。

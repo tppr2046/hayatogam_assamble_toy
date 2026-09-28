@@ -267,7 +267,8 @@ local parts_data = {
         preview_cell = 4,                    -- HQ／商店預覽畫滿格的樣子
         placement_row = "TOP",
         align_image_top = false,
-        ui_panel = "images/empty.png",       -- ★ 2026-09-28：被動零件＝空面板
+        -- ★ 2026-09-28 修正：防護罩那一格用 **gun_panel**（不是空面板）
+        ui_panel = "images/gun_panel.png",
         operation_hint = "Auto Block",
         operable = false,
         -- ★★ 三個數字就是防護罩的全部手感（2026-09-28 使用者拍板）：
@@ -328,9 +329,9 @@ local parts_data = {
         aim_speed = 150,                     -- 每秒最多轉幾度（瞬間貼齊會看起來像瞬移）
         placement_row = "TOP",
         align_image_top = false,
-        -- ★ 2026-09-28：**左格 empty、右格 A 鈕**（右格的鈕由 drawPartUI 依面板寬度接上去）。
+        -- ★ 2026-09-28：**左格 gun_panel、右格 A 鈕**（右格的鈕由 drawPartUI 依面板寬度接上去）。
         --   面板圖只有 32px（1 格），所以第 2 格自然就是按鈕的位置。
-        ui_panel = "images/empty.png",
+        ui_panel = "images/gun_panel.png",
         operation_hint = "A: Fire Missile",
         operable = true,                     -- 手動：按 A 發射（進焦點循環）
         fire_cooldown = 3.0,                 -- ★ 比任何槍都長
