@@ -91,8 +91,12 @@ function MechController:init()
         hook_rope = nil,
         hook_len = 32,          -- 索道到機體頂端的距離（crank 收放）
 
-        -- [[ §15.2 防護罩 ]] 擋一次 → 冷卻 → 恢復
-        shield_cd = 0,          -- >0 = 冷卻中（秒）
+        -- [[ §15.2 防護罩 ]] 2026-09-28：擋 3 次 → 打空鎖定 → 一格一格長回來
+        shield_charges = nil,   -- nil = 還沒初始化（第一次跑到時填滿）
+        shield_cd = 0,          -- >0 = **打空後的鎖定**（秒）；這段期間完全不能擋
+        shield_regen_t = 0,     -- 距離下一格回復的累計秒數
+        shield_grow_t = nil,     -- 護罩展開動畫的計時（nil＝已經是全尺寸）
+        shield_was_ready = nil,  -- 上一幀能不能擋（用來抓「剛啟動」那一瞬間）
         shield_flash = 0,       -- 剛擋下時的視覺回饋幀數
 
         -- 玩家受擊效果
@@ -349,40 +353,62 @@ function MechController:hookedRope()
     return self.hook_rope
 end
 
--- [[ §15.2 防護罩 ]] 傷害套用**之前**先過這裡。
--- 回傳「實際要扣的傷害」——擋下時回傳 0 並起冷卻。
--- ★ 刻意做成「攔在傷害管線前面」而不是改傷害計算:
---   共享血量池、敵人攻擊力、命中判定全部維持原狀,零件只影響「這一下算不算數」。
--- ★ 只擋**正值傷害**;冷卻中或沒裝防護罩就原樣回傳。
-function MechController:absorbDamage(damage)
-    if not damage or damage <= 0 then return damage end
-    if (self.shield_cd or 0) > 0 then return damage end   -- 冷卻中,擋不了
-
+-- [[ §15.2 防護罩 ]] 裝在身上的那個防護罩零件（沒裝回傳 nil）。
+-- ★★ 唯一查詢點：擋傷害、遞減計時、畫零件、畫護罩圈全部讀這一支 ——
+--   原本每個地方各自跑一次 equipped_parts 迴圈，加欄位時很容易漏掉其中一處。
+-- 回傳：零件資料, 裝備項（col/row —— 展開動畫要知道零件裝在哪一格）
+function MechController:shieldPart()
     local eq = _G.GameState and _G.GameState.mech_stats
                and _G.GameState.mech_stats.equipped_parts or {}
     for _, item in ipairs(eq) do
         local pdata = _G.PartsData and _G.PartsData[item.id]
-        if pdata and pdata.part_type == "SHIELD" then
-            self.shield_cd = pdata.shield_cooldown or 5.0
-            self.shield_flash = 12
-            print(string.format("LOG: shield blocked %.0f damage (cd %.1fs)", damage, self.shield_cd))
-            return 0
-        end
-    end
-    return damage
-end
-
--- 防護罩目前能不能擋（供 UI 顯示）。沒裝防護罩回傳 nil
-function MechController:shieldState()
-    local eq = _G.GameState and _G.GameState.mech_stats
-               and _G.GameState.mech_stats.equipped_parts or {}
-    for _, item in ipairs(eq) do
-        local pdata = _G.PartsData and _G.PartsData[item.id]
-        if pdata and pdata.part_type == "SHIELD" then
-            return ((self.shield_cd or 0) <= 0), (self.shield_cd or 0)
-        end
+        if pdata and pdata.part_type == "SHIELD" then return pdata, item end
     end
     return nil
+end
+
+-- [[ §15.2 防護罩 ]] 傷害套用**之前**先過這裡。
+-- 回傳「實際要扣的傷害」——擋下時回傳 0 並消耗一格。
+-- ★ 刻意做成「攔在傷害管線前面」而不是改傷害計算:
+--   共享血量池、敵人攻擊力、命中判定全部維持原狀,零件只影響「這一下算不算數」。
+-- ★ 只擋**正值傷害**;鎖定中、格數用完或沒裝防護罩就原樣回傳。
+function MechController:absorbDamage(damage)
+    if not damage or damage <= 0 then return damage end
+    local pdata = self:shieldPart()
+    if not pdata then return damage end
+
+    local maxc = pdata.shield_charges or 3
+    if self.shield_charges == nil then self.shield_charges = maxc end
+    if (self.shield_cd or 0) > 0 then return damage end          -- 打空鎖定中
+    if (self.shield_charges or 0) <= 0 then return damage end
+
+    self.shield_charges = self.shield_charges - 1
+    self.shield_flash = 12
+    self.shield_regen_t = 0        -- ★ 剛擋完不要馬上補回來（回復計時重新算）
+    if self.shield_charges <= 0 then
+        -- 打空了才鎖定；還有格子的時候照樣能連續擋
+        self.shield_cd = pdata.shield_cooldown or 9.0
+    end
+    print(string.format("LOG: shield blocked %.0f damage (%d left, cd %.1fs)",
+        damage, self.shield_charges, self.shield_cd or 0))
+    return 0
+end
+
+-- 回復一格（鎖定結束、或回復計時到了）。★ 兩條路徑共用，閃爍也只在這裡設。
+function MechController:shieldGainCharge(maxc)
+    self.shield_charges = math.min(maxc, (self.shield_charges or 0) + 1)
+    self.shield_flash = 8          -- 回一格時也閃一下（使用者要求：恢復時閃爍）
+end
+
+-- 防護罩目前的狀態（供 UI／繪製）。沒裝防護罩回傳 nil。
+-- 回傳：能不能擋, 剩餘格數, 最大格數, 鎖定剩餘秒數
+function MechController:shieldState()
+    local pdata = self:shieldPart()
+    if not pdata then return nil end
+    local maxc = pdata.shield_charges or 3
+    if self.shield_charges == nil then self.shield_charges = maxc end
+    local cd = self.shield_cd or 0
+    return (cd <= 0 and self.shield_charges > 0), self.shield_charges, maxc, cd
 end
 
 -- 檢查發射方向是否被已安裝的零件阻擋（不包括當前發射的零件）
@@ -1169,10 +1195,40 @@ function MechController:updateParts(dt, mech_x, mech_y, mech_grid, entity_contro
     --   之後再加槍械變體（如雷射槍 GUN2）只要在 parts_data 宣告即可，不必回來改這裡。
     -- ★ 冷卻計時器**所有槍都要累計**（含手動的雷射槍），只有「自動開火」這段跳過手動零件；
     --   否則手動槍的計時器永遠不會前進，按 A 就再也打不出第二發。
-    -- [[ §15.2 防護罩 ]] 冷卻遞減。放在 updateParts —— 它每幀都會被呼叫,
+    -- [[ §15.2 防護罩 ]] 鎖定遞減 ＋ 一格一格回復。放在 updateParts —— 它每幀都會被呼叫,
     -- 而且與槍械冷卻同一個地方,不會出現「有的計時器有跑、有的沒跑」。
-    if self.shield_cd and self.shield_cd > 0 then
-        self.shield_cd = math.max(0, self.shield_cd - dt)
+    -- ★ 順序是「鎖定 → 回復」：打空後先等滿 shield_cooldown 秒，鎖定結束的當下回第一格，
+    --   之後每 shield_recharge 秒再一格，直到滿。沒打空時直接走回復那條。
+    local spd = self:shieldPart()
+    if spd then
+        local maxc = spd.shield_charges or 3
+        if self.shield_charges == nil then self.shield_charges = maxc end
+        if (self.shield_cd or 0) > 0 then
+            self.shield_cd = math.max(0, self.shield_cd - dt)
+            if self.shield_cd <= 0 then
+                self.shield_regen_t = 0
+                self:shieldGainCharge(maxc)
+            end
+        elseif self.shield_charges < maxc then
+            local per = spd.shield_recharge or 3.0
+            self.shield_regen_t = (self.shield_regen_t or 0) + dt
+            while self.shield_regen_t >= per and self.shield_charges < maxc do
+                self.shield_regen_t = self.shield_regen_t - per
+                self:shieldGainCharge(maxc)
+            end
+        else
+            self.shield_regen_t = 0
+        end
+
+        -- [[ 護罩展開 ]] 「不能擋 → 能擋」的那一瞬間重新展開（開場、以及鎖定結束回第一格）。
+        -- ★ 計時只在這裡推進，繪製端純讀值 —— 動畫算兩次一定會對不上。
+        local ready = (self.shield_cd or 0) <= 0 and (self.shield_charges or 0) > 0
+        if ready and not self.shield_was_ready then self.shield_grow_t = 0 end
+        self.shield_was_ready = ready
+        local gt = spd.shield_grow_time or 0.5
+        if ready and (self.shield_grow_t or gt) < gt then
+            self.shield_grow_t = (self.shield_grow_t or 0) + dt
+        end
     end
     if self.shield_flash and self.shield_flash > 0 then
         self.shield_flash = self.shield_flash - 1

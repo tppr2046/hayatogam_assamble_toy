@@ -689,6 +689,16 @@ function StateHQ.setup()
                 end
             end
             
+            -- [[ §15.2 防護罩 ]] 機體外圍那一圈護罩的圖（與零件圖無關，見 drawShieldRing）
+            if pdata.circle_image then
+                local okc, cimg = pcall(function() return gfx.image.new(pdata.circle_image) end)
+                if okc and cimg then
+                    pdata._circle_img = cimg
+                else
+                    print("WARN: failed to load circle_image for part", pid, pdata.circle_image)
+                end
+            end
+
             -- [[ 零件的旋轉件 ]] 2026-09-26：2 格的表 → **底座 ＋「軸心置中」的旋轉件**。
             -- ★ 軸心置中是為了 drawRotated（它繞圖片中心轉）—— 與 BOSS 的旋轉件同一招。
             -- ★ 同時合成一張「底座＋旋轉件」當 `_img`：HQ／商店的預覽，也是旋轉圖載不到時的後備。
@@ -712,12 +722,18 @@ function StateHQ.setup()
                             pdata._tbl_rot = buf
                         end
                     end
-                    -- [[ §15.2 防護罩 ]] 狀態格：可以擋／冷卻中各一張
-                    if pdata.state_cell_on then pdata._state_on = tbl:getImage(pdata.state_cell_on) end
-                    if pdata.state_cell_off then pdata._state_off = tbl:getImage(pdata.state_cell_off) end
+                    -- [[ §15.2 防護罩 ]] 2026-09-28：剩餘次數的格子（第 1 格＝剩 1 次…）
+                    -- ★ 依 charge_cells 的**順序**存，不是依表裡的編號 ——
+                    --   繪製端只要 `_charge_cells[剩餘格數]`，不必再換算一次。
+                    if pdata.charge_cells then
+                        local cells = {}
+                        for i, c in ipairs(pdata.charge_cells) do cells[i] = tbl:getImage(c) end
+                        pdata._charge_cells = cells
+                    end
 
                     -- [[ §15.3 吊索鉤 ]] 4 格的表再多切兩件：繩子（一小段，之後往上平鋪）與鉤子
-                    if tbl:getLength() and tbl:getLength() >= 4 then
+                    -- ★ 限定 HOOK：防護罩也是 4 格的表，不加這個判斷會把它的第 4 格當成鉤子。
+                    if pdata.part_type == "HOOK" and tbl:getLength() and tbl:getLength() >= 4 then
                         local rope_src = tbl:getImage(3)
                         if rope_src and pdata.rope_w and pdata.rope_h then
                             local okr, rimg = pcall(function() return gfx.image.new(pdata.rope_w, pdata.rope_h) end)
@@ -731,7 +747,10 @@ function StateHQ.setup()
                         end
                         pdata._hook_img = tbl:getImage(4)
                     end
-                    if base and gun then
+                    -- HQ／商店的預覽：底座 ＋ 一張代表圖（預設第 2 格；preview_cell 可指定別格）
+                    local prev = (pdata.preview_cell and tbl:getImage(pdata.preview_cell)) or gun
+                    if base and prev then
+                        local gun = prev
                         local oks, cw, ch = pcall(function() return base:getSize() end)
                         if oks and cw and ch then
                             local okc2, comp = pcall(function() return gfx.image.new(cw, ch) end)

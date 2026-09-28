@@ -238,7 +238,9 @@ local parts_data = {
     -- ★ 上排只有 3 格,所以 2 格的輔助零件會**擠掉主武器** —— 那是刻意的取捨。
     -- ================================================================
 
-    -- 防護罩：擋一次傷害後進入冷卻,冷卻完又能擋（使用者拍板：**有冷卻、會恢復**）。
+    -- 防護罩：**擋 3 次**,打空後鎖定一段時間,再一格一格慢慢長回來（2026-09-28 使用者拍板）。
+    -- ★ 從「擋 1 次 / 5 秒冷卻」改成多格,是為了把它從「賭一次」變成「一段可消耗的餘裕」——
+    --   玩家看得到還剩幾格,才有辦法決定現在該衝還是該退。
     -- ★ 被動生效（operable = false）→ 不進焦點循環,切換壓力零增加。
     -- ★ 不碰傷害模型本身:它只是在傷害套用**之前**攔一次,共享血量池維持現狀。
     ["SHIELD"] = {
@@ -254,17 +256,36 @@ local parts_data = {
         color = gfx.kColorBlack,
         -- ★★ 2026-09-27 換上使用者的圖：**shield-table-16-16.png（3 格）**
         --   1＝底座　2＝啟動中（可以擋）　3＝未啟動（冷卻中）
-        --   ★ 沒有 `image`：舊的 shield_part.png 已刪除，預覽圖由載入端合成（底座＋啟動中）。
-        table_image = "images/shield-table-16-16",
-        -- 狀態格：可以擋時畫第 2 格、冷卻中畫第 3 格（見 entity_mech_render 的 SHIELD 分支）
-        state_cell_on = 2, state_cell_off = 3,
+        --   ★ 沒有 `image`：舊的 shield_part.png 已刪除，預覽圖由載入端合成（底座＋滿格）。
+        table_image = "images/shield-table-16-24",
+        -- 剩餘次數的格子：第 2 格＝剩 1 次、第 3 格＝剩 2 次、第 4 格＝剩 3 次（滿）。
+        -- ★ 這三格只畫「量表裡的白色段」，疊在底座上 —— 格數與 shield_charges 一一對應，
+        --   之後要改成 4 格護盾，只要這裡多填一格、下面的數字改 4（程式不用動）。
+        charge_cells = { 2, 3, 4 },
+        preview_cell = 4,                    -- HQ／商店預覽畫滿格的樣子
         placement_row = "TOP",
         align_image_top = false,
         ui_panel = "images/gun_panel.png",   -- 暫時沿用,之後有專屬面板再換
         operation_hint = "Auto Block",
         operable = false,
-        -- ★ 擋下一次攻擊後的冷卻秒數。調這個數字＝調「多久能擋一次」。
-        shield_cooldown = 5.0,
+        -- ★★ 三個數字就是防護罩的全部手感（2026-09-28 使用者拍板）：
+        --   可以擋 3 次 → 打空後鎖定 9 秒（這段期間完全擋不住）→ 之後每 3 秒長回一格。
+        -- ★ 沒打空的時候不會鎖定，剩下的格子照樣能擋，同時也在慢慢回復。
+        -- [[ 護罩本體的圖 ]] 2026-09-28：機體外圍那一圈改用 `shield_circle.png`（88×88）。
+        -- ★ 啟動時會**從零件上方那顆圓開始長出來**：位置與大小在 0 → shield_grow_time 之間
+        --   一起內插（起點 shield_emit_x/y ＝零件圖上那顆圓的中心）。
+        --   看起來就是「護罩是從這顆發射器放出來的」，而不是憑空出現一個圈。
+        -- ★ 失效（打空／鎖定中）時**整個不畫** —— 玩家看到沒有圈就知道子彈會直接打到機體。
+        circle_image = "images/shield_circle.png",
+        shield_grow_time = 0.5,              -- 展開時間（秒）
+        shield_grow_from = 0.14,             -- 起始縮放（≈ 零件上那顆圓的大小 12/88）
+        shield_emit_x = 7.5, shield_emit_y = 3.5,   -- 發射點（零件畫布內座標）
+
+        shield_charges = 3,                  -- 最多／初始的格數
+        shield_cooldown = 9.0,               -- 打空後的鎖定秒數（鎖定結束就先回一格）
+        shield_recharge = 3.0,               -- 之後每幾秒回一格
+        -- ⚠️ 只剩**後備**在用（`shield_circle.png` 載不到時畫的那個圓）：
+        --   實際大小現在由圖決定（88×88 → 半徑 44）。
         -- 護罩視覺半徑（以機體中心為圓心）。★ 目前**只是視覺**：
         -- 傷害是由 entity_controller 加總後才回傳一個數字,分不出來源方位,
         -- 所以護罩實際上是「擋下一次任何傷害」,不是按距離判定。
@@ -737,7 +758,7 @@ local descriptions = {
     BACK_GUN    = "Rear gun. Press A to fire to the left.",
     HIGH_GUN    = "Lob gun. Press A to arc shots over cover.",
     AUTO_LOADER = "Autoloader. All guns fire by themselves.",
-    SHIELD      = "Shield. Blocks one hit, then recharges.",
+    SHIELD      = "Shield. Blocks 3 hits, then recharges.",
     MISSILE     = "Missile pod. Press A to launch a homing shot.",
     DETECTOR    = "Detector. Keeps cloaked enemies visible.",
     HOOK        = "Grapple. Press A to hook a rope, crank to reel.",

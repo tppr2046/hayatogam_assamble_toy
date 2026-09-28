@@ -53,6 +53,8 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     if MechController.SLOPE_OFFSCREEN_TILT and terrain_angle ~= 0 then
         self:drawMechTilted(draw_x, body_draw_y, mech_grid, eq, feet_extra_height, terrain_angle, feet_imagetable, feet_current_frame)
         self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
+        -- ★ 斜坡路徑原本沒畫護罩 → 一走上斜坡護罩就消失。護罩不跟著傾斜（它是圓的）。
+        self:drawShieldRing(draw_x, body_draw_y, mech_grid, entity_controller, mech_x)
         return
     end
 
@@ -113,7 +115,7 @@ function MechController:drawMech(mech_x, mech_y, camera_x, mech_grid, game_state
     end
 
     self:drawFocusPartOutline(mech_x, mech_y, draw_x, mech_grid, entity_controller)
-    self:drawShieldRing(draw_x, body_draw_y, mech_grid)
+    self:drawShieldRing(draw_x, body_draw_y, mech_grid, entity_controller, mech_x)
     self:drawHookLine(draw_x, body_draw_y, mech_grid)
 end
 
@@ -198,45 +200,78 @@ function MechController:hookReelAngle()
     return ((self.hook_crank_deg or 0) / math.max(0.01, ratio)) % 360
 end
 
--- [[ §15.2 防護罩 ]] 以機體中心畫一圈**虛線圓**表示護罩。
--- 可用時：實線感較強的虛線；冷卻中：點更稀疏（一眼看得出還能不能擋）。
--- ★ 用 drawLine 逐段畫而不是 drawCircle + dither —— 1-bit 上 dither 圓會糊成一團。
--- ★ 白線在下、黑線在上：地面是純黑、天空上半也是黑的（§3-4）。
-function MechController:drawShieldRing(draw_x, body_draw_y, mech_grid)
-    local ready, cd = self:shieldState()
-    if ready == nil then return end          -- 沒裝防護罩
+-- [[ §15.2 防護罩 ]] 2026-09-28：機體外圍的護罩改用 `shield_circle.png`。
+-- ★ 三條規則（使用者拍板）：
+--   1) **失效就整個不畫** —— 沒有圈＝子彈會直接打到機體，這是玩家唯一需要的訊息。
+--   2) 啟動時**從零件上方那顆圓長出來**（約 0.5 秒）：位置與大小一起內插，
+--      看起來是「從發射器放出來的」，不是憑空出現。
+--   3) **地面線以下切掉** —— 地面是純黑（§3-4），護罩壓在上面只會糊成一團。
+-- ★ 展開的計時在 updateParts 推進，這裡純讀值（同一個動畫不要有兩個計算點）。
+function MechController:drawShieldRing(draw_x, body_draw_y, mech_grid, entity_controller, mech_x)
+    local ready = self:shieldState()
+    if not ready then return end             -- 沒裝、打空、或鎖定中
 
-    local pdata
-    local eq = _G.GameState and _G.GameState.mech_stats
-               and _G.GameState.mech_stats.equipped_parts or {}
-    for _, item in ipairs(eq) do
-        local pd = _G.PartsData and _G.PartsData[item.id]
-        if pd and pd.part_type == "SHIELD" then pdata = pd break end
-    end
-    local r = (pdata and pdata.shield_radius) or 42
-
+    local pdata, item = self:shieldPart()
+    local gfx = playdate.graphics
     local cell = (mech_grid and mech_grid.cell_size) or 16
     local cx = draw_x + cell * 1.5
     local cy = body_draw_y + cell
 
-    -- 剛擋下時整圈閃一下（實心感）
-    local flashing = (self.shield_flash or 0) > 0
-    -- 虛線密度：可用時較密、冷卻中較疏
-    local seg = flashing and 16 or (ready and 12 or 6)
-    local gap = flashing and 0.18 or (ready and 0.45 or 0.72)
+    -- 展開進度（ease-out：一開始衝出來、收尾慢下來）
+    local gt = (pdata and pdata.shield_grow_time) or 0.5
+    local k = math.min(1, (self.shield_grow_t or gt) / math.max(0.01, gt))
+    local e = 1 - (1 - k) * (1 - k)
+    local s0 = (pdata and pdata.shield_grow_from) or 0.14
+    local scale = s0 + (1 - s0) * e
 
-    local gfx = playdate.graphics
-    for i = 0, seg - 1 do
-        local a1 = (i / seg) * 2 * math.pi
-        local a2 = ((i + gap) / seg) * 2 * math.pi
-        local x1, y1 = cx + math.cos(a1) * r, cy + math.sin(a1) * r
-        local x2, y2 = cx + math.cos(a2) * r, cy + math.sin(a2) * r
-        gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(3)
-        gfx.drawLine(x1, y1, x2, y2)
-        gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(1)
-        gfx.drawLine(x1, y1, x2, y2)
+    -- 起點：零件圖上方那顆圓的中心（位置與大小一起內插）
+    if pdata and item and e < 1 then
+        local px = draw_x + (item.col - 1) * cell + (pdata.image_offset_x or 0)
+        local py_top = body_draw_y + ((mech_grid and mech_grid.rows or 2) - item.row) * cell
+        local ch = 24
+        local okh, _, hh = pcall(function() return pdata._tbl_base:getSize() end)
+        if okh and hh then ch = hh end
+        local part_y = py_top + (cell - ch) + (pdata.image_offset_y or 0)
+        local ex = px + (pdata.shield_emit_x or cell / 2)
+        local ey = part_y + (pdata.shield_emit_y or 3.5)
+        cx = ex + (cx - ex) * e
+        cy = ey + (cy - ey) * e
     end
-    gfx.setLineWidth(1)
+
+    -- 地面線以下切掉。★ 讀 getGroundHeight（地形的唯一高度來源）——
+    --   空洞（pit）會回傳極大值,那裡本來就沒有地面,不切正好。
+    local clipped = false
+    if entity_controller and entity_controller.getGroundHeight then
+        local okg, gy = pcall(function()
+            return entity_controller:getGroundHeight((mech_x or 0) + cell * 1.5)
+        end)
+        if okg and gy and gy < 5000 then
+            gfx.setClipRect(-100, -240, 600, math.floor(gy) + 240)
+            clipped = true
+        end
+    end
+
+    -- 剛擋下／剛回一格時閃白一下
+    local flash = (self.shield_flash or 0) > 0 and ((self.shield_flash % 4) < 2)
+    if flash then gfx.setImageDrawMode(gfx.kDrawModeFillWhite) end
+
+    local img = pdata and pdata._circle_img
+    if img then
+        local oki, iw, ih = pcall(function() return img:getSize() end)
+        if oki and iw and ih then
+            local w, h = iw * scale, ih * scale
+            pcall(function() img:drawScaled(cx - w / 2, cy - h / 2, scale) end)
+        end
+    else
+        -- 後備：沒有圖時畫一個圓（白粗在下、黑細在上，黑天空白天空都看得見 §3-4）
+        local r = ((pdata and pdata.shield_radius) or 42) * scale
+        gfx.setColor(gfx.kColorWhite); gfx.setLineWidth(3); gfx.drawCircleAtPoint(cx, cy, r)
+        gfx.setColor(gfx.kColorBlack); gfx.setLineWidth(1); gfx.drawCircleAtPoint(cx, cy, r)
+        gfx.setLineWidth(1)
+    end
+
+    if flash then gfx.setImageDrawMode(gfx.kDrawModeCopy) end
+    if clipped then gfx.clearClipRect() end
 end
 
 -- [[ A3/G1 ]] 機體上的焦點回饋：切到某零件的瞬間，該零件外框以
@@ -401,13 +436,20 @@ function MechController:drawPart(item, draw_x, body_draw_y, mech_grid, feet_imag
             pdata._tbl_rot:drawRotated(px + (pdata.rot_pivot_x or 0),
                                        part_y + (pdata.rot_pivot_y or 0), ang)
         end)
-    -- [[ §15.2 防護罩 ]] 2026-09-27：底座 ＋ **依狀態換格**（可以擋／冷卻中）。
+    -- [[ §15.2 防護罩 ]] 2026-09-28：底座 ＋ **剩餘次數的量表**（0~3 格）。
     -- ★ 讀 shieldState()（唯一判定點）—— 機體周圍那圈虛線圓也讀同一個值，
-    --   兩邊不會出現「零件圖說能擋、圓圈說在冷卻」。
-    elseif part_type == "SHIELD" and pdata._tbl_base and pdata._state_on then
+    --   兩邊不會出現「零件圖說還能擋、圓圈說在冷卻」。
+    -- ★ 還沒回滿的時候，**下一格會閃爍**：這就是「正在充能」的訊號（使用者要求），
+    --   不必再另外畫一條進度條。
+    elseif part_type == "SHIELD" and pdata._tbl_base and pdata._charge_cells then
         pcall(function() pdata._tbl_base:draw(px, part_y) end)
-        local ready = self:shieldState()
-        local img = (ready and pdata._state_on) or pdata._state_off or pdata._state_on
+        local _, charges, maxc, cd = self:shieldState()
+        local n = charges or 0
+        if n < (maxc or 3) and (cd or 0) <= 0 then
+            local ms = playdate.getCurrentTimeMilliseconds and playdate.getCurrentTimeMilliseconds() or 0
+            if math.floor(ms / 200) % 2 == 0 then n = n + 1 end
+        end
+        local img = pdata._charge_cells[n]
         if img then pcall(function() img:draw(px, part_y) end) end
     -- [[ §15.3 吊索鉤 ]] 2026-09-27：底座不動、**板手跟著 crank 轉**。
     -- ★ 繩子與鉤子不在這裡畫 —— 它們要從底座一路畫到吊點（可能遠在機體上方），
