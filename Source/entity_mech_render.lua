@@ -762,6 +762,27 @@ function MechController:drawUI(mech_stats, ui_start_x, ui_start_y, ui_cell_size,
     -- [[ A3 ]] 舊「Select part (A)」提示已移除：直接切換制下焦點永遠存在
 end
 
+-- [[ 面板 A 鈕 ]] 接在面板右邊；放不下就往回夾，蓋在面板上（鈕圖四角透明，邊緣仍看得見）。
+-- ★★ 唯一計算點：CANON 以外的手動零件（GUN／GUN2／高位槍／飛彈／吊索鉤）與輪子的跳躍鈕
+--   都讀這一支 —— 原本抄了三份，面板一換寬度就會有一份掉到格子外
+--   （2026-08-13 的 bug 就是這樣來的，HANDOFF §3-5）。
+-- ★ 上限是**零件自己的格數**（slot_x × 格寬），不是面板圖的寬度：
+--   面板換成 1 格寬的 empty 時，鈕才會落在第 2 格而不是貼著面板右緣。
+-- 回傳 true＝真的畫了
+function MechController:drawPanelButton(x, y, size, pdata, panel_w, pressed)
+    local ui = self.ui_images or {}
+    local button_table = ui.canon_button   -- 共用 canon_button-table-32-32（1=放開 / 2=按下）
+    if not button_table then return false end
+    local button_img = button_table:getImage(pressed and 2 or 1)
+    if not button_img then return false end
+    local bw = button_img:getSize()
+    local avail = ((pdata and pdata.slot_x) or 1) * size
+    local bx = x + (panel_w or 0)
+    if bx + bw > x + avail then bx = x + avail - bw end
+    pcall(function() button_img:draw(bx, y) end)
+    return true
+end
+
 -- 繪製零件介面圖（根據零件類型）
 function MechController:drawPartUI(part_id, x, y, size)
     local gfx = playdate.graphics
@@ -873,47 +894,17 @@ function MechController:drawPartUI(part_id, x, y, size)
                 end
             end
             local panel_w = panel_img:getSize()
-            local button_table = ui.canon_button   -- 共用 canon_button-table-32-32（1=放開 / 2=按下）
-            if button_table then
-                local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
-                local button_img = button_table:getImage(pressed and 2 or 1)
-                if button_img then
-                    -- ★ 按鈕靠**面板右緣內側**對齊,不是接在面板外面。
-                    --   2 格寬的零件面板本身就是 64px（canon_panel）,
-                    --   畫在 x + panel_w 會整顆掉到零件範圍之外（2026-08-13 的 bug）。
-                    local bw = button_img:getSize()
-                    pcall(function() button_img:draw(x + panel_w - bw, y) end)
-                end
-            end
+            local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
+            self:drawPanelButton(x, y, size, pdata, panel_w, pressed)
 
         elseif part_type == "GUN" then
             -- [[ 雷射槍 GUN2 2026-08-11 ]] 手動槍（operable）＝ 面板 + 右格 A 鈕。
             -- 全自動的 GUN（operable=false）沒有操作，只畫面板。
             pcall(function() panel_img:draw(x, y) end)
             if pdata.operable then
-                local panel_w = panel_img:getSize()
-                local button_table = ui.canon_button  -- 共用 canon_button-table-32-32（1=放開 / 2=按下）
-                if button_table then
-                    -- 按下狀態只在焦點是自己時才反映（同 CANON）
-                    local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
-                    local button_img = button_table:getImage(pressed and 2 or 1)
-                    if button_img then
-                        -- ★★ A 鈕**必須留在零件自己的格子範圍內**。
-                        --   零件的操作面板寬度 = slot_x × 格寬（見上面的 UI 格迴圈：
-                        --   只有起始格會呼叫本函式，其餘格留白）。
-                        --   `gun_panel` 是 32px：
-                        --     GUN2 是 **2 格**(64px) → 鈕畫在 x+32 剛好落在第二格內（原本就正確）
-                        --     GUN / BACK_GUN 是 **1 格**(32px) → 畫在 x+32 會整顆掉到格子外
-                        --       （2026-08-19 GUN 改手動後浮現的 bug）
-                        --   → 優先接在面板右邊；放不下就往回夾，蓋在面板上
-                        --     （鈕圖四角是透明的，面板邊緣仍看得到）。
-                        local bw = button_img:getSize()
-                        local avail = (pdata.slot_x or 1) * size
-                        local bx = x + panel_w
-                        if bx + bw > x + avail then bx = x + avail - bw end
-                        pcall(function() button_img:draw(bx, y) end)
-                    end
-                end
+                -- 按下狀態只在焦點是自己時才反映（同 CANON）
+                local pressed = (part_id == self.active_part_id) and self.gun_button_pressed
+                self:drawPanelButton(x, y, size, pdata, panel_img:getSize(), pressed)
             end
         elseif part_type == "WHEEL" or part_type == "FEET" then
             -- [[ 版面 ]] 2026-08-08：wheel_panel 由 3 格（96px）縮成 **2 格（64px）**，
@@ -928,16 +919,9 @@ function MechController:drawPartUI(part_id, x, y, size)
             local is_active = (self.active_part_id == part_id)
             local drew_button = false
             if self.can_jump then
-                local button_table = ui.canon_button
-                if button_table then
-                    -- 按下狀態只在焦點是自己時才反映（同 CANON 的作法）
-                    local pressed = is_active and self.jump_button_pressed
-                    local button_img = button_table:getImage(pressed and 2 or 1)
-                    if button_img then
-                        pcall(function() button_img:draw(x + panel_w, y) end)
-                        drew_button = true
-                    end
-                end
+                -- 按下狀態只在焦點是自己時才反映（同 CANON 的作法）
+                local pressed = is_active and self.jump_button_pressed
+                drew_button = self:drawPanelButton(x, y, size, pdata, panel_w, pressed)
             end
             if not drew_button and ui.empty then
                 pcall(function() ui.empty:draw(x + panel_w, y) end)
