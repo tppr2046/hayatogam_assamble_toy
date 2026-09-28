@@ -32,6 +32,10 @@ _G.BossData = bd or _G.BossData or {}
 local cd = import "core_data"
 _G.CoreData = cd or _G.CoreData or {}
 
+-- [[ 介面 ]] 資源圖示（S/C/R 三個字母改畫掉落物的圖）—— 商店與 HQ 共用
+local uii = import "ui_icons"
+_G.UIIcons = uii or _G.UIIcons or {}
+
 -- [[ 耐久 ]] 零件耐久/損壞（GDD §8.07）。★ 必須在 parts_data 之後載入（會讀 indestructible）
 local du = import "durability"
 _G.Durability = du or _G.Durability or {}

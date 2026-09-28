@@ -224,11 +224,19 @@ function StateSaveSelect.draw()
         gfx.drawText(text, 50, y)
         gfx.drawText(info, 180, y)
         if save_info[i].exists then
-            local resources = string.format("S:%d C:%d R:%d", 
-                save_info[i].steel or 0, 
-                save_info[i].copper or 0, 
-                save_info[i].rubber or 0)
-            gfx.drawText(resources, 180, y + 12)
+            -- ★ 2026-09-28：S/C/R 三個字母改畫資源圖示（與商店／HQ 讀同一支 UIIcons）。
+            -- ★ 選中的那一列是黑底白字 → 圖示要跟著反白，否則黑線條會沉進黑底。
+            local U = _G.UIIcons
+            local inverted = (i == selected_slot and not selected_back)
+            if U and U.drawRow then
+                U.drawRow(U.resourceItems(save_info[i].steel, save_info[i].copper,
+                                          save_info[i].rubber, false, inverted),
+                          180, y + 12, 8)
+            else
+                gfx.drawText(string.format("S:%d C:%d R:%d",
+                    save_info[i].steel or 0, save_info[i].copper or 0,
+                    save_info[i].rubber or 0), 180, y + 12)
+            end
         end
         if i == selected_slot and not selected_back then
             gfx.setImageDrawMode(gfx.kDrawModeCopy)

@@ -43,7 +43,9 @@ local PV_STAT_DY   =  12        -- ★ 新增：數值行（WT / HP / DMG）
 local PV_WIDE_W    = 240        -- 名稱行與數值行的置中寬度（比 PV_TEXT_W 寬，
                                 --   因為 y162 以上整條 x137~392 都沒有按鈕擋著）
 local PV_LINE1_DY  =  30        -- 第 1 行資訊（購買資源／耐久度）
-local PV_LINE2_DY  =  48        -- 第 2 行資訊（修理資源）
+local PV_LINE2_DY  =  46        -- 第 2 行資訊（修理資源）
+                                -- ★ 2026-09-28：由 48 上移 2px —— 三行都在時，
+                                --   這一行的白底會壓到下面說明框的框線（使用者回報）。
 
 -- [[ 2026-08-13 ]] 按鈕改用 `shop_button-table-86-25`（2 格：1=一般 / 2=焦點）。
 -- 底圖已把按鈕框拿掉，改由程式畫 —— 因為**只顯示需要操作的按鈕**，數量會變。
@@ -385,6 +387,21 @@ end
 -- ============================================================
 -- [[ 2026-08-13 ]] 預覽區沒有框線、底下是機艙裝飾圖 → **文字一律鋪白底**（HANDOFF §3-4）。
 -- 不鋪的話黑字會糊進背景的線條裡，1-bit 螢幕上完全讀不出來。
+-- [[ 資源圖示 ]] 上面那支的圖示列版本：把 S/C/R 三個字母換成掉落物的圖。
+-- ★ 寬度由 UIIcons 算（唯一來源），這裡只負責置中與鋪白底。
+local function drawResourceRowCentered(items, bx, bw, y, prefix)
+    local U = _G.UIIcons
+    if not (U and U.drawRow) then return end
+    local sep = 10
+    local w = U.rowWidth(items, sep, prefix)
+    local _, th = gfx.getTextSize("0")
+    local x = bx + (bw - w) // 2
+    gfx.setColor(gfx.kColorWhite)
+    gfx.fillRect(x - 4, y - 2, w + 8, (th or 14) + 4)
+    gfx.setColor(gfx.kColorBlack)
+    U.drawRow(items, x, y, sep, prefix)
+end
+
 local function drawCenteredOnWhite(text, bx, bw, y)
     if not text or text == "" then return end
     local tw, th = gfx.getTextSize(text)
@@ -410,9 +427,17 @@ function StateShop.draw()
         local r = L.res
         local ty = r.y + (r.h - select(2, gfx.getTextSize("0"))) // 2
         if not (res_flash_timer > 0 and ((res_flash_timer // 4) % 2 == 0)) then
-            gfx.drawText("STEEL " .. res.steel,   r.x + 12,  ty)
-            gfx.drawText("COPPER " .. res.copper, r.x + 145, ty)
-            gfx.drawText("RUBBER " .. res.rubber, r.x + 280, ty)
+            -- ★ 2026-09-28：改成「名稱＋圖示　數量」（圖示＝場上撿到的掉落物本身）
+            local U = _G.UIIcons
+            if U and U.drawItem then
+                U.drawItem({ label = "STEEL",  kind = "steel",  text = tostring(res.steel)  }, r.x + 12,  ty)
+                U.drawItem({ label = "COPPER", kind = "copper", text = tostring(res.copper) }, r.x + 145, ty)
+                U.drawItem({ label = "RUBBER", kind = "rubber", text = tostring(res.rubber) }, r.x + 280, ty)
+            else
+                gfx.drawText("STEEL " .. res.steel,   r.x + 12,  ty)
+                gfx.drawText("COPPER " .. res.copper, r.x + 145, ty)
+                gfx.drawText("RUBBER " .. res.rubber, r.x + 280, ty)
+            end
         end
     end
 
@@ -491,8 +516,9 @@ function StateShop.draw()
         local pb = { x = tx0, w = PV_TEXT_W }
         if not owned then
             -- 購買需求資源
-            drawCenteredOnWhite(string.format("S:%d   C:%d   R:%d",
-                part_data.cost_steel or 0, part_data.cost_copper or 0, part_data.cost_rubber or 0),
+            local U = _G.UIIcons
+            drawResourceRowCentered(
+                U.resourceItems(part_data.cost_steel, part_data.cost_copper, part_data.cost_rubber),
                 pb.x, pb.w, line1_y)
         else
             -- 耐久度
@@ -505,8 +531,10 @@ function StateShop.draw()
                 -- 修理需要的資源（滿耐久時不顯示）
                 local c = (D and D.repairCost and D.repairCost(part_id)) or nil
                 if c and c.total > 0 then
-                    drawCenteredOnWhite(string.format("REPAIR  S:%d   C:%d   R:%d", c.steel, c.copper, c.rubber),
-                        pb.x, pb.w, line2_y)
+                    local U = _G.UIIcons
+                    drawResourceRowCentered(
+                        U.resourceItems(c.steel, c.copper, c.rubber),
+                        pb.x, pb.w, line2_y, "REPAIR")
                 end
             end
         end

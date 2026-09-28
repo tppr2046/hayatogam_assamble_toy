@@ -1925,19 +1925,30 @@ function StateHQ.draw()
             local rs = mission.reward_steel or 0
             local rc = mission.reward_copper or 0
             local rr = mission.reward_rubber or 0
+            -- ★ 2026-09-28：S/C/R 三個字母改畫掉落物的圖（寬度也由 UIIcons 算）
+            local U = _G.UIIcons
+            local reward_items = nil
             local reward_text = nil
             if rs > 0 or rc > 0 or rr > 0 then
-                reward_text = string.format("REWARD  S:%d  C:%d  R:%d", rs, rc, rr)
+                if U and U.drawRow then
+                    reward_items = U.resourceItems(rs, rc, rr)
+                else
+                    reward_text = string.format("REWARD  S:%d  C:%d  R:%d", rs, rc, rr)
+                end
             end
             local _, dth = gfx.getTextSize(desc)
             dth = dth or 14
-            if reward_text then
+            if reward_text or reward_items then
                 -- 兩行一起垂直置中（行距 4px），不要各自置中
                 local gap = 4
                 local top = mbox.y + math.floor((mbox.h - (dth * 2 + gap)) / 2)
                 gfx.drawText(desc, mbox.x + 6, top)
                 local line2_y = top + dth + gap
-                gfx.drawText(reward_text, mbox.x + 6, line2_y)
+                if reward_items then
+                    U.drawRow(reward_items, mbox.x + 6, line2_y, 10, "REWARD")
+                else
+                    gfx.drawText(reward_text, mbox.x + 6, line2_y)
+                end
                 -- ★ REQ 改畫在**第 2 行右側**（原本在第 1 行右側）。
                 --   說明文字最長 353px（"Deliver the stone to the target zone"），右緣到 365，
                 --   而 REQ 左緣在 301 —— 同一行會直接疊字（M002/M003/M005 三關就是這個組合）。
