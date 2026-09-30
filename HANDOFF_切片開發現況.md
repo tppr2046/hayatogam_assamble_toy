@@ -527,6 +527,20 @@ for s in re.findall(r'\"([^\"]*)\"\s*,', io.open('Source/intro_data.lua',encodin
     → 另做了 **round-trip 實測**:把 M011/M012 餵進編輯器的
       `normalizeScene → sceneToJSON`,確認 `arena` / `walls` / `parallax` / `boss_id`
       / `WALL_ENEMY` 匯出後原樣還在。
+  - ★ **2026-09-30 補上(v24)**:
+    - **爬牆軌道的「橫移半徑」`x_range`**(0＝純上下爬;填了就是「上下為主、爬到端點後偶爾橫移一段」)。
+      畫布上會畫出左右範圍的虛線與端點,擺牆面建築時看得出「它會晃到哪裡」。
+      ⚠️ 這是**巢狀在 walls 項目裡**的欄位 —— `_extra` 只保留**場景層級**的未知欄位,
+      巢狀項目仍是白名單輸出,所以 `sceneToJSON` 那一行一定要補。
+    - **天空層可以選圖**:`bg_sky`(雲) 或 **`wall_background`(地底牆面,240×240)**,
+      並新增 **`sky_parallax` 欄位**(以前只被 `_extra` 原樣帶著走,編輯器裡看不到也改不了)。
+      選 `wall_background` 時自動把視差預設成 **1.0** —— 它是貼在身後的牆,不是遠景。
+    - **背景清單加入 `bg_building_10`**(128×128,給 CRAWLER 爬的牆面建築);
+      `BG_NAME_RE` 改成也吃**底線命名**(`bg_building_10`)與 `wall_background`。
+    - 驗證:`node --check` OK、`check_editor_sync.py` 三項 OK、
+      **round-trip 實測 M012/M014/M011/M003** —— `walls`(含 `x_range`)/`sky`/`sky_parallax`
+      /`backgrounds`/`arena`/`platforms`/`enemies` 匯出後全部原樣還在。
+
 - ★★ **「編輯器吃掉欄位」的老問題已解決**(2026-08-13)
   舊版只輸出白名單內的欄位,`sky_parallax`/`sky_y`/`reward_core`/`final` 等會在
   「載入 → 重存」時**靜默消失**。現在改成**保留未知欄位**:載入時把白名單外的欄位
