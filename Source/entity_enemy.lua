@@ -219,6 +219,13 @@ function Enemy:init(x, y, type_id, ground_y)
         e.climb_pause_time = data.climb_pause_time or 0.5
         e.climb_dir        = 1
         e.climb_pause      = 0
+        -- [[ 2026-09-30 ]] 橫移（只有軌道有填 x_range 時才會發生）
+        e.shift_chance     = data.shift_chance or 0.5
+        e.shift_speed      = data.shift_speed or 18
+        e.shift_min        = data.shift_min or 20
+        e.shift_max        = data.shift_max or 48
+        e.wall_shift       = nil     -- 橫移目標 x（nil＝沒在橫移）
+        e.pending_shift    = false
     end
 
     -- 特殊處理：無人機應該在空中飛行
@@ -583,19 +590,53 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         local w = self.wall
         if w then
             self.climb_dir = self.climb_dir or 1
-            -- 端點停頓：一路來回會像鐘擺，停一下才像「爬到頭、換方向」
-            if (self.climb_pause or 0) > 0 then
+            -- [[ 2026-09-30 ]] **上下為主、偶爾橫移一段**（使用者拍板）。
+            -- ★ 橫移刻意只發生在**爬到端點之後**，不在半路 ——
+            --   半路橫移會變成「在牆上亂走」，垂直才是這隻敵人的識別（§15.4a）；
+            --   放在端點則讀起來是「爬到頭了，換一條路線再爬」，節奏也對得上原本的停頓。
+            -- ★ 橫移期間不爬升：一次只做一件事，玩家才看得懂它在幹嘛。
+            if self.wall_shift then
+                local step = (self.shift_speed or 18) * dt
+                local dx = self.wall_shift - self.x
+                if math.abs(dx) <= step then
+                    self.x = self.wall_shift
+                    self.wall_shift = nil
+                else
+                    self.x = self.x + (dx > 0 and step or -step)
+                end
+
+            elseif (self.climb_pause or 0) > 0 then
+                -- 端點停頓：一路來回會像鐘擺，停一下才像「爬到頭、換方向」
                 self.climb_pause = self.climb_pause - dt
+                if self.climb_pause <= 0 and self.pending_shift then
+                    self.pending_shift = false
+                    local range = w.x_range or 0
+                    if range > 0 then
+                        local lo, hi = w.x - range, w.x + range
+                        local dist = (self.shift_min or 20)
+                                     + math.random() * math.max(0, (self.shift_max or 48) - (self.shift_min or 20))
+                        -- 方向隨機，但貼到邊界時一定往回（不然會卡在邊上原地抖）
+                        local dir = (math.random() < 0.5) and -1 or 1
+                        if self.x - dist < lo then dir = 1 end
+                        if self.x + dist > hi then dir = -1 end
+                        local target = self.x + dir * dist
+                        if target < lo then target = lo elseif target > hi then target = hi end
+                        if math.abs(target - self.x) > 1 then self.wall_shift = target end
+                    end
+                end
+
             else
                 self.y = self.y + self.climb_dir * (self.climb_speed or 26) * dt
                 if self.y <= w.y_top then
                     self.y = w.y_top
                     self.climb_dir = 1
                     self.climb_pause = self.climb_pause_time or 0.5
+                    self.pending_shift = (math.random() < (self.shift_chance or 0.5))
                 elseif self.y + self.height >= w.y_bottom then
                     self.y = w.y_bottom - self.height
                     self.climb_dir = -1
                     self.climb_pause = self.climb_pause_time or 0.5
+                    self.pending_shift = (math.random() < (self.shift_chance or 0.5))
                 end
             end
         end

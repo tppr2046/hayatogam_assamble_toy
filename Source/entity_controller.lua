@@ -179,7 +179,11 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
     end
     
     -- ============================================================
-    -- [[ §15.4 爬牆敵人 ]] scene.walls = [{ x, y_top, y_bottom }]
+    -- [[ §15.4 爬牆敵人 ]] scene.walls = [{ x, y_top, y_bottom, x_range }]
+    -- ★ `x_range`（2026-09-30 新增，選填、預設 0）＝**可以左右橫移的半徑**。
+    --   0 ＝維持原本的純垂直（既有關卡完全不受影響）；填了就允許「上下為主、偶爾橫移一段」。
+    --   用半徑而不是 x_left/x_right：軌道本來就以 x 為中心，一個數字就夠，
+    --   編輯器也只要多一格欄位（⚠️ 編輯器的 sceneToJSON 是白名單，新欄位要記得加）。
     -- ★★ 這**不是**碰撞面 —— 不擋移動、不擋子彈、不畫出來。
     --   它只是爬牆敵人的**移動軌道**（一條垂直線與上下界）。
     --   牆的外觀由關卡自己擺 `backgrounds` 的牆壁圖，軌道對齊那張圖即可。
@@ -196,6 +200,7 @@ function EntityController:init(scene_data, enemies_data, player_move_speed, ui_o
             x        = wd.x or 0,
             y_top    = math.min(wd.y_top or 20, wd.y_bottom or 140),
             y_bottom = math.max(wd.y_top or 20, wd.y_bottom or 140),
+            x_range  = math.max(0, wd.x_range or 0),
         })
     end
 
@@ -504,21 +509,11 @@ function EntityController:attachWall(enemy)
         if not bestd or d < bestd then best, bestd = w, d end
     end
     if not best then
-        -- ★★ 2026-09-30（使用者拍板）：**沒有 `scene.walls` 就用敵人自己的 x 當軌道。**
-        --   地底場景的牆已經是整片背景（`scene.sky` 鋪滿），整個畫面都是牆 ——
-        --   再為每一隻填一條看不見的軌道只是重複勞動，擺敵人的位置就等於選好爬的位置。
-        -- ★ 上下界自動取：上緣留 `climb_top`、下緣停在地面線上方 `climb_bottom_pad`。
-        --   下界**不能太高** —— 太高的話水平槍打不到，就變成「不裝 CANON 就無解」，
-        --   違反「零件是取捨、不是鑰匙」（§15.4 原本就是這個理由才要求 y_bottom 壓低）。
-        -- ★ 關卡若仍填了 `walls`，維持原本的吸附行為（既有關卡不受影響）。
-        local ed = _G.EnemyData and _G.EnemyData[enemy.type_id]
-        local top = (ed and ed.climb_top) or 24
-        local pad = (ed and ed.climb_bottom_pad) or 6
-        best = {
-            x = enemy.x,
-            y_top = top,
-            y_bottom = (self.ground_y or 240) - pad,
-        }
+        -- ★ 2026-09-30 使用者拍板**回復原行為**：爬牆敵人只在 `scene.walls` 的範圍內移動，
+        --   不做「沒填就用出生 x 自動建軌道」——牆是**具體的物件**（一棟建築的面），
+        --   不是整片背景；軌道要對齊那棟建築，交給關卡明確指定才不會飄。
+        print("WARNING: WALL enemy at " .. tostring(enemy.x) .. " has no wall to climb (scene.walls empty)")
+        return
     end
     enemy.wall = best
     enemy.x = best.x
