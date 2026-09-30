@@ -298,6 +298,10 @@ return {
         move_type = "WALL", attack_type = "FIRE BULLET",
         -- 軌道參數（實際的上下界由 scene.walls 決定）
         climb_speed = 26,          -- 爬升/下降速度（px/秒）
+        -- ★ 2026-09-30：關卡沒填 `scene.walls` 時**自動建軌道**（牆＝整片背景）的上下界。
+        --   上緣留白 climb_top；下緣停在地面線上方 climb_bottom_pad（要夠低，水平槍才打得到）。
+        climb_top = 24,
+        climb_bottom_pad = 6,
         climb_pause_time = 0.5,    -- 爬到端點的停頓（秒）。★ 沒有停頓會像鐘擺，不像生物
         -- 砲彈：明顯的拋物線，看得出來、閃得掉 —— 壓制型的重點是**可預測**
         projectile_speed_mult = 26,

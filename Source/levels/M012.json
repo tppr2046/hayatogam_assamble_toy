@@ -15,7 +15,7 @@
   {
    "width": 800,
    "ground_y": 220,
-   "sky": "images/bg_sky",
+   "sky": "images/wall_background",
    "objective": {
     "type": "ELIMINATE_ALL",
     "description": "Clear the crawlers"
@@ -30,20 +30,7 @@
     ]
    },
    "backgrounds": [
-    {
-     "layer": 0,
-     "x": 420,
-     "y": 28,
-     "image": "images/bg_building1.png",
-     "parallax": 1.0
-    },
-    {
-     "layer": 0,
-     "x": 640,
-     "y": 28,
-     "image": "images/bg_building3.png",
-     "parallax": 1.0
-    }
+
    ],
    "terrain": [
     {

@@ -504,8 +504,21 @@ function EntityController:attachWall(enemy)
         if not bestd or d < bestd then best, bestd = w, d end
     end
     if not best then
-        print("WARNING: WALL enemy at " .. tostring(enemy.x) .. " has no wall to climb (scene.walls empty)")
-        return
+        -- ★★ 2026-09-30（使用者拍板）：**沒有 `scene.walls` 就用敵人自己的 x 當軌道。**
+        --   地底場景的牆已經是整片背景（`scene.sky` 鋪滿），整個畫面都是牆 ——
+        --   再為每一隻填一條看不見的軌道只是重複勞動，擺敵人的位置就等於選好爬的位置。
+        -- ★ 上下界自動取：上緣留 `climb_top`、下緣停在地面線上方 `climb_bottom_pad`。
+        --   下界**不能太高** —— 太高的話水平槍打不到，就變成「不裝 CANON 就無解」，
+        --   違反「零件是取捨、不是鑰匙」（§15.4 原本就是這個理由才要求 y_bottom 壓低）。
+        -- ★ 關卡若仍填了 `walls`，維持原本的吸附行為（既有關卡不受影響）。
+        local ed = _G.EnemyData and _G.EnemyData[enemy.type_id]
+        local top = (ed and ed.climb_top) or 24
+        local pad = (ed and ed.climb_bottom_pad) or 6
+        best = {
+            x = enemy.x,
+            y_top = top,
+            y_bottom = (self.ground_y or 240) - pad,
+        }
     end
     enemy.wall = best
     enemy.x = best.x

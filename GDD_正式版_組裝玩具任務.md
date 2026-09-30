@@ -110,7 +110,7 @@
 | NPC `npc` ＋ 掩體 `bunker` | ✅ | PROTECT 用 |
 | 場景武器 `weapons`（固定砲台） | ✅ | |
 | 敵人重生點 `respawns` | ✅ | |
-| 牆面軌道 `walls`（給 CRAWLER 爬） | ✅ | |
+| 牆面軌道 `walls`（給 CRAWLER 爬） | ✅ | **2026-09-30 起可不填**：沒有 `walls` 時 CRAWLER 用**自己的出生 x** 自動建軌道（上下界＝畫面上緣 24 ~ 地面線上方 6px）。<br>地底場景的牆已是整片背景（`scene.sky` 鋪滿），不必再為每隻填一條看不見的軌道；有填 `walls` 就照舊吸附 |
 | BOSS 戰場鎖定 `arena` | ✅ | |
 | 捲動天空 `sky_scroll` | ✅ | COMET 關使用 |
 | 傳送點 `teleport`（多場景） | ✅ | |
