@@ -292,6 +292,13 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
     --    2026-08-13 的 bug：原本放在 update 最前面且隱形時 `return`,
     --    導致隱形階段死亡的敵人**爆炸計時器永遠不前進** → is_alive 不會變 false → 屍體殘留。
     if self.cloak_duration then
+        -- [[ 2026-10-01 ]] 撞到玩家的短暫現形倒數（觸發點在 controller 的接觸傷害）
+        if (self.bump_reveal_t or 0) > 0 then
+            self.bump_reveal_t = math.max(0, self.bump_reveal_t - dt)
+        end
+        if (self.bump_cd or 0) > 0 then
+            self.bump_cd = math.max(0, self.bump_cd - dt)
+        end
         self.cloak_timer = (self.cloak_timer or 0) + dt
         local dur = self.cloaked and self.cloak_duration or (self.reveal_duration or 1.5)
         if self.cloak_timer >= dur then
@@ -305,7 +312,10 @@ function Enemy:update(dt, mech_x, mech_y, mech_width, mech_height, controller)
         --   在真正隱形時閃給玩家看，就會製造「看得到卻打不到」的挫折。
         --   → 現在的語意是「它正在**實體化／消失**」，而那兩段都還打得到，規則不破。
         if self.glitch_time then
-            if self.cloaked then
+            if self.cloaked and (self.bump_reveal_t or 0) > 0 then
+                -- 被撞出來的閃現：整段都是干擾、由強轉弱 —— 一眼看得出「這不是正常現身」
+                self.glitch = self.bump_reveal_t / (self.bump_reveal_time or 0.3)
+            elseif self.cloaked then
                 self.glitch = 0
             else
                 local gt = self.glitch_time
@@ -883,13 +893,25 @@ function Enemy:shieldBox()
     return self.x + off_x, self.y + (self.shield_offset_y or 0), w, h, block_vx
 end
 
+-- [[ §15.4 隱形敵人 ]] 現在「看不見、打不到」嗎？
+-- ★★ 唯一判定點：繪製、受傷、子彈穿透三處都讀這一支 ——
+--   「看得到」與「打得到」必須一起切換（本作的規則），分開寫就一定會有一處漏掉。
+-- ★ `cloaked` 仍是**隱形節奏的相位**（決定開不開火），這支只多算了
+--   「撞到玩家的短暫現形」：相位還在隱形，但此刻看得到也打得到。
+function Enemy:isHidden()
+    if not self.cloaked then return false end
+    if (self.bump_reveal_t or 0) > 0 then return false end
+    return true
+end
+
 -- 回傳 true = 傷害有生效。cloaked（隱形中）時回傳 false 且不扣血。
 -- ============================================================
 function Enemy:takeDamage(amount)
     if not amount or amount <= 0 then return false end
     if not self.is_alive then return false end
     -- 隱形中：打不到。★ 裝了偵測器時 controller 會把 cloaked 清掉（見 update）
-    if self.cloaked then return false end
+    -- ★ 判定一律走 isHidden()（撞到玩家的短暫現形也算看得到＝打得到）
+    if self:isHidden() then return false end
     self.hp = (self.hp or 0) - amount
     return true
 end
@@ -1725,7 +1747,7 @@ function Enemy:draw(camera_x)
     -- [[ §15.4 隱形敵人 ]] 隱形中整隻不畫（連盾牌/劍等附件也不畫，所以整段提前 return）。
     -- ★ 打不到的東西就不該看得到 —— 兩者必須一致，否則會出現「看得到卻打不到」的挫折。
     -- ★ 爆炸中一律看得見 —— 不然「打中了但看不到爆炸」會像沒打到
-    if self.cloaked and not self.is_exploding then return end
+    if self:isHidden() and not self.is_exploding then return end
 
     -- 繪製敵人圖片或方塊
     if self.image then

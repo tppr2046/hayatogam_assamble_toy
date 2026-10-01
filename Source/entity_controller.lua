@@ -524,7 +524,7 @@ end
 
 function EntityController:canHitEnemy(e)
     if not e or not e.is_alive then return false end
-    if e.cloaked then return false end                       -- 隱形中：穿過去
+    if e.isHidden and e:isHidden() then return false end      -- 隱形中：穿過去（被撞現形時打得到）
     return self:isEngageable(e.x, e.width)
 end
 
@@ -1248,6 +1248,17 @@ function EntityController:updateAll(dt, mech_x, mech_y, mech_width, mech_height,
                     -- ★ `or 0`：BOSS 的手臂代理等「不是用接觸傷害打人」的實體可能沒有 attack。
                     --   沒有這個防呆的話一碰到就是 nil 做算術，整個 update 崩掉（2026-09-23 實際發生）。
                     mech_damage_taken = mech_damage_taken + (enemy.attack or 0) * dt
+                    -- [[ 2026-10-01 ]] 隱形中的 PHANTOM 撞到玩家 → 短暫現形（使用者拍板）。
+                    -- ★ 接觸傷害保留，但要讓玩家知道「有看不見的東西在打我」。
+                    -- ★ 脈衝式：閃完要等 bump_reveal_interval 才會再閃 —— 每幀刷新的話
+                    --   貼著就一直現形，等於貼身就破了它的隱形（2026-10-01 實測）。
+                    if enemy.cloak_duration and enemy.cloaked
+                       and (enemy.bump_reveal_t or 0) <= 0 and (enemy.bump_cd or 0) <= 0 then
+                        local ed = EnemyData[enemy.type_id] or {}
+                        enemy.bump_reveal_time = ed.bump_reveal_time or 0.3
+                        enemy.bump_reveal_t = enemy.bump_reveal_time
+                        enemy.bump_cd = ed.bump_reveal_interval or 1.0
+                    end
                 end
             else
                 enemy.has_hit_player = false  -- 離開碰撞範圍後重置
