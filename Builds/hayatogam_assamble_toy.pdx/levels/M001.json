@@ -26,31 +26,31 @@
         "layer": 0,
         "x": 6,
         "y": 89,
-        "image": "images/bg_building8.png"
+        "image": "images/far_bg_building2.png"
       },
       {
         "layer": 0,
         "x": 236,
         "y": 109,
-        "image": "images/bg_building9.png"
+        "image": "images/far_bg_building3.png"
       },
       {
         "layer": 0,
         "x": 496,
         "y": 89,
-        "image": "images/bg_building9.png"
+        "image": "images/far_bg_building3.png"
       },
       {
         "layer": 0,
         "x": 998,
         "y": 95,
-        "image": "images/bg_building8.png"
+        "image": "images/far_bg_building2.png"
       },
       {
         "layer": 0,
         "x": 734,
         "y": 108,
-        "image": "images/bg_building9.png"
+        "image": "images/far_bg_building3.png"
       }
     ],
     "terrain": [

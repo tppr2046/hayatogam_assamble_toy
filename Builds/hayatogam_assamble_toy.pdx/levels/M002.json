@@ -44,43 +44,43 @@
         "layer": 0,
         "x": 17,
         "y": 131,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       },
       {
         "layer": 0,
         "x": 386,
         "y": 128,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       },
       {
         "layer": 0,
         "x": 732,
         "y": 115,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       },
       {
         "layer": 0,
         "x": 577,
         "y": 56,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       },
       {
         "layer": 0,
         "x": 238,
         "y": 141,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       },
       {
         "layer": 0,
         "x": 876,
         "y": 64,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       },
       {
         "layer": 0,
         "x": 1033,
         "y": 72,
-        "image": "images/bg_building7.png"
+        "image": "images/far_bg_building1.png"
       }
     ],
     "terrain": [

@@ -535,11 +535,21 @@ for s in re.findall(r'\"([^\"]*)\"\s*,', io.open('Source/intro_data.lua',encodin
     - **天空層可以選圖**:`bg_sky`(雲) 或 **`wall_background`(地底牆面,240×240)**,
       並新增 **`sky_parallax` 欄位**(以前只被 `_extra` 原樣帶著走,編輯器裡看不到也改不了)。
       選 `wall_background` 時自動把視差預設成 **1.0** —— 它是貼在身後的牆,不是遠景。
-    - **背景清單加入 `bg_building_10`**(128×128,給 CRAWLER 爬的牆面建築);
+    - **背景清單加入 `bg_building_10`**(128×128,給 CRAWLER 爬的牆面建築)
+      —— ★ 2026-10-01 已改名為 **`bg_building8`**,見下面 v25;
       `BG_NAME_RE` 改成也吃**底線命名**(`bg_building_10`)與 `wall_background`。
     - 驗證:`node --check` OK、`check_editor_sync.py` 三項 OK、
       **round-trip 實測 M012/M014/M011/M003** —— `walls`(含 `x_range`)/`sky`/`sky_parallax`
       /`backgrounds`/`arena`/`platforms`/`enemies` 匯出後全部原樣還在。
+
+  - ★ **2026-10-01 補上(v25)：背景改名,區分遠景／近景**:
+    `bg_building7/8/9` → **`far_bg_building1/2/3`**(遠景)、`bg_building_10` → **`bg_building8`**(近景牆面)。
+    - 內建清單 `BG_FALLBACK` 照新名字分成近景／遠景兩段;`BG_NAME_RE` 收 `far_bg_buildingN`
+    - 下拉排序:**近景在前、遠景在後**,各自依編號;畫布標籤近景顯示 `BG8`、遠景顯示 `FAR2`
+      (只顯示數字的話 `bg_building2` 和 `far_bg_building2` 分不出來)
+    - 圖庫快取 key 升為 `assembleToy.bgLib.v2` → **舊名字的快取作廢,第一次開要重新「連結 images」一次**
+      (不升的話下拉會殘留已不存在的 `bg_building9` 之類)
+    - ⚠️ `bg_building8` 的意思變了(舊＝200×70 遠景,新＝128×128 牆面)。關卡檔已一次對應改過,見 ArtAssets 的改名對照。
 
 - ★★ **「編輯器吃掉欄位」的老問題已解決**(2026-08-13)
   舊版只輸出白名單內的欄位,`sky_parallax`/`sky_y`/`reward_core`/`final` 等會在
@@ -634,7 +644,8 @@ function canvasToBgY(cy){ return Math.round(cy - V_BASE + effGround()); }
 python -c "
 import json,glob,os
 H={'bg_building1.png':128,'bg_building2.png':128,'bg_building3.png':128,
-   'bg_building4.png':64,'bg_building5.png':64,'bg_building6.png':64,'bg_building7.png':32}
+   'bg_building4.png':64,'bg_building5.png':64,'bg_building6.png':64,'bg_building8.png':128,
+   'far_bg_building1.png':32,'far_bg_building2.png':70,'far_bg_building3.png':70}
 UI=64
 for f in sorted(glob.glob('Source/levels/*.json')):
     d=json.load(open(f,encoding='utf-8'))

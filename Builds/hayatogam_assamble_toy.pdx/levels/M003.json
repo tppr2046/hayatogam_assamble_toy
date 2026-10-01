@@ -51,19 +51,19 @@
           "layer": 0,
           "x": 39,
           "y": 140,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 0,
           "x": 211,
           "y": 141,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 0,
           "x": 397,
           "y": 140,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         }
       ],
       "terrain": [
@@ -205,13 +205,13 @@
           "layer": 0,
           "x": 15,
           "y": 134,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 0,
           "x": 405,
           "y": 65,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 1,
@@ -229,25 +229,25 @@
           "layer": 0,
           "x": 764,
           "y": 130,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 0,
           "x": 577,
           "y": 64,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 0,
           "x": 958,
           "y": 121,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         },
         {
           "layer": 0,
           "x": 1207,
           "y": 119,
-          "image": "images/bg_building7.png"
+          "image": "images/far_bg_building1.png"
         }
       ],
       "terrain": [
