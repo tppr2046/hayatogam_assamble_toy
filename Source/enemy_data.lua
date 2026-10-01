@@ -85,7 +85,7 @@ return {
     },
     
     ["SWORD_ENEMY"] = {
-        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（刀刃＝鋼）
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（刀刃＝鐵）
         drop = { steel = {2, 3} },
         name = "SWORD UNIT", hp = 30, attack = 12,
         move_type = "IMMOBILE", attack_type = "SWING SWORD",
@@ -132,7 +132,7 @@ return {
     },
 
     ["SHIELD_ROBOT"] = {
-        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（裝甲類＝鋼）
+        -- [[ §8.08 ]] 資源掉落：型別固定、數量小範圍隨機（裝甲類＝鐵）
         drop = { steel = {1, 2} },
         name = "SHIELD ROBOT", hp = 10, attack = 8,
         move_type = "SHIELD_MOVEMENT", attack_type = "SHIELD_FIRE",

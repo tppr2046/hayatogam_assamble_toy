@@ -618,7 +618,7 @@ end
 --     drop = { steel = {5,8}, copper = {5,8}, ... }  -- BOSS：三種都掉
 --
 -- 現階段**用程式繪製**（三種資源靠形狀區分，各自白描邊 → 黑地面上也看得見）。
--- ★ 之後放 `images/drop-table-8-8.png`（3 格：鋼/銅/橡膠，順序同 DROP_KINDS）
+-- ★ 之後放 `images/drop-table-8-8.png`（3 格：鐵/銅/橡膠，順序同 DROP_KINDS）
 --   進 Source/images/ 就會自動改用圖，本檔與呼叫端都不必改。
 -- ============================================================
 local DROP_W, DROP_H   = 8, 8
@@ -2181,7 +2181,7 @@ function EntityController:draw(camera_x)
             gfx.setColor(gfx.kColorWhite); gfx.fillRect(sx, sy, DROP_W, DROP_H)
             gfx.setColor(gfx.kColorBlack)
             if d.kind == "steel" then
-                gfx.drawRect(sx, sy, DROP_W, DROP_H)                 -- 鋼＝方形
+                gfx.drawRect(sx, sy, DROP_W, DROP_H)                 -- 鐵＝方形
             elseif d.kind == "copper" then
                 gfx.drawCircleAtPoint(cx, cy, DROP_W / 2 - 1)        -- 銅＝圓形
             else
