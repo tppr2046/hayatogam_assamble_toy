@@ -151,6 +151,13 @@ local max_hp = 1     -- 機甲最大 HP (在 setup 中獲取)
 local current_mission_id = nil -- 當前任務 ID（用於檢查目標）
 local mission_time_limit = -1  -- 任務時間限制（秒），-1 表示無時間限制
 local mission_elapsed_time = 0 -- 任務經過時間（秒）
+-- [[ 平衡紀錄 2026-10-01 ]] 每一場結束時印一行 BALANCE，試玩時把估計值換成實測值（GDD §8.09）。
+-- ★ run_time 與 mission_elapsed_time 分開：後者只有限時關才會走，前者每一關都計。
+-- ★ 只算**實際遊玩**的幀（對話、教學、暫停時 update 會提早 return，不會走到計時那一行）。
+local run_time = 0
+local run_drops = { steel = 0, copper = 0, rubber = 0 }
+local run_wear = 0
+local run_repair = nil
 local dialog_active = false
 local dialog_lines = nil
 local dialog_index = 1
@@ -188,6 +195,7 @@ local function loadScene(scene)
     if current_scene and EntityController then
         local enemies = (current_scene.enemies) or {}
         entity_controller = EntityController:init(current_scene, enemies, MOVE_SPEED, UI_HEIGHT)
+        entity_controller.run_drops = run_drops   -- [[ 平衡紀錄 ]] 跨場景累計
         -- [[ S5 護送 ]] 沿用上一場景帶過來的 NPC 血量（受過的傷不會因換場景而回復）
         if carry_npc_hp and entity_controller.npc then
             entity_controller.npc.hp = math.min(carry_npc_hp, entity_controller.npc.max_hp or carry_npc_hp)
@@ -249,6 +257,39 @@ local CLEAR_GRACE_TIME = 3.0   -- 秒
 local clear_grace_timer = nil
 
 -- [[ S1 多場景 ]] 目前場景達標：非最後一場景→載入下一場景（保留機甲 HP/組裝）；最後一場景→通關結算。
+-- [[ 平衡紀錄 2026-10-01 ]] 任務結束的**唯一出口**：印 BALANCE 紀錄，再進結算畫面。
+-- ★★ 結束點原本散在 5 處（過關／墜崖／超時／機體爆炸／護送失敗），
+--   每處各印一次一定會漏 → 全部改走這一支，之後新增的失敗條件也自動有紀錄。
+-- 格式（一行、方便 grep）：
+--   BALANCE mission=M003 result=CLEAR first=Y attempt=2 time=183.2 dmg=34% hp=66/100
+--           wear=5 repair=2/3/1 drops=4/12/1 reward=10/0/2 reason=-
+--   repair／drops／reward 都是「鐵/銅/橡膠」（程式 key 是 steel/copper/rubber）。
+local function endMission(ok, msg)
+    local id = current_mission_id or "?"
+    local done = (_G.GameState and _G.GameState.completed_missions) or {}
+    local first = not done[id]             -- ★ 結算畫面才會標記完成，這裡讀到的還是「打之前」
+    local md = (_G.MissionData or {})[id] or {}
+    local ratio = (max_hp and max_hp > 0) and ((max_hp - current_hp) / max_hp) or 0
+    if ratio < 0 then ratio = 0 end
+    local rp = run_repair or { steel = 0, copper = 0, rubber = 0 }
+    local rw_ = (ok and first)
+        and string.format("%d/%d/%d", md.reward_steel or 0, md.reward_copper or 0, md.reward_rubber or 0)
+        or "0/0/0"
+    local attempts = (_G.BalanceAttempts and _G.BalanceAttempts[id]) or 1
+    print(string.format(
+        "BALANCE mission=%s result=%s first=%s attempt=%d time=%.1f dmg=%.0f%% hp=%d/%d wear=%d repair=%d/%d/%d drops=%d/%d/%d reward=%s reason=%s",
+        id, ok and "CLEAR" or "FAIL", first and "Y" or "N", attempts, run_time,
+        ratio * 100, math.max(0, math.floor(current_hp + 0.5)), math.floor(max_hp + 0.5),
+        ok and run_wear or 0, rp.steel, rp.copper, rp.rubber,
+        run_drops.steel or 0, run_drops.copper or 0, run_drops.rubber or 0,
+        rw_, ok and "-" or (msg or "?")))
+    if ok then
+        setState(_G.StateResult, true, msg, current_mission_id)
+    else
+        setState(_G.StateResult, false, msg)
+    end
+end
+
 local function completeCurrentScene()
     -- 還有掉落物沒撿 → 起算寬限期，先不結束
     if entity_controller and entity_controller.drops and #entity_controller.drops > 0 then
@@ -282,7 +323,16 @@ local function completeCurrentScene()
             if max_hp and max_hp > 0 then
                 ratio = (max_hp - current_hp) / max_hp
             end
-            local changes = _G.Durability.applyMissionWear(ratio)
+            local changes, wear = _G.Durability.applyMissionWear(ratio)
+            -- [[ 平衡紀錄 ]] 這一場造成的修理費（公式走 Durability.costForPoints，唯一計算點）
+            run_wear = wear or 0
+            run_repair = { steel = 0, copper = 0, rubber = 0 }
+            for _, c in ipairs(changes) do
+                local cost = _G.Durability.costForPoints(c.id, c.before - c.after)
+                run_repair.steel  = run_repair.steel  + cost.steel
+                run_repair.copper = run_repair.copper + cost.copper
+                run_repair.rubber = run_repair.rubber + cost.rubber
+            end
             if #changes > 0 then
                 print(string.format("LOG: durability wear (dmg %.0f%%): %d part(s)",
                                     ratio * 100, #changes))
@@ -292,7 +342,7 @@ local function completeCurrentScene()
             end
         end
 
-        setState(_G.StateResult, true, "Mission Complete!", current_mission_id)
+        endMission(true, "Mission Complete!")
     end
 end
 
@@ -430,6 +480,14 @@ function StateMission.setup()
     -- 儲存當前任務 ID 用於目標檢查
     current_mission_id = mission_id
     
+    -- [[ 平衡紀錄 ]] 這一場的累計歸零（重試／重打都是新的一場）
+    run_time = 0
+    run_drops = { steel = 0, copper = 0, rubber = 0 }
+    run_wear, run_repair = 0, nil
+    -- 本次開機以來這一關打了第幾次（不存檔：只為了量「平均要試幾次才過」）
+    _G.BalanceAttempts = _G.BalanceAttempts or {}
+    _G.BalanceAttempts[mission_id or "?"] = (_G.BalanceAttempts[mission_id or "?"] or 0) + 1
+
     -- 初始化任務時間限制
     mission_elapsed_time = 0
     if mission_id and MissionDataToUse and MissionDataToUse[mission_id] then
@@ -777,7 +835,7 @@ function StateMission.update()
     -- [[ S2 懸崖 ]] 掉出畫面底部 → 關卡失敗
     if mech_y > SCREEN_HEIGHT + 40 then
         print("MISSION FAILED: fell off a cliff")
-        setState(_G.StateResult, false, "Fell off the cliff!")
+        endMission(false, "Fell off the cliff!")
         return
     end
 
@@ -1023,6 +1081,9 @@ function StateMission.update()
         timer = timer - 1 
     end
     
+    -- [[ 平衡紀錄 ]] 實際遊玩時間（每一關都計，與下面的限時無關）
+    run_time = run_time + (1 / 30)
+
     -- 5.1 更新任務計時器
     if mission_time_limit > 0 then
         mission_elapsed_time = mission_elapsed_time + (1 / 30)  -- 假設 30 FPS
@@ -1030,7 +1091,7 @@ function StateMission.update()
         -- 檢查是否超時
         if mission_elapsed_time >= mission_time_limit then
             print("MISSION FAILED: Time limit exceeded!")
-            setState(_G.StateResult, false, "Time limit exceeded!")
+            endMission(false, "Time limit exceeded!")
             return
         end
     end
@@ -1056,7 +1117,7 @@ function StateMission.update()
         -- 等待爆炸動畫完成
         mech_explode_timer = mech_explode_timer + (1/30)
         if mech_explode_timer >= mech_explode_duration then
-            setState(_G.StateResult, false, "Mech destroyed!")
+            endMission(false, "Mech destroyed!")
         end
         return
     end
@@ -1221,7 +1282,7 @@ function StateMission.update()
                 if npc then
                     if npc.is_dead or (npc.hp or 1) <= 0 then
                         print("MISSION FAILED: NPC destroyed")
-                        setState(_G.StateResult, false, "The escort was destroyed!")
+                        endMission(false, "The escort was destroyed!")
                         return
                     elseif npc.reached_goal or npc.protect_done then
                         print("MISSION SUCCESS: escort protected")

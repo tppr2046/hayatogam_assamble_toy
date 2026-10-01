@@ -98,12 +98,12 @@ end
 -- ★ 只在**過關**時呼叫。失敗不扣 —— 否則玩得差的人「又輸又花錢」，只會加速卡關；
 --   重試永遠免費，推進才有成本（GDD §8.07）。
 -- ★ 重打已通關的關卡**仍然會耗損** —— 不然重打就是零成本收掉落，經濟直接破掉。
--- 回傳 { {id=, before=, after=}, ... } 供結算畫面顯示（目前未用，留給日後演出）
+-- 回傳 { {id=, before=, after=}, ... }, wear（供結算畫面與 BALANCE 紀錄）
 function Durability.applyMissionWear(damage_ratio)
     damage_ratio = math.max(0, math.min(1, damage_ratio or 0))
     local wear = math.floor(Durability.WEAR_K * damage_ratio * damage_ratio + 0.5)
     local changes = {}
-    if wear <= 0 then return changes end
+    if wear <= 0 then return changes, 0 end
 
     local eq = _G.GameState and _G.GameState.mech_stats
                 and _G.GameState.mech_stats.equipped_parts or {}
@@ -118,7 +118,7 @@ function Durability.applyMissionWear(damage_ratio)
             end
         end
     end
-    return changes
+    return changes, wear
 end
 
 -- ============================================================
@@ -127,12 +127,15 @@ end
 -- 修到全滿要花的資源。回傳 { steel=, copper=, rubber=, total= }
 -- ★ 每種資源各自 ceil —— 所以極小額的修理仍會各花 1 點，
 --   這會讓「每關都回去補一下」不划算，是刻意的。
-function Durability.repairCost(part_id)
+-- 修回 `points` 點耐久要花多少資源。
+-- ★★ 修理費公式的**唯一計算點**：商店的修理（repairCost）與平衡紀錄（BALANCE log 的
+--   「這一場要花多少修理費」）都讀這一支，公式只寫一次。
+function Durability.costForPoints(part_id, points)
     local p = _G.PartsData and _G.PartsData[part_id]
     local zero = { steel = 0, copper = 0, rubber = 0, total = 0 }
     if not p or Durability.isIndestructible(part_id) then return zero end
 
-    local missing = (Durability.MAX - Durability.get(part_id)) / Durability.MAX
+    local missing = (points or 0) / Durability.MAX
     if missing <= 0 then return zero end
 
     local function part_cost(base)
@@ -143,6 +146,10 @@ function Durability.repairCost(part_id)
     local c = part_cost(p.cost_copper)
     local r = part_cost(p.cost_rubber)
     return { steel = s, copper = c, rubber = r, total = s + c + r }
+end
+
+function Durability.repairCost(part_id)
+    return Durability.costForPoints(part_id, Durability.MAX - Durability.get(part_id))
 end
 
 function Durability.canAfford(part_id)

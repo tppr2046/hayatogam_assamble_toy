@@ -702,6 +702,9 @@ function EntityController:updateDrops(dt, mech_x, mech_y, mech_width, mech_heigh
                                    d.x, d.y, DROP_W, DROP_H) then
             local res = _G.GameState and _G.GameState.resources
             if res then res[d.kind] = (res[d.kind] or 0) + 1 end
+            -- [[ 平衡紀錄 ]] 這一場撿了什麼。★ 表由 state_mission 持有、每換場景重新掛上，
+            --   所以多場景關卡會一路累計（controller 每個場景都會重建）。
+            if self.run_drops then self.run_drops[d.kind] = (self.run_drops[d.kind] or 0) + 1 end
             table.remove(self.drops, i)
         end
 
